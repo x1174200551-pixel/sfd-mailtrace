@@ -3,6 +3,7 @@ package com.sfonda.mailtrace.interfaces.api.template;
 import com.sfonda.mailtrace.application.bizservice.template.NotificationTemplateService;
 import com.sfonda.mailtrace.infrastructure.basic.BasicResult;
 import com.sfonda.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateCreateRequest;
 import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateListResponse;
 import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateUpdateRequest;
 import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateVO;
@@ -37,6 +38,14 @@ public class NotificationTemplateController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean enabled) {
         return BasicResult.ok(notificationTemplateService.listTemplates(principal, keyword, enabled));
+    }
+
+    @Operation(summary = "新建通知模板")
+    @PostMapping
+    public BasicResult<NotificationTemplateVO> createTemplate(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @Valid @RequestBody NotificationTemplateCreateRequest request) {
+        return BasicResult.ok(notificationTemplateService.createTemplate(principal, request));
     }
 
     @Operation(summary = "保存通知模板")

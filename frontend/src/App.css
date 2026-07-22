@@ -1687,9 +1687,31 @@ body {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   color: #1f2937;
   background: #fff;
   font-weight: 700;
+}
+
+.template-head-action.primary {
+  border-color: var(--primary);
+  color: #fff;
+  background: var(--primary);
+}
+
+.template-head-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.template-editor-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .template-code-pill {
@@ -1856,6 +1878,27 @@ body {
   color: #9ca3af;
   font-size: 12px;
   font-weight: 600;
+}
+
+.template-editor-actions {
+  border-top: 1px solid #f3f4f6;
+  margin-top: 16px;
+  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.template-editor-actions span {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.template-editor-actions button {
+  min-width: 132px;
+  justify-content: center;
 }
 
 .template-switch {

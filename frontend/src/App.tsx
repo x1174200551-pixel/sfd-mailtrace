@@ -351,7 +351,7 @@ function roleLabel(roleCode: string) {
 }
 
 function templateSceneLabel(templateCode: string) {
-  return templateScenes[templateCode] || '系统通知场景'
+  return templateScenes[templateCode] || '自定义通知场景'
 }
 
 function toRoleCode(value: string): RoleCode {
@@ -697,6 +697,22 @@ function App() {
     setTemplatesError('')
   }
 
+  function openCreateTemplate() {
+    setSelectedTemplateId(null)
+    setTemplateKeyword('')
+    setTemplateForm({
+      id: null,
+      templateCode: '',
+      templateName: '自定义通知模板',
+      subjectTpl: '通知：{ticket_no}',
+      contentTpl: '您好，工单 {ticket_no} 有新的通知。\n\n工单主题：{subject}',
+      enabled: true,
+    })
+    setTemplateDirty(true)
+    setTemplatePreview(null)
+    setTemplatesError('')
+  }
+
   function updateTemplateForm(patch: Partial<TemplateFormState>) {
     setTemplateForm((value) => ({ ...value, ...patch }))
     setTemplateDirty(true)
@@ -748,20 +764,27 @@ function App() {
   }
 
   async function saveTemplate() {
-    if (!token || !templateForm.id) return
+    if (!token) return
     setTemplateSaving(true)
     setTemplatesError('')
     try {
-      await requestApi<NotificationTemplate>(`/api/v1/notification-templates/${templateForm.id}`, {
-        method: 'PUT',
-        headers: authHeaders(token),
-        body: JSON.stringify({
-          templateName: templateForm.templateName,
-          subjectTpl: templateForm.subjectTpl,
-          contentTpl: templateForm.contentTpl,
-          enabled: templateForm.enabled,
-        }),
-      })
+      const saved = await requestApi<NotificationTemplate>(
+        templateForm.id ? `/api/v1/notification-templates/${templateForm.id}` : '/api/v1/notification-templates',
+        {
+          method: templateForm.id ? 'PUT' : 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            templateCode: templateForm.templateCode,
+            templateName: templateForm.templateName,
+            subjectTpl: templateForm.subjectTpl,
+            contentTpl: templateForm.contentTpl,
+            enabled: templateForm.enabled,
+          }),
+        },
+      )
+      setSelectedTemplateId(saved.id)
+      setTemplateForm(toTemplateForm(saved))
+      setTemplateDirty(false)
       setTemplateConfirmOpen(false)
       await fetchTemplates()
     } catch (error) {
@@ -1231,15 +1254,6 @@ function App() {
                     <RefreshCw size={16} />
                     刷新
                   </button>
-                  <button
-                    className="primary-action"
-                    disabled={!templateDirty || !templateForm.id}
-                    onClick={() => setTemplateConfirmOpen(true)}
-                    type="button"
-                  >
-                    <Check size={16} />
-                    保存模板
-                  </button>
                 </div>
               </div>
 
@@ -1280,7 +1294,10 @@ function App() {
                     <aside className="template-panel template-list-panel">
                       <div className="template-panel__head">
                         <strong>模板列表</strong>
-                        <span className="template-code-pill">唯一编码</span>
+                        <button className="template-head-action" onClick={openCreateTemplate} type="button">
+                          <Plus size={14} />
+                          新建
+                        </button>
                       </div>
                       <label className="template-search">
                         <Search size={15} />
@@ -1330,17 +1347,35 @@ function App() {
 
                     <section className="template-panel template-editor-panel">
                       <div className="template-panel__head">
-                        <strong>模板编辑</strong>
-                        <span className={templateDirty ? 'template-code-pill dirty' : 'template-code-pill'}>
-                          {templateDirty ? '未保存' : '已保存'}
-                        </span>
+                        <div className="template-editor-title">
+                          <strong>{templateForm.id ? '模板编辑' : '新建模板'}</strong>
+                          <span className={templateDirty ? 'template-code-pill dirty' : 'template-code-pill'}>
+                            {templateDirty ? '未保存' : '已保存'}
+                          </span>
+                        </div>
+                        <button
+                          className="template-head-action primary"
+                          disabled={!templateDirty || templateSaving}
+                          onClick={() => setTemplateConfirmOpen(true)}
+                          type="button"
+                        >
+                          <Check size={14} />
+                          {templateForm.id ? '保存' : '创建'}
+                        </button>
                       </div>
                       <div className="template-editor">
                         <div className="template-form-grid">
                           <label>
                             <span>模板编码</span>
-                            <input disabled value={templateForm.templateCode} />
-                            <small>编码唯一，不允许重复。</small>
+                            <input
+                              disabled={Boolean(templateForm.id)}
+                              onChange={(event) =>
+                                updateTemplateForm({ templateCode: event.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })
+                              }
+                              placeholder="例如 CUSTOM_NOTICE"
+                              value={templateForm.templateCode}
+                            />
+                            <small>编码唯一；新建时可填写，保存后不可修改。</small>
                           </label>
                           <label>
                             <span>模板名称</span>
@@ -1389,6 +1424,18 @@ function App() {
                             />
                             <small>第一版可降级为纯文本编辑；工具栏保留交互位，保存时写入正文模板。</small>
                           </label>
+                        </div>
+                        <div className="template-editor-actions">
+                          <span>{templateForm.id ? '保存后立即更新后续自动通知模板。' : '创建后会进入模板列表，可继续编辑和启停。'}</span>
+                          <button
+                            className="primary-action"
+                            disabled={!templateDirty || templateSaving}
+                            onClick={() => setTemplateConfirmOpen(true)}
+                            type="button"
+                          >
+                            <Check size={16} />
+                            {templateSaving ? '保存中...' : templateForm.id ? '保存模板' : '创建模板'}
+                          </button>
                         </div>
                       </div>
                     </section>
@@ -1599,8 +1646,12 @@ function App() {
         {templateConfirmOpen && (
           <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="template-confirm-title">
             <div className="confirm-modal">
-              <h3 id="template-confirm-title">保存模板确认</h3>
-              <p>保存后新产生的自动回执和通知将使用当前模板内容，历史已发送邮件不受影响。</p>
+              <h3 id="template-confirm-title">{templateForm.id ? '保存模板确认' : '新建模板确认'}</h3>
+              <p>
+                {templateForm.id
+                  ? '保存后新产生的自动回执和通知将使用当前模板内容，历史已发送邮件不受影响。'
+                  : '创建后模板会进入列表，启用状态由当前开关决定。'}
+              </p>
               <div className="confirm-target">
                 <strong>{templateForm.templateName || '未命名模板'}</strong>
                 <span>{templateForm.templateCode || '未选择模板'}</span>
@@ -1608,7 +1659,7 @@ function App() {
               <div className="user-modal__foot">
                 <button disabled={templateSaving} onClick={() => setTemplateConfirmOpen(false)} type="button">取消</button>
                 <button className="primary-action" disabled={templateSaving} onClick={saveTemplate} type="button">
-                  {templateSaving ? '保存中...' : '确认保存'}
+                  {templateSaving ? '保存中...' : templateForm.id ? '确认保存' : '确认创建'}
                 </button>
               </div>
             </div>

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.sfonda.mailtrace.application.bizservice.common.BusinessException;
 import com.sfonda.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateCreateRequest;
 import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateListResponse;
 import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateSummaryVO;
 import com.sfonda.mailtrace.interfaces.vo.template.NotificationTemplateUpdateRequest;
@@ -55,6 +56,36 @@ public class NotificationTemplateService {
                 .toList();
         // 4、汇总模板总数、启用数、停用数和变量清单
         return new NotificationTemplateListResponse(records, buildSummary(), List.copyOf(VARIABLES.values()));
+    }
+
+    /**
+     * 新建通知模板。
+     */
+    @Transactional
+    public NotificationTemplateVO createTemplate(CurrentUserPrincipal principal, NotificationTemplateCreateRequest request) {
+        // 1、校验当前用户具备管理员权限
+        assertAdmin(principal);
+        // 2、规范化模板编码，并校验编码唯一性
+        String templateCode = normalize(request.getTemplateCode()).toUpperCase();
+        ensureTemplateCodeUnique(templateCode);
+        // 3、校验主题和正文中的变量都在白名单内
+        validateVariables(request.getSubjectTpl());
+        validateVariables(request.getContentTpl());
+
+        // 4、写入新模板基础信息、启用状态和创建人
+        NotificationTemplateEntity template = new NotificationTemplateEntity();
+        template.setTemplateCode(templateCode);
+        template.setTemplateName(normalize(request.getTemplateName()));
+        template.setSubjectTpl(normalize(request.getSubjectTpl()));
+        template.setContentTpl(normalize(request.getContentTpl()));
+        template.setEnabled(request.getEnabled());
+        template.setCreatedBy(principal.account());
+        template.setUpdatedBy(principal.account());
+        notificationTemplateMapper.insert(template);
+
+        // 5、写入模板创建操作日志并返回新模板详情
+        recordLog(principal, "CREATE", template.getId(), "新建通知模板：" + templateCode);
+        return toVO(notificationTemplateMapper.selectById(template.getId()));
     }
 
     /**
@@ -143,6 +174,15 @@ public class NotificationTemplateService {
             if (!VARIABLES.containsKey(variable)) {
                 throw new BusinessException(CODE_BAD_REQUEST, "模板变量不支持：" + variable);
             }
+        }
+    }
+
+    private void ensureTemplateCodeUnique(String templateCode) {
+        Long count = notificationTemplateMapper.selectCount(
+                new LambdaQueryWrapper<NotificationTemplateEntity>()
+                        .eq(NotificationTemplateEntity::getTemplateCode, templateCode));
+        if (count != null && count > 0) {
+            throw new BusinessException(CODE_BAD_REQUEST, "模板编码已存在，请更换编码");
         }
     }
 
