@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邮件工单系统 - 系统参数原型</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #eff6ff;
+            --primary-hover: #1d4ed8;
+            --bg-main: #f5f6f8;
+            --border-light: #e5e7eb;
+            --border-soft: #f3f4f6;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+            --success-light: #ecfdf5;
+            --warning: #f59e0b;
+            --warning-light: #fffbeb;
+            --danger: #ef4444;
+            --danger-light: #fef2f2;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            color: var(--text-main);
+            background: var(--bg-main);
+            font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+        }
+        button, input, select, textarea { font: inherit; }
+        button { cursor: pointer; }
+
+        .shell {
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            overflow: hidden;
+        }
+
+        .sidebar {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-light);
+            background: #fff;
+        }
+        .logo {
+            height: 64px;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo-mark {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--primary);
+            font-weight: 800;
+        }
+        .logo strong { font-size: 16px; font-weight: 700; }
+        .nav { flex: 1; overflow-y: auto; padding: 12px; }
+        .nav-group { margin-bottom: 16px; }
+        .nav-title {
+            padding: 8px 12px;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .nav-item {
+            min-height: 40px;
+            border-radius: 8px;
+            padding: 0 12px;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--text-sub);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .nav-item.active { color: var(--primary); background: var(--primary-light); }
+        .nav-main { min-width: 0; display: flex; align-items: center; gap: 10px; }
+        .nav-icon { width: 18px; text-align: center; font-weight: 800; }
+        .badge {
+            min-width: 20px;
+            border-radius: 999px;
+            padding: 2px 7px;
+            color: #fff;
+            background: var(--danger);
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.3;
+            text-align: center;
+        }
+        .badge.warning { background: var(--warning); }
+        .badge.primary { background: var(--primary); }
+        .collapse {
+            height: 48px;
+            border-top: 1px solid var(--border-light);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-sub);
+            font-weight: 600;
+        }
+
+        .main { min-width: 0; height: 100vh; display: flex; flex-direction: column; }
+        .topbar {
+            height: 64px;
+            flex: 0 0 64px;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--border-light);
+            display: grid;
+            grid-template-columns: minmax(180px, 260px) minmax(280px, 560px) auto;
+            align-items: center;
+            gap: 24px;
+            background: #fff;
+        }
+        .breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--text-sub); }
+        .breadcrumb strong { color: var(--text-main); }
+        .search {
+            height: 36px;
+            border-radius: 8px;
+            padding: 0 11px;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            color: var(--text-muted);
+            background: var(--bg-main);
+        }
+        .search input { min-width: 0; flex: 1; border: 0; outline: none; background: transparent; }
+        .shortcut {
+            min-width: 18px;
+            height: 18px;
+            border: 1px solid var(--text-muted);
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .tools { display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            border: 0;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-sub);
+            background: transparent;
+            font-weight: 800;
+        }
+        .avatar-wrap { border-left: 1px solid var(--border-light); padding-left: 12px; display: flex; align-items: center; gap: 10px; }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: linear-gradient(135deg, #34d399, #14b8a6);
+            font-weight: 800;
+        }
+        .avatar-text strong, .avatar-text small { display: block; }
+        .avatar-text small { color: var(--text-muted); font-size: 12px; }
+
+        .content { flex: 1; min-height: 0; overflow-y: auto; padding: 24px; }
+        .page-head {
+            margin-bottom: 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+        }
+        .page-head h1 { margin: 0 0 6px; font-size: 24px; }
+        .page-head p { margin: 0; color: var(--text-sub); }
+        .head-actions { display: flex; gap: 12px; }
+        .btn {
+            height: 38px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 0 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--text-main);
+            background: #fff;
+            font-weight: 700;
+        }
+        .btn.primary { border-color: var(--primary); color: #fff; background: var(--primary); }
+        .btn.primary:hover { background: var(--primary-hover); }
+        .btn:disabled { cursor: not-allowed; opacity: .55; }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .metric {
+            min-height: 100px;
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            padding: 18px;
+            background: #fff;
+        }
+        .metric span { color: var(--text-sub); font-size: 13px; font-weight: 700; }
+        .metric strong { display: block; margin: 10px 0 6px; font-size: 28px; line-height: 1; }
+        .metric small { color: var(--text-muted); font-weight: 600; }
+
+        .alert {
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            margin-bottom: 18px;
+            padding: 13px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            color: #1e40af;
+            background: #eff6ff;
+            font-weight: 700;
+        }
+        .alert.danger { border-color: #fecaca; color: #b91c1c; background: #fef2f2; }
+        .alert button { border: 0; color: inherit; background: transparent; font-weight: 800; }
+
+        .settings-layout {
+            display: grid;
+            grid-template-columns: 300px minmax(0, 1fr) 360px;
+            gap: 16px;
+            align-items: start;
+        }
+        .panel {
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .panel-head {
+            min-height: 52px;
+            border-bottom: 1px solid var(--border-soft);
+            padding: 0 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .panel-head strong { font-size: 15px; font-weight: 800; }
+        .pill {
+            min-height: 24px;
+            border-radius: 999px;
+            padding: 4px 9px;
+            display: inline-flex;
+            align-items: center;
+            color: #1d4ed8;
+            background: var(--primary-light);
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .pill.warning { color: #b45309; background: var(--warning-light); }
+        .pill.success { color: #047857; background: var(--success-light); }
+        .pill.danger { color: #dc2626; background: var(--danger-light); }
+
+        .group-list { padding: 12px; }
+        .group-item {
+            width: 100%;
+            min-height: 82px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            padding: 12px;
+            display: grid;
+            grid-template-columns: 36px minmax(0, 1fr);
+            gap: 10px;
+            color: var(--text-main);
+            background: transparent;
+            text-align: left;
+        }
+        .group-item.active { border-color: #bfdbfe; background: var(--primary-light); }
+        .group-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary);
+            background: #fff;
+            font-weight: 900;
+        }
+        .group-item strong { display: block; margin-bottom: 5px; font-weight: 800; }
+        .group-item small { color: var(--text-muted); font-size: 12px; font-weight: 600; }
+
+        .rule-editor { padding: 16px; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        label { min-width: 0; display: grid; gap: 8px; }
+        label.full { grid-column: 1 / -1; }
+        label span { color: #374151; font-size: 13px; font-weight: 800; }
+        input, select, textarea {
+            width: 100%;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            color: var(--text-main);
+            background: #fff;
+            font-weight: 600;
+        }
+        input, select { height: 40px; padding: 0 12px; }
+        textarea { min-height: 74px; padding: 12px; resize: vertical; line-height: 1.65; }
+        input:disabled { color: var(--text-muted); background: #f9fafb; }
+        label small { color: var(--text-muted); font-size: 12px; font-weight: 600; }
+
+        .token-bar {
+            border: 1px dashed #bfdbfe;
+            border-radius: 8px;
+            margin-top: 14px;
+            padding: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: #f8fbff;
+        }
+        .token {
+            border: 1px solid #bfdbfe;
+            border-radius: 999px;
+            padding: 7px 10px;
+            color: #1d4ed8;
+            background: #fff;
+            font-family: Menlo, Consolas, monospace;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .action-row {
+            border-top: 1px solid var(--border-soft);
+            margin: 16px -16px -16px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            background: #fff;
+        }
+        .action-row span { color: var(--text-sub); font-size: 12px; font-weight: 700; }
+        .action-row div { display: flex; gap: 10px; }
+
+        .preview-body { padding: 16px; }
+        .ticket-card {
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .ticket-card-head {
+            border-bottom: 1px solid var(--border-soft);
+            padding: 12px;
+            color: var(--text-sub);
+            background: #f9fafb;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .ticket-number {
+            padding: 18px 12px;
+            color: var(--primary);
+            font-family: Menlo, Consolas, monospace;
+            font-size: 19px;
+            font-weight: 900;
+            word-break: break-all;
+        }
+        .preview-list { margin: 14px 0 0; padding: 0; list-style: none; }
+        .preview-list li {
+            border-bottom: 1px solid var(--border-soft);
+            padding: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            color: var(--text-sub);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .preview-list li:last-child { border-bottom: 0; }
+        .preview-list strong { color: var(--text-main); }
+
+        .check-list { padding: 14px 16px 16px; display: grid; gap: 10px; }
+        .check-item {
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            padding: 11px;
+            display: grid;
+            grid-template-columns: 28px minmax(0, 1fr);
+            gap: 10px;
+            background: #fff;
+        }
+        .check-mark {
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #047857;
+            background: var(--success-light);
+            font-weight: 900;
+        }
+        .check-mark.warn { color: #b45309; background: var(--warning-light); }
+        .check-item strong { display: block; margin-bottom: 4px; font-size: 13px; }
+        .check-item small { color: var(--text-muted); font-size: 12px; font-weight: 600; }
+
+        .param-panel { margin-top: 16px; }
+        .toolbar {
+            border-bottom: 1px solid var(--border-soft);
+            padding: 12px 16px;
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) 160px 110px;
+            gap: 12px;
+        }
+        .toolbar .search-lite {
+            height: 36px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 0 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+        }
+        .toolbar input { border: 0; outline: 0; background: transparent; }
+        .param-table { width: 100%; border-collapse: collapse; }
+        .param-table th, .param-table td {
+            border-bottom: 1px solid var(--border-soft);
+            padding: 14px 16px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .param-table th { color: var(--text-muted); font-size: 12px; font-weight: 800; background: #fafafa; }
+        .param-key {
+            display: block;
+            color: var(--text-main);
+            font-family: Menlo, Consolas, monospace;
+            font-weight: 900;
+        }
+        .param-table small { display: block; margin-top: 5px; color: var(--text-muted); font-weight: 600; }
+        .inline-input { height: 34px; min-width: 220px; max-width: 100%; }
+        .ops { display: flex; gap: 8px; }
+        .ops button {
+            height: 30px;
+            border: 1px solid var(--border-light);
+            border-radius: 7px;
+            padding: 0 9px;
+            color: var(--text-sub);
+            background: #fff;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .state-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .state-card {
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 14px;
+            background: #fff;
+        }
+        .state-card strong { display: block; margin-bottom: 7px; font-weight: 800; }
+        .state-card p { margin: 0; color: var(--text-sub); font-size: 12px; line-height: 1.6; font-weight: 600; }
+
+        .modal-mask {
+            position: fixed;
+            inset: 0;
+            z-index: 20;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            background: rgba(15, 23, 42, .28);
+        }
+        .modal-mask.show { display: flex; }
+        .confirm-modal {
+            width: min(460px, 100%);
+            border-radius: 8px;
+            padding: 22px;
+            background: #fff;
+            box-shadow: 0 22px 60px rgba(15, 23, 42, .22);
+        }
+        .confirm-modal h3 { margin: 0 0 8px; font-size: 20px; }
+        .confirm-modal p { margin: 0; color: var(--text-sub); line-height: 1.7; }
+        .confirm-target {
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            margin: 16px 0;
+            padding: 12px;
+            background: #f9fafb;
+        }
+        .confirm-target strong, .confirm-target span { display: block; }
+        .confirm-target span { margin-top: 5px; color: var(--text-muted); font-size: 12px; font-weight: 700; }
+        .modal-foot { display: flex; justify-content: flex-end; gap: 10px; }
+
+        .loading-mask {
+            position: absolute;
+            inset: 52px 0 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-sub);
+            background: rgba(255, 255, 255, .8);
+            font-weight: 800;
+        }
+        .panel.loading { position: relative; }
+        .panel.loading .loading-mask { display: flex; }
+
+        @media (max-width: 1180px) {
+            .settings-layout { grid-template-columns: 280px minmax(0, 1fr); }
+            .preview-column { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+            .state-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 760px) {
+            .shell { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+            .topbar { grid-template-columns: 1fr; height: auto; padding: 14px 16px; }
+            .tools { display: none; }
+            .content { padding: 16px; }
+            .page-head, .action-row { align-items: flex-start; flex-direction: column; }
+            .metrics, .settings-layout, .form-grid, .preview-column, .toolbar, .state-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-mark">M</span>
+                <strong>邮件工单系统</strong>
+            </div>
+            <nav class="nav">
+                <div class="nav-group">
+                    <div class="nav-title">工作空间</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">H</span>工作台</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">工单中心</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">T</span>全部工单</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">M</span>我的工单</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">C</span>待处理</span><span class="badge">39</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">R</span>待客户回复</span><span class="badge warning">15</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">D</span>已关闭</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">邮件管理</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">B</span>邮箱配置</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">I</span>收件记录</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">S</span>发件记录</span><span class="badge primary">3</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">SLA管理</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">L</span>SLA策略</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">W</span>工作日历</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">!</span>超时记录</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">系统管理</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">U</span>用户管理</span></a>
+                    <a class="nav-item active" href="#"><span class="nav-main"><span class="nav-icon">P</span>系统参数</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">N</span>通知模板</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">O</span>操作日志</span></a>
+                </div>
+            </nav>
+            <div class="collapse">← 收起菜单</div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div class="breadcrumb"><span>系统管理</span><span>/</span><strong>系统参数</strong></div>
+                <label class="search">
+                    <span>⌕</span>
+                    <input placeholder="搜索参数键、工单号规则、通知配置">
+                    <span class="shortcut">K</span>
+                </label>
+                <div class="tools">
+                    <button class="icon-btn" title="帮助">?</button>
+                    <button class="icon-btn" title="通知">B</button>
+                    <div class="avatar-wrap">
+                        <span class="avatar">谭</span>
+                        <span class="avatar-text"><strong>系统管理员</strong><small>admin@sfonda.local</small></span>
+                    </div>
+                </div>
+            </header>
+
+            <section class="content">
+                <div class="page-head">
+                    <div>
+                        <h1>系统参数</h1>
+                        <p>维护工单编号规则、邮件处理参数和系统运行配置；关键参数保存前需要二次确认。</p>
+                    </div>
+                    <div class="head-actions">
+                        <button class="btn" id="showLoading">刷新</button>
+                        <button class="btn primary" id="saveTop">保存修改</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric"><span>参数总数</span><strong>18</strong><small>系统级可维护参数</small></div>
+                    <div class="metric"><span>编号规则</span><strong>1</strong><small>当前前缀 TCK</small></div>
+                    <div class="metric"><span>未保存变更</span><strong>2</strong><small>规则长度和重试次数</small></div>
+                    <div class="metric"><span>今日流水</span><strong>42</strong><small>下一号 0043</small></div>
+                </div>
+
+                <div class="alert" id="infoAlert">
+                    <span>编号规则影响后续新建工单，历史工单号不会回写变更。</span>
+                    <button id="showError">模拟错误态</button>
+                </div>
+
+                <div class="settings-layout">
+                    <aside class="panel">
+                        <div class="panel-head">
+                            <strong>参数分组</strong>
+                            <span class="pill">4 组</span>
+                        </div>
+                        <div class="group-list">
+                            <button class="group-item active" data-group="ticket">
+                                <span class="group-icon">T</span>
+                                <span><strong>工单编号规则</strong><small>前缀、日期格式、流水位数</small></span>
+                            </button>
+                            <button class="group-item" data-group="mail">
+                                <span class="group-icon">M</span>
+                                <span><strong>邮件处理参数</strong><small>重试次数、拉取间隔、附件限制</small></span>
+                            </button>
+                            <button class="group-item" data-group="notice">
+                                <span class="group-icon">N</span>
+                                <span><strong>通知与提醒</strong><small>SLA 预警、分配通知开关</small></span>
+                            </button>
+                            <button class="group-item" data-group="security">
+                                <span class="group-icon">S</span>
+                                <span><strong>安全与审计</strong><small>会话超时、操作日志保留</small></span>
+                            </button>
+                        </div>
+                    </aside>
+
+                    <section class="panel" id="editorPanel">
+                        <div class="panel-head">
+                            <strong>工单编号规则</strong>
+                            <span class="pill warning">未保存</span>
+                        </div>
+                        <div class="rule-editor">
+                            <div class="form-grid">
+                                <label>
+                                    <span>规则键</span>
+                                    <input value="ticket.no.pattern" disabled>
+                                    <small>系统内置关键参数，不允许删除。</small>
+                                </label>
+                                <label>
+                                    <span>启用状态</span>
+                                    <select>
+                                        <option>启用</option>
+                                        <option>停用</option>
+                                    </select>
+                                    <small>停用后使用默认规则 TCK-yyyyMMdd-0001。</small>
+                                </label>
+                                <label>
+                                    <span>工单前缀</span>
+                                    <input id="prefixInput" value="TCK" maxlength="8">
+                                    <small>建议使用 2-8 位大写英文。</small>
+                                </label>
+                                <label>
+                                    <span>日期格式</span>
+                                    <select id="dateFormat">
+                                        <option value="yyyyMMdd">yyyyMMdd</option>
+                                        <option value="yyyyMM">yyyyMM</option>
+                                        <option value="yyyy">yyyy</option>
+                                    </select>
+                                    <small>变更后新工单按新日期维度取流水。</small>
+                                </label>
+                                <label>
+                                    <span>流水位数</span>
+                                    <input id="seqLength" type="number" value="4" min="3" max="8">
+                                    <small>示例：4 位生成 0001，6 位生成 000001。</small>
+                                </label>
+                                <label>
+                                    <span>分隔符</span>
+                                    <select id="separator">
+                                        <option value="-">短横线 -</option>
+                                        <option value="">无分隔符</option>
+                                        <option value="_">下划线 _</option>
+                                    </select>
+                                    <small>建议保留短横线，便于邮件主题识别。</small>
+                                </label>
+                                <label class="full">
+                                    <span>参数说明</span>
+                                    <textarea>客户来信自动建单时生成唯一工单号；邮件线程关联会优先匹配主题中的工单号。</textarea>
+                                </label>
+                            </div>
+
+                            <div class="token-bar" aria-label="可插入规则片段">
+                                <button class="token" data-token="{prefix}">{prefix}</button>
+                                <button class="token" data-token="{yyyyMMdd}">{yyyyMMdd}</button>
+                                <button class="token" data-token="{seq}">{seq}</button>
+                                <button class="token" data-token="-">-</button>
+                                <button class="token" data-token="_">_</button>
+                            </div>
+
+                            <div class="action-row">
+                                <span>保存前会校验唯一性、格式合法性和下一号预览。</span>
+                                <div>
+                                    <button class="btn" id="resetRule">恢复默认</button>
+                                    <button class="btn primary" id="saveRule">保存规则</button>
+                                </div>
+                            </div>
+                            <div class="loading-mask">正在刷新参数...</div>
+                        </div>
+                    </section>
+
+                    <aside class="preview-column">
+                        <section class="panel">
+                            <div class="panel-head">
+                                <strong>规则预览</strong>
+                                <span class="pill success">可用</span>
+                            </div>
+                            <div class="preview-body">
+                                <div class="ticket-card">
+                                    <div class="ticket-card-head">下一工单号</div>
+                                    <div class="ticket-number" id="ticketPreview">TCK-20260722-0043</div>
+                                </div>
+                                <ul class="preview-list">
+                                    <li><span>今日日期</span><strong>2026-07-22</strong></li>
+                                    <li><span>今日已用流水</span><strong>42</strong></li>
+                                    <li><span>下一流水</span><strong id="nextSeqText">0043</strong></li>
+                                    <li><span>主题匹配样例</span><strong id="subjectPreview">Re: TCK-20260722-0043</strong></li>
+                                </ul>
+                            </div>
+                        </section>
+
+                        <section class="panel" style="margin-top:16px;">
+                            <div class="panel-head">
+                                <strong>发布检查</strong>
+                                <span class="pill">自动校验</span>
+                            </div>
+                            <div class="check-list">
+                                <div class="check-item">
+                                    <span class="check-mark">✓</span>
+                                    <span><strong>规则格式合法</strong><small>前缀、日期和流水片段均可解析。</small></span>
+                                </div>
+                                <div class="check-item">
+                                    <span class="check-mark">✓</span>
+                                    <span><strong>下一号未占用</strong><small>预览编号尚未存在于工单表。</small></span>
+                                </div>
+                                <div class="check-item">
+                                    <span class="check-mark warn">!</span>
+                                    <span><strong>影响新工单</strong><small>保存后仅影响后续自动建单。</small></span>
+                                </div>
+                            </div>
+                        </section>
+                    </aside>
+                </div>
+
+                <section class="panel param-panel">
+                    <div class="panel-head">
+                        <strong>系统参数列表</strong>
+                        <button class="btn primary" id="addParam">新增参数</button>
+                    </div>
+                    <div class="toolbar">
+                        <label class="search-lite"><span>⌕</span><input id="paramSearch" placeholder="搜索参数键或说明"></label>
+                        <select>
+                            <option>全部分组</option>
+                            <option>邮件处理</option>
+                            <option>通知提醒</option>
+                            <option>安全审计</option>
+                        </select>
+                        <button class="btn" id="emptySearch">空结果</button>
+                    </div>
+                    <table class="param-table" id="paramTable">
+                        <thead>
+                            <tr>
+                                <th>参数键</th>
+                                <th>参数值</th>
+                                <th>分组</th>
+                                <th>说明</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><span class="param-key">mail.fetch.interval.seconds</span><small>最近更新 2026-07-22 16:20</small></td>
+                                <td><input class="inline-input" value="60"></td>
+                                <td><span class="pill">邮件处理</span></td>
+                                <td>收件任务轮询间隔，单位秒。</td>
+                                <td><span class="pill success">启用</span></td>
+                                <td><div class="ops"><button>保存</button><button>重置</button></div></td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-key">mail.retry.max</span><small>最近更新 2026-07-22 16:23</small></td>
+                                <td><input class="inline-input" value="5"></td>
+                                <td><span class="pill">邮件处理</span></td>
+                                <td>发送失败后最大重试次数。</td>
+                                <td><span class="pill warning">待保存</span></td>
+                                <td><div class="ops"><button>保存</button><button>重置</button></div></td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-key">sla.warning.minutes</span><small>最近更新 2026-07-22 16:25</small></td>
+                                <td><input class="inline-input" value="30"></td>
+                                <td><span class="pill">通知提醒</span></td>
+                                <td>SLA 即将超时时提前提醒分钟数。</td>
+                                <td><span class="pill success">启用</span></td>
+                                <td><div class="ops"><button>保存</button><button>停用</button></div></td>
+                            </tr>
+                            <tr>
+                                <td><span class="param-key">audit.log.retention.days</span><small>最近更新 2026-07-22 16:28</small></td>
+                                <td><input class="inline-input" value="180"></td>
+                                <td><span class="pill">安全审计</span></td>
+                                <td>操作日志保留天数。</td>
+                                <td><span class="pill success">启用</span></td>
+                                <td><div class="ops"><button>保存</button><button>重置</button></div></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="empty-state" id="emptyState" style="display:none; padding:54px 20px; text-align:center;">
+                        <strong style="display:block;font-size:18px;margin-bottom:8px;">未找到参数</strong>
+                        <p style="margin:0 0 16px;color:var(--text-sub);">可清空搜索条件，或新增自定义参数。</p>
+                        <button class="btn primary">新增参数</button>
+                    </div>
+                </section>
+
+                <div class="state-grid">
+                    <div class="state-card"><strong>空态</strong><p>搜索无结果时隐藏表格，展示清空搜索和新增参数入口。</p></div>
+                    <div class="state-card"><strong>加载态</strong><p>刷新参数时编辑区覆盖加载提示，按钮临时禁用。</p></div>
+                    <div class="state-card"><strong>错误态</strong><p>编号格式非法、保存失败时在顶部显示红色错误提示。</p></div>
+                    <div class="state-card"><strong>权限态</strong><p>非管理员只读参数，保存、新增和停用按钮禁用。</p></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div class="modal-mask" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <div class="confirm-modal">
+            <h3 id="confirmTitle">保存编号规则确认</h3>
+            <p>保存后系统会用新规则生成后续工单号，历史工单号不受影响。请确认规则预览无误。</p>
+            <div class="confirm-target">
+                <strong id="confirmNumber">TCK-20260722-0043</strong>
+                <span>影响范围：后续客户来信自动建单、自动回执、主题工单号匹配。</span>
+            </div>
+            <div class="modal-foot">
+                <button class="btn" id="cancelModal">取消</button>
+                <button class="btn primary" id="confirmSave">确认保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const prefixInput = document.getElementById('prefixInput');
+        const dateFormat = document.getElementById('dateFormat');
+        const seqLength = document.getElementById('seqLength');
+        const separator = document.getElementById('separator');
+        const ticketPreview = document.getElementById('ticketPreview');
+        const nextSeqText = document.getElementById('nextSeqText');
+        const subjectPreview = document.getElementById('subjectPreview');
+        const confirmNumber = document.getElementById('confirmNumber');
+        const confirmModal = document.getElementById('confirmModal');
+        const infoAlert = document.getElementById('infoAlert');
+        const editorPanel = document.getElementById('editorPanel');
+        const paramTable = document.getElementById('paramTable');
+        const emptyState = document.getElementById('emptyState');
+
+        function formatDate() {
+            if (dateFormat.value === 'yyyyMM') return '202607';
+            if (dateFormat.value === 'yyyy') return '2026';
+            return '20260722';
+        }
+
+        function updatePreview() {
+            const prefix = (prefixInput.value || 'TCK').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+            prefixInput.value = prefix;
+            const length = Math.max(3, Math.min(8, Number(seqLength.value || 4)));
+            seqLength.value = length;
+            const nextSeq = String(43).padStart(length, '0');
+            const sep = separator.value;
+            const value = [prefix, formatDate(), nextSeq].filter(Boolean).join(sep);
+            ticketPreview.textContent = value;
+            nextSeqText.textContent = nextSeq;
+            subjectPreview.textContent = 'Re: ' + value;
+            confirmNumber.textContent = value;
+        }
+
+        [prefixInput, dateFormat, seqLength, separator].forEach(item => {
+            item.addEventListener('input', updatePreview);
+            item.addEventListener('change', updatePreview);
+        });
+
+        document.querySelectorAll('.token').forEach(button => {
+            button.addEventListener('click', () => {
+                infoAlert.className = 'alert';
+                infoAlert.querySelector('span').textContent = '已插入规则片段：' + button.dataset.token;
+            });
+        });
+
+        document.querySelectorAll('.group-item').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.group-item').forEach(item => item.classList.remove('active'));
+                button.classList.add('active');
+            });
+        });
+
+        document.getElementById('saveTop').addEventListener('click', () => confirmModal.classList.add('show'));
+        document.getElementById('saveRule').addEventListener('click', () => confirmModal.classList.add('show'));
+        document.getElementById('cancelModal').addEventListener('click', () => confirmModal.classList.remove('show'));
+        document.getElementById('confirmSave').addEventListener('click', () => {
+            confirmModal.classList.remove('show');
+            infoAlert.className = 'alert';
+            infoAlert.querySelector('span').textContent = '编号规则已保存，后续新建工单将使用当前规则。';
+        });
+
+        document.getElementById('resetRule').addEventListener('click', () => {
+            prefixInput.value = 'TCK';
+            dateFormat.value = 'yyyyMMdd';
+            seqLength.value = '4';
+            separator.value = '-';
+            updatePreview();
+        });
+
+        document.getElementById('showLoading').addEventListener('click', () => {
+            editorPanel.classList.add('loading');
+            setTimeout(() => editorPanel.classList.remove('loading'), 900);
+        });
+
+        document.getElementById('showError').addEventListener('click', () => {
+            infoAlert.className = 'alert danger';
+            infoAlert.querySelector('span').textContent = '保存失败：工单前缀只能包含大写英文和数字，请检查后重试。';
+        });
+
+        document.getElementById('emptySearch').addEventListener('click', () => {
+            paramTable.style.display = 'none';
+            emptyState.style.display = 'block';
+        });
+
+        document.getElementById('paramSearch').addEventListener('input', event => {
+            if (!event.target.value.trim()) {
+                paramTable.style.display = 'table';
+                emptyState.style.display = 'none';
+            }
+        });
+
+        updatePreview();
+    </script>
+</body>
+</html>
