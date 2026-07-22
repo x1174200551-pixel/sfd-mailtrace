@@ -37,5 +37,7 @@ logging:
 
 mailtrace:
   security:
-    # 骨架阶段：开发环境放行 API，后续接入 JWT
-    permit-all: true
+    permit-all: false
+    jwt:
+      secret: mailtrace-local-dev-secret-change-before-production
+      expires-in-seconds: 7200
