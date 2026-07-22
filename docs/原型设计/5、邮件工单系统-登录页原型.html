@@ -25,11 +25,19 @@
             box-sizing: border-box;
         }
 
+        html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
         body {
             margin: 0;
+            width: 100%;
             min-height: 100vh;
             font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
             color: var(--text-main);
+            overflow: hidden;
             background:
                 radial-gradient(circle at 16% 20%, rgba(15, 107, 255, 0.14), transparent 30%),
                 radial-gradient(circle at 78% 24%, rgba(82, 142, 255, 0.10), transparent 26%),
@@ -41,8 +49,40 @@
             font: inherit;
         }
 
-        .version-badge {
+        .prototype-shell {
             position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .prototype-stage {
+            position: relative;
+            width: calc(1309px * var(--prototype-scale, 1));
+            height: calc(1201px * var(--prototype-scale, 1));
+            flex: 0 0 auto;
+        }
+
+        .prototype-artboard {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 1309px;
+            height: 1201px;
+            overflow: hidden;
+            transform: scale(var(--prototype-scale, 1));
+            transform-origin: top left;
+            background:
+                radial-gradient(circle at 16% 20%, rgba(15, 107, 255, 0.14), transparent 30%),
+                radial-gradient(circle at 78% 24%, rgba(82, 142, 255, 0.10), transparent 26%),
+                linear-gradient(135deg, #f8fbff 0%, #eef6ff 52%, #f8fbff 100%);
+            box-shadow: 0 30px 80px rgba(39, 76, 130, 0.08);
+        }
+
+        .version-badge {
+            position: absolute;
             top: 0;
             left: 24px;
             z-index: 20;
@@ -60,8 +100,8 @@
         }
 
         .page {
-            width: min(1309px, 100%);
-            min-height: 100vh;
+            width: 1309px;
+            min-height: 1201px;
             margin: 0 auto;
             padding: 116px 54px 72px 63px;
             display: grid;
@@ -646,8 +686,8 @@
         }
 
         .footer {
-            position: fixed;
-            left: calc(50% - 591px);
+            position: absolute;
+            left: 63px;
             bottom: 76px;
             color: #7180a0;
             font-size: 15px;
@@ -822,9 +862,12 @@
     </style>
 </head>
 <body>
-    <button class="version-badge" type="button">V0.1 登录页</button>
+    <div class="prototype-shell">
+        <div class="prototype-stage" id="prototypeStage">
+            <div class="prototype-artboard">
+                <button class="version-badge" type="button">V0.1 登录页</button>
 
-    <main class="page">
+                <main class="page">
         <section class="intro" aria-label="产品介绍">
             <div class="brand">
                 <div class="brand-icon" aria-hidden="true"><i class="fa-solid fa-envelope"></i></div>
@@ -966,9 +1009,12 @@
                 <p class="helper">首次无账号？<button type="button" id="noAccountButton">请联系管理员创建账号</button></p>
             </form>
         </section>
-    </main>
+                </main>
 
-    <footer class="footer">© 2026 邮件工单系统. All rights reserved.</footer>
+                <footer class="footer">© 2026 邮件工单系统. All rights reserved.</footer>
+            </div>
+        </div>
+    </div>
 
     <div class="modal-mask" id="modalMask" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <div class="modal">
@@ -982,6 +1028,9 @@
     </div>
 
     <script>
+        const DESIGN_WIDTH = 1309;
+        const DESIGN_HEIGHT = 1201;
+        const prototypeStage = document.getElementById('prototypeStage');
         const form = document.getElementById('loginForm');
         const account = document.getElementById('account');
         const password = document.getElementById('password');
@@ -999,6 +1048,15 @@
         const noAccountButton = document.getElementById('noAccountButton');
         const modalCancel = document.getElementById('modalCancel');
         const modalConfirm = document.getElementById('modalConfirm');
+
+        function fitPrototype() {
+            const scale = Math.min(window.innerWidth / DESIGN_WIDTH, window.innerHeight / DESIGN_HEIGHT);
+            const finalScale = Math.min(scale, 1);
+            prototypeStage.style.setProperty('--prototype-scale', finalScale.toFixed(4));
+        }
+
+        fitPrototype();
+        window.addEventListener('resize', fitPrototype);
 
         function setFieldError(input, errorNode, message) {
             input.classList.add('invalid');
