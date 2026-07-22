@@ -15,13 +15,14 @@ final result: passed
 | Area | Result | Notes |
 |------|--------|-------|
 | Layout | passed | Two-column desktop layout matches the reference structure. |
-| Brand area | passed | Version badge, product name, subtitle, headline, and capability copy are present. |
+| Brand area | passed | Product name, subtitle, headline, and capability copy are present; the earlier version badge has been removed. |
 | Illustration | passed | Left workflow illustration approximates the reference using existing system UI language. |
 | Login card | passed | Card position, scale, title, inputs, remember row, forgot action, and primary button align with the reference. |
 | Interaction states | passed | Required, error, loading, success, password toggle, forgot password, and no-account states are implemented. |
 | Wide-screen scaling | passed | Prototype now uses a full-width browser canvas with a balanced inner grid, removing the large blank side gutters on wide screens. |
 | Column balance | passed | Left content column is widened and the right login panel/form is narrowed so the two sides read with more balanced visual weight. |
 | Single-screen fit | passed | Wide-screen verification fits the login page in one viewport without visible page scrolling. |
+| Version badge and footer | passed | The top-left version badge is removed and the copyright text is anchored at the bottom of the page. |
 
 ## Follow-Up Notes
 
