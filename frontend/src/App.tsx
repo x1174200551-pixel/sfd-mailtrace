@@ -313,12 +313,16 @@ function clearSession() {
 }
 
 async function requestApi<T>(url: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers)
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+
   const response = await fetch(url, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
     ...options,
+    headers: {
+      ...Object.fromEntries(headers.entries()),
+    },
   })
   const body = (await response.json().catch(() => ({
     code: response.status,
