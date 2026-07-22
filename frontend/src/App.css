@@ -1,0 +1,63 @@
+:root {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #1f2937;
+  background: #f3f4f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 24px 16px;
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.brand-sub {
+  margin: 4px 0 24px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.menu-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  color: #cbd5e1;
+}
+
+.menu-item:hover {
+  background: #1e293b;
+}
+
+.main {
+  padding: 32px;
+}
+
+.card {
+  margin-top: 20px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.muted {
+  color: #6b7280;
+}

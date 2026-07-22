@@ -1,0 +1,45 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mailtrace-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mailtrace
+      MYSQL_USER: mailtrace
+      MYSQL_PASSWORD: mailtrace
+      TZ: Asia/Shanghai
+    volumes:
+      - mailtrace_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/docker/backend.Dockerfile
+    container_name: mailtrace-backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/mailtrace?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      SPRING_DATASOURCE_USERNAME: mailtrace
+      SPRING_DATASOURCE_PASSWORD: mailtrace
+    ports:
+      - "8080:8080"
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/docker/frontend.Dockerfile
+    container_name: mailtrace-web
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  mailtrace_mysql_data:

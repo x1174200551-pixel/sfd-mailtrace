@@ -1,0 +1,6 @@
+/Users/tanzhixing/workSpace/sfd-mailtrace/backend/src/main/java/com/sfonda/mailtrace/MailtraceApplication.java
+/Users/tanzhixing/workSpace/sfd-mailtrace/backend/src/main/java/com/sfonda/mailtrace/infrastructure/basic/BasicResult.java
+/Users/tanzhixing/workSpace/sfd-mailtrace/backend/src/main/java/com/sfonda/mailtrace/infrastructure/config/MybatisPlusConfig.java
+/Users/tanzhixing/workSpace/sfd-mailtrace/backend/src/main/java/com/sfonda/mailtrace/infrastructure/config/OpenApiConfig.java
+/Users/tanzhixing/workSpace/sfd-mailtrace/backend/src/main/java/com/sfonda/mailtrace/infrastructure/config/SecurityConfig.java
+/Users/tanzhixing/workSpace/sfd-mailtrace/backend/src/main/java/com/sfonda/mailtrace/interfaces/api/system/HealthController.java

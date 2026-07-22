@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邮件工单系统 - 全部工单</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563EB',
+                        'primary-light': '#EFF6FF',
+                        'primary-hover': '#1D4ED8',
+                        'bg-main': '#F5F6F8',
+                        'border-light': '#E5E7EB',
+                        'text-main': '#1F2937',
+                        'text-sub': '#6B7280',
+                        'text-muted': '#9CA3AF',
+                        success: '#10B981',
+                        'success-light': '#ECFDF5',
+                        warning: '#F59E0B',
+                        'warning-light': '#FFFBEB',
+                        danger: '#EF4444',
+                        'danger-light': '#FEF2F2',
+                        purple: '#8B5CF6',
+                        'purple-light': '#F5F3FF',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #F5F6F8;
+        }
+        
+        .sidebar-item {
+            transition: all 0.2s ease;
+        }
+        
+        .sidebar-item:hover {
+            background-color: #F3F4F6;
+            color: #1F2937;
+        }
+        
+        .sidebar-item.active {
+            background-color: #EFF6FF;
+            color: #2563EB;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            border: 1px solid #F3F4F6;
+        }
+        
+        .stat-tab {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .stat-tab:hover {
+            background-color: #F9FAFB;
+        }
+        
+        .stat-tab.active {
+            background-color: #EFF6FF;
+            border-color: #2563EB;
+        }
+        
+        .stat-tab.active .stat-tab-title {
+            color: #2563EB;
+        }
+        
+        .filter-group-title {
+            position: relative;
+            padding-left: 12px;
+        }
+        
+        .filter-group-title::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 14px;
+            background-color: #2563EB;
+            border-radius: 2px;
+        }
+        
+        .ticket-item {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .ticket-item:hover {
+            background-color: #F9FAFB;
+        }
+        
+        .ticket-item.selected {
+            background-color: #EFF6FF;
+            border-left-color: #2563EB;
+        }
+        
+        .priority-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        
+        .priority-p1 {
+            background-color: #FEF2F2;
+            color: #DC2626;
+        }
+        
+        .priority-p2 {
+            background-color: #FFFBEB;
+            color: #D97706;
+        }
+        
+        .priority-p3 {
+            background-color: #EFF6FF;
+            color: #2563EB;
+        }
+        
+        .priority-p4 {
+            background-color: #ECFDF5;
+            color: #059669;
+        }
+        
+        .status-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 10px;
+            border-radius: 9999px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-processing {
+            background-color: #EFF6FF;
+            color: #2563EB;
+        }
+        
+        .status-waiting {
+            background-color: #FFFBEB;
+            color: #D97706;
+        }
+        
+        .status-evaluate {
+            background-color: #F3F4F6;
+            color: #6B7280;
+        }
+        
+        .status-overdue {
+            background-color: #FEF2F2;
+            color: #DC2626;
+        }
+        
+        .custom-checkbox {
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border: 1.5px solid #D1D5DB;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        
+        .custom-checkbox:checked {
+            background-color: #2563EB;
+            border-color: #2563EB;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+            background-size: 12px;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+        
+        .tab-item {
+            padding: 12px 16px;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #6B7280;
+        }
+        
+        .tab-item:hover {
+            color: #2563EB;
+        }
+        
+        .tab-item.active {
+            color: #2563EB;
+            border-bottom-color: #2563EB;
+        }
+        
+        .action-btn {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        
+        .action-btn-primary {
+            background-color: #2563EB;
+            color: white;
+        }
+        
+        .action-btn-primary:hover {
+            background-color: #1D4ED8;
+        }
+        
+        .action-btn-default {
+            background-color: white;
+            color: #374151;
+            border: 1px solid #E5E7EB;
+        }
+        
+        .action-btn-default:hover {
+            background-color: #F9FAFB;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #D1D5DB;
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #9CA3AF;
+        }
+        
+        .badge-new {
+            background: linear-gradient(135deg, #2563EB 0%, #3B82F6 100%);
+        }
+    </style>
+</head>
+<body class="text-text-main antialiased">
+    <div class="flex h-screen overflow-hidden">
+        <!-- 左侧边栏 -->
+        <aside class="w-[240px] bg-white flex flex-col border-r border-border-light flex-shrink-0">
+            <!-- Logo -->
+            <div class="h-16 flex items-center px-5 border-b border-border-light">
+                <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center mr-3">
+                    <i class="fa-solid fa-envelope text-white text-sm"></i>
+                </div>
+                <span class="font-semibold text-base text-text-main">邮件工单系统</span>
+            </div>
+            
+            <!-- 菜单 -->
+            <div class="flex-1 overflow-y-auto py-3">
+                <!-- 工作空间 -->
+                <div class="px-3 mb-4">
+                    <div class="px-3 py-2 text-xs font-medium text-text-muted mb-1">工作空间</div>
+                    <a href="#" class="sidebar-item flex items-center px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <i class="fa-solid fa-house w-5 text-center mr-2"></i>
+                        <span>工作台</span>
+                    </a>
+                </div>
+                
+                <!-- 工单中心 -->
+                <div class="px-3 mb-4">
+                    <div class="px-3 py-2 text-xs font-medium text-text-muted mb-1">工单中心</div>
+                    <a href="#" class="sidebar-item active flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-layer-group w-5 text-center mr-2"></i>
+                            <span>全部工单</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-regular fa-folder w-5 text-center mr-2"></i>
+                            <span>我的工单</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-regular fa-clock w-5 text-center mr-2"></i>
+                            <span>待处理</span>
+                        </div>
+                        <span class="bg-danger text-white text-xs px-2 py-0.5 rounded-full min-w-[20px] text-center">38</span>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-regular fa-comment-dots w-5 text-center mr-2"></i>
+                            <span>待客户回复</span>
+                        </div>
+                        <span class="bg-warning text-white text-xs px-2 py-0.5 rounded-full min-w-[20px] text-center">18</span>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-regular fa-circle-check w-5 text-center mr-2"></i>
+                            <span>已关闭</span>
+                        </div>
+                    </a>
+                </div>
+                
+                <!-- 邮件管理 -->
+                <div class="px-3 mb-4">
+                    <div class="px-3 py-2 text-xs font-medium text-text-muted mb-1">邮件管理</div>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-gear w-5 text-center mr-2"></i>
+                            <span>邮箱配置</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-inbox w-5 text-center mr-2"></i>
+                            <span>收件记录</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-regular fa-paper-plane w-5 text-center mr-2"></i>
+                            <span>发件记录</span>
+                        </div>
+                        <span class="bg-primary text-white text-xs px-2 py-0.5 rounded-full min-w-[20px] text-center">3</span>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-trash-can w-5 text-center mr-2"></i>
+                            <span>回收站</span>
+                        </div>
+                    </a>
+                </div>
+                
+                <!-- SLA管理 -->
+                <div class="px-3 mb-4">
+                    <div class="px-3 py-2 text-xs font-medium text-text-muted mb-1">SLA管理</div>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-stopwatch w-5 text-center mr-2"></i>
+                            <span>SLA策略</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-regular fa-calendar w-5 text-center mr-2"></i>
+                            <span>工作日历</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-triangle-exclamation w-5 text-center mr-2"></i>
+                            <span>超时记录</span>
+                        </div>
+                    </a>
+                </div>
+                
+                <!-- 统计报表 -->
+                <div class="px-3 mb-4">
+                    <div class="px-3 py-2 text-xs font-medium text-text-muted mb-1">统计报表</div>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-chart-pie w-5 text-center mr-2"></i>
+                            <span>工单报表</span>
+                        </div>
+                        <span class="badge-new text-white text-[10px] px-1.5 py-0.5 rounded font-medium">使用中</span>
+                    </a>
+                </div>
+                
+                <!-- 系统管理 -->
+                <div class="px-3 mb-4">
+                    <div class="px-3 py-2 text-xs font-medium text-text-muted mb-1">系统管理</div>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-sliders w-5 text-center mr-2"></i>
+                            <span>系统设置</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-regular fa-bell w-5 text-center mr-2"></i>
+                            <span>通知模板</span>
+                        </div>
+                    </a>
+                    <a href="#" class="sidebar-item flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium text-text-sub">
+                        <div class="flex items-center">
+                            <i class="fa-solid fa-list-check w-5 text-center mr-2"></i>
+                            <span>操作日志</span>
+                        </div>
+                    </a>
+                </div>
+            </div>
+            
+            <!-- 收起菜单 -->
+            <div class="h-12 border-t border-border-light flex items-center px-5 text-text-sub hover:text-text-main cursor-pointer transition-colors">
+                <i class="fa-solid fa-angles-left mr-2 text-sm"></i>
+                <span class="text-sm">收起菜单</span>
+            </div>
+        </aside>
+        
+        <!-- 主内容区 -->
+        <main class="flex-1 flex flex-col min-w-0">
+            <!-- 顶部栏 -->
+            <header class="h-16 bg-white border-b border-border-light flex items-center justify-between px-6 flex-shrink-0">
+                <!-- 面包屑 -->
+                <div class="flex items-center text-sm text-text-sub">
+                    <i class="fa-solid fa-bars mr-3 text-text-muted"></i>
+                    <span>邮件工单</span>
+                    <span class="mx-2 text-text-muted">/</span>
+                    <span>工单中心</span>
+                    <span class="mx-2 text-text-muted">/</span>
+                    <span class="text-text-main font-medium">全部工单</span>
+                </div>
+                
+                <!-- 搜索 -->
+                <div class="flex-1 max-w-xl mx-8">
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm"></i>
+                        <input type="text" placeholder="搜索工单、客户、邮件内容或功能" class="w-full h-9 pl-10 pr-20 bg-bg-main border border-transparent rounded-lg text-sm focus:outline-none focus:border-primary focus:bg-white transition-colors">
+                        <div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center text-text-muted text-xs">
+                            <span class="border border-text-muted rounded px-1 mr-1">⌘</span>
+                            <span class="border border-text-muted rounded px-1">K</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 右侧工具 -->
+                <div class="flex items-center space-x-4">
+                    <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-bg-main text-text-sub transition-colors">
+                        <i class="fa-regular fa-circle-question text-lg"></i>
+                    </button>
+                    <button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-bg-main text-text-sub transition-colors relative">
+                        <i class="fa-regular fa-bell text-lg"></i>
+                        <span class="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full border-2 border-white"></span>
+                    </button>
+                    <div class="flex items-center pl-2 border-l border-border-light">
+                        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-medium text-sm mr-3">
+                            李
+                        </div>
+                        <div class="hidden md:block">
+                            <div class="text-sm font-medium text-text-main">李工</div>
+                            <div class="text-xs text-text-muted">客服处理人员</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- 页面内容 -->
+            <div class="flex-1 overflow-hidden flex flex-col">
+                <!-- 页面标题区 -->
+                <div class="bg-white px-6 py-5 border-b border-border-light flex-shrink-0">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <h1 class="text-2xl font-semibold text-text-main mb-1">全部工单</h1>
+                            <p class="text-sm text-text-sub">共 128 个工单，包含所有状态的工单信息</p>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <button class="action-btn action-btn-default">
+                                <i class="fa-solid fa-rotate-right mr-2 text-text-muted"></i>
+                                刷新
+                            </button>
+                            <button class="action-btn action-btn-default">
+                                <i class="fa-solid fa-download mr-2 text-text-muted"></i>
+                                导出
+                            </button>
+                            <button class="action-btn action-btn-primary">
+                                <i class="fa-solid fa-plus mr-2"></i>
+                                新建工单
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 状态标签栏 -->
+                    <div class="flex space-x-3">
+                        <div class="stat-tab active px-4 py-3 border border-border-light rounded-xl flex items-center min-w-[140px]">
+                            <div class="flex-1">
+                                <div class="stat-tab-title text-sm text-text-sub mb-1">全部工单</div>
+                                <div class="text-2xl font-bold text-text-main">128</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-primary-light flex items-center justify-center text-primary ml-3">
+                                <i class="fa-solid fa-layer-group text-sm"></i>
+                            </div>
+                        </div>
+                        <div class="stat-tab px-4 py-3 border border-border-light rounded-xl flex items-center min-w-[140px]">
+                            <div class="flex-1">
+                                <div class="stat-tab-title text-sm text-text-sub mb-1">待分配</div>
+                                <div class="text-2xl font-bold text-text-main">18</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-purple-light flex items-center justify-center text-purple ml-3">
+                                <i class="fa-solid fa-user-plus text-sm"></i>
+                            </div>
+                        </div>
+                        <div class="stat-tab px-4 py-3 border border-border-light rounded-xl flex items-center min-w-[140px]">
+                            <div class="flex-1">
+                                <div class="stat-tab-title text-sm text-text-sub mb-1">处理中</div>
+                                <div class="text-2xl font-bold text-text-main">56</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-primary-light flex items-center justify-center text-primary ml-3">
+                                <i class="fa-solid fa-spinner text-sm"></i>
+                            </div>
+                        </div>
+                        <div class="stat-tab px-4 py-3 border border-border-light rounded-xl flex items-center min-w-[140px]">
+                            <div class="flex-1">
+                                <div class="stat-tab-title text-sm text-text-sub mb-1">待客户回复</div>
+                                <div class="text-2xl font-bold text-text-main">32</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center text-warning ml-3">
+                                <i class="fa-regular fa-comment-dots text-sm"></i>
+                            </div>
+                        </div>
+                        <div class="stat-tab px-4 py-3 border border-border-light rounded-xl flex items-center min-w-[140px]">
+                            <div class="flex-1">
+                                <div class="stat-tab-title text-sm text-text-sub mb-1">即将超时</div>
+                                <div class="text-2xl font-bold text-text-main">6</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center text-warning ml-3">
+                                <i class="fa-regular fa-clock text-sm"></i>
+                            </div>
+                        </div>
+                        <div class="stat-tab px-4 py-3 border border-border-light rounded-xl flex items-center min-w-[140px]">
+                            <div class="flex-1">
+                                <div class="stat-tab-title text-sm text-text-sub mb-1">已超时</div>
+                                <div class="text-2xl font-bold text-text-main">2</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-danger-light flex items-center justify-center text-danger ml-3">
+                                <i class="fa-solid fa-triangle-exclamation text-sm"></i>
+                            </div>
+                        </div>
+                        <div class="stat-tab px-4 py-3 border border-border-light rounded-xl flex items-center min-w-[140px]">
+                            <div class="flex-1">
+                                <div class="stat-tab-title text-sm text-text-sub mb-1">今日已关闭</div>
+                                <div class="text-2xl font-bold text-text-main">42</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-lg bg-success-light flex items-center justify-center text-success ml-3">
+                                <i class="fa-regular fa-circle-check text-sm"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 三栏内容区 -->
+                <div class="flex-1 overflow-hidden flex p-4 space-x-4">
+                    <!-- 左侧筛选面板 -->
+                    <aside class="w-[220px] bg-white rounded-xl border border-border-light flex-shrink-0 overflow-y-auto">
+                        <div class="p-4">
+                            <!-- 我的视图 -->
+                            <div class="mb-5">
+                                <div class="filter-group-title text-sm font-semibold text-text-main mb-3">我的视图</div>
+                                <div class="space-y-1">
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <i class="fa-solid fa-star text-warning text-xs mr-2"></i>
+                                            <span class="text-sm text-text-main">我的待处理</span>
+                                        </div>
+                                        <span class="text-sm font-medium text-text-main">35</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <i class="fa-regular fa-eye text-text-muted text-xs mr-2"></i>
+                                            <span class="text-sm text-text-sub">我关注的</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">12</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <i class="fa-regular fa-clock text-text-muted text-xs mr-2"></i>
+                                            <span class="text-sm text-text-sub">最近更新</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">20</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- 工单状态 -->
+                            <div class="mb-5">
+                                <div class="filter-group-title text-sm font-semibold text-text-main mb-3">工单状态</div>
+                                <div class="space-y-1">
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="text-sm text-text-main">全部</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">128</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="text-sm text-text-sub">新建</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">18</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="text-sm text-text-sub">处理中</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">56</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="text-sm text-text-sub">待客户回复</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">32</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="text-sm text-text-sub">已关闭</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">22</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="text-sm text-text-sub">超时</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">2</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- 优先级 -->
+                            <div class="mb-5">
+                                <div class="filter-group-title text-sm font-semibold text-text-main mb-3">优先级</div>
+                                <div class="space-y-1">
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2" checked>
+                                            <span class="priority-badge priority-p1 mr-2">P1</span>
+                                            <span class="text-sm text-text-sub">紧急</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">8</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="priority-badge priority-p2 mr-2">P2</span>
+                                            <span class="text-sm text-text-sub">高</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">36</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <span class="priority-badge priority-p3 mr-2">P3</span>
+                                            <span class="text-sm text-text-sub">普通</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">72</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2" checked>
+                                            <span class="priority-badge priority-p4 mr-2">P4</span>
+                                            <span class="text-sm text-text-sub">低</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">12</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- SLA状态 -->
+                            <div class="mb-5">
+                                <div class="filter-group-title text-sm font-semibold text-text-main mb-3">SLA状态</div>
+                                <div class="space-y-1">
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <span class="w-2 h-2 rounded-full bg-warning mr-3"></span>
+                                            <span class="text-sm text-text-sub">即将超时</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">6</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <span class="w-2 h-2 rounded-full bg-danger mr-3"></span>
+                                            <span class="text-sm text-text-sub">已超时</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">2</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <span class="w-2 h-2 rounded-full bg-success mr-3"></span>
+                                            <span class="text-sm text-text-sub">正常</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">120</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- 负责人 -->
+                            <div class="mb-2">
+                                <div class="filter-group-title text-sm font-semibold text-text-main mb-3">负责人</div>
+                                <div class="relative mb-3">
+                                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-xs"></i>
+                                    <input type="text" placeholder="搜索负责人" class="w-full h-8 pl-8 pr-3 bg-bg-main rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2" checked>
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-medium mr-2">李</div>
+                                            <span class="text-sm text-text-main">李工</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">38</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-medium mr-2">王</div>
+                                            <span class="text-sm text-text-sub">王工</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">25</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-xs font-medium mr-2">张</div>
+                                            <span class="text-sm text-text-sub">张工</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">18</span>
+                                    </label>
+                                    <label class="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-bg-main cursor-pointer">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" class="custom-checkbox mr-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white text-xs font-medium mr-2">赵</div>
+                                            <span class="text-sm text-text-sub">赵工</span>
+                                        </div>
+                                        <span class="text-sm text-text-muted">12</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                    
+                    <!-- 中间工单列表 -->
+                    <div class="flex-1 bg-white rounded-xl border border-border-light flex flex-col min-w-0">
+                        <!-- 列表头部 -->
+                        <div class="h-14 border-b border-border-light flex items-center justify-between px-4 flex-shrink-0">
+                            <div class="flex items-center">
+                                <span class="text-sm text-text-sub mr-2">排序：</span>
+                                <div class="flex items-center text-sm text-text-main font-medium cursor-pointer">
+                                    最新更新
+                                    <i class="fa-solid fa-chevron-down ml-1.5 text-text-muted text-xs"></i>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-primary-light text-primary">
+                                    <i class="fa-solid fa-list text-sm"></i>
+                                </button>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-text-muted">
+                                    <i class="fa-solid fa-table-cells-large text-sm"></i>
+                                </button>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-text-muted">
+                                    <i class="fa-solid fa-table-list text-sm"></i>
+                                </button>
+                                <div class="h-5 w-px bg-border-light mx-2"></div>
+                                <button class="action-btn action-btn-default py-1.5 px-3">
+                                    批量操作
+                                    <i class="fa-solid fa-chevron-down ml-2 text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 工单列表 -->
+                        <div class="flex-1 overflow-y-auto">
+                            <!-- 工单项 1 -->
+                            <div class="ticket-item selected flex items-start px-4 py-4 border-b border-border-light/60 border-l-4 border-l-transparent">
+                                <div class="pt-1 mr-3">
+                                    <input type="checkbox" class="custom-checkbox">
+                                </div>
+                                <div class="flex-shrink-0 mr-3">
+                                    <span class="priority-badge priority-p1">P1</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center mb-1.5">
+                                        <span class="text-sm font-medium text-text-muted mr-2">TCK-20260722-0001</span>
+                                        <span class="text-sm font-medium text-text-main truncate">服务器无法登录</span>
+                                    </div>
+                                    <div class="flex items-center text-xs text-text-muted mb-2">
+                                        <span>tech@test.com</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">来源：客户邮件</span>
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">产品咨询</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end justify-between h-full ml-4 flex-shrink-0">
+                                    <span class="text-xs text-text-muted mb-3">10 分钟前更新</span>
+                                    <div class="text-right">
+                                        <div class="text-sm font-semibold text-danger mb-1">01:25:30</div>
+                                        <div class="text-xs text-text-muted mb-2">SLA剩余</div>
+                                        <div class="flex items-center justify-end space-x-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-medium">李</div>
+                                            <span class="status-tag status-processing">处理中</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 工单项 2 -->
+                            <div class="ticket-item flex items-start px-4 py-4 border-b border-border-light/60 border-l-4 border-l-transparent">
+                                <div class="pt-1 mr-3">
+                                    <input type="checkbox" class="custom-checkbox">
+                                </div>
+                                <div class="flex-shrink-0 mr-3">
+                                    <span class="priority-badge priority-p2">P2</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center mb-1.5">
+                                        <span class="text-sm font-medium text-text-muted mr-2">TCK-20260722-0002</span>
+                                        <span class="text-sm font-medium text-text-main truncate">API 接口 500 错误</span>
+                                    </div>
+                                    <div class="flex items-center text-xs text-text-muted mb-2">
+                                        <span>api@test.com</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">来源：客户邮件</span>
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">技术问题</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end justify-between ml-4 flex-shrink-0">
+                                    <span class="text-xs text-text-muted mb-3">30 分钟前更新</span>
+                                    <div class="text-right">
+                                        <div class="text-sm font-semibold text-warning mb-1">05:20:00</div>
+                                        <div class="text-xs text-text-muted mb-2">SLA剩余</div>
+                                        <div class="flex items-center justify-end space-x-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-medium">王</div>
+                                            <span class="status-tag status-processing">处理中</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 工单项 3 -->
+                            <div class="ticket-item flex items-start px-4 py-4 border-b border-border-light/60 border-l-4 border-l-transparent">
+                                <div class="pt-1 mr-3">
+                                    <input type="checkbox" class="custom-checkbox">
+                                </div>
+                                <div class="flex-shrink-0 mr-3">
+                                    <span class="priority-badge priority-p3">P3</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center mb-1.5">
+                                        <span class="text-sm font-medium text-text-muted mr-2">TCK-20260722-0003</span>
+                                        <span class="text-sm font-medium text-text-main truncate">如何重置密码？</span>
+                                    </div>
+                                    <div class="flex items-center text-xs text-text-muted mb-2">
+                                        <span>user@test.com</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">来源：客户邮件</span>
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">账户问题</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end justify-between ml-4 flex-shrink-0">
+                                    <span class="text-xs text-text-muted mb-3">1 小时前更新</span>
+                                    <div class="text-right">
+                                        <div class="text-sm font-semibold text-success mb-1">10:15:00</div>
+                                        <div class="text-xs text-text-muted mb-2">SLA剩余</div>
+                                        <div class="flex items-center justify-end space-x-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-medium">李</div>
+                                            <span class="status-tag status-waiting">待客户回复</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 工单项 4 -->
+                            <div class="ticket-item flex items-start px-4 py-4 border-b border-border-light/60 border-l-4 border-l-transparent">
+                                <div class="pt-1 mr-3">
+                                    <input type="checkbox" class="custom-checkbox">
+                                </div>
+                                <div class="flex-shrink-0 mr-3">
+                                    <span class="priority-badge priority-p2">P2</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center mb-1.5">
+                                        <span class="text-sm font-medium text-text-muted mr-2">TCK-20260722-0004</span>
+                                        <span class="text-sm font-medium text-text-main truncate">系统导出报错</span>
+                                    </div>
+                                    <div class="flex items-center text-xs text-text-muted mb-2">
+                                        <span>export@test.com</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">来源：客户邮件</span>
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">技术问题</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end justify-between ml-4 flex-shrink-0">
+                                    <span class="text-xs text-text-muted mb-3">2 小时前更新</span>
+                                    <div class="text-right">
+                                        <div class="text-sm font-semibold text-warning mb-1">03:40:00</div>
+                                        <div class="text-xs text-text-muted mb-2">SLA剩余</div>
+                                        <div class="flex items-center justify-end space-x-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-xs font-medium">张</div>
+                                            <span class="status-tag status-processing">处理中</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 工单项 5 -->
+                            <div class="ticket-item flex items-start px-4 py-4 border-b border-border-light/60 border-l-4 border-l-transparent">
+                                <div class="pt-1 mr-3">
+                                    <input type="checkbox" class="custom-checkbox">
+                                </div>
+                                <div class="flex-shrink-0 mr-3">
+                                    <span class="priority-badge priority-p4">P4</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center mb-1.5">
+                                        <span class="text-sm font-medium text-text-muted mr-2">TCK-20260722-0005</span>
+                                        <span class="text-sm font-medium text-text-main truncate">功能建议：增加批量导入</span>
+                                    </div>
+                                    <div class="flex items-center text-xs text-text-muted mb-2">
+                                        <span>suggest@test.com</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">来源：客户邮件</span>
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">功能建议</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end justify-between ml-4 flex-shrink-0">
+                                    <span class="text-xs text-text-muted mb-3">3 小时前更新</span>
+                                    <div class="text-right">
+                                        <div class="text-sm font-semibold text-success mb-1">15:30:00</div>
+                                        <div class="text-xs text-text-muted mb-2">SLA剩余</div>
+                                        <div class="flex items-center justify-end space-x-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white text-xs font-medium">赵</div>
+                                            <span class="status-tag status-evaluate">待评估</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 工单项 6 -->
+                            <div class="ticket-item flex items-start px-4 py-4 border-b border-border-light/60 border-l-4 border-l-transparent">
+                                <div class="pt-1 mr-3">
+                                    <input type="checkbox" class="custom-checkbox">
+                                </div>
+                                <div class="flex-shrink-0 mr-3">
+                                    <span class="priority-badge priority-p1">P1</span>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center mb-1.5">
+                                        <span class="text-sm font-medium text-text-muted mr-2">TCK-20260722-0006</span>
+                                        <span class="text-sm font-medium text-text-main truncate">数据库连接超时</span>
+                                    </div>
+                                    <div class="flex items-center text-xs text-text-muted mb-2">
+                                        <span>dba@test.com</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">来源：客户邮件</span>
+                                        <span class="px-2 py-0.5 bg-bg-main text-text-sub text-xs rounded">技术问题</span>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col items-end justify-between ml-4 flex-shrink-0">
+                                    <span class="text-xs text-text-muted mb-3">5 小时前更新</span>
+                                    <div class="text-right">
+                                        <div class="text-sm font-semibold text-danger mb-1">SLA已超时</div>
+                                        <div class="text-sm font-semibold text-danger mb-1">02:10:00</div>
+                                        <div class="flex items-center justify-end space-x-2">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-medium">李</div>
+                                            <span class="status-tag status-overdue">超时</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 分页 -->
+                        <div class="h-14 border-t border-border-light flex items-center justify-between px-4 flex-shrink-0">
+                            <div class="flex items-center text-sm text-text-sub">
+                                <button class="flex items-center text-text-sub hover:text-text-main mr-4">
+                                    <i class="fa-solid fa-angle-down mr-1"></i>
+                                    展开更多
+                                </button>
+                                <span>共 128 条</span>
+                                <div class="flex items-center ml-4">
+                                    <span class="mr-2">20条/页</span>
+                                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-white text-sm font-medium">1</button>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-sm text-text-sub">2</button>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-sm text-text-sub">3</button>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-sm text-text-sub">4</button>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-sm text-text-sub">5</button>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-sm text-text-sub">6</button>
+                                <span class="px-1 text-text-muted">...</span>
+                                <button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-bg-main text-sm text-text-sub">7</button>
+                                <div class="flex items-center ml-3 text-sm text-text-sub">
+                                    <span class="mr-2">前往</span>
+                                    <input type="text" value="1" class="w-10 h-8 border border-border-light rounded-lg text-center text-sm mx-1 focus:outline-none focus:border-primary">
+                                    <span>页</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 右侧详情面板 -->
+                    <aside class="w-[360px] bg-white rounded-xl border border-border-light flex flex-col flex-shrink-0 overflow-hidden">
+                        <!-- 详情头部 -->
+                        <div class="h-14 border-b border-border-light flex items-center justify-between px-4 flex-shrink-0">
+                            <span class="font-semibold text-text-main">工单详情</span>
+                            <button class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-bg-main text-text-muted">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="flex-1 overflow-y-auto">
+                            <!-- 工单标题区 -->
+                            <div class="p-4 border-b border-border-light">
+                                <div class="flex items-start justify-between mb-3">
+                                    <div class="flex items-center">
+                                        <span class="priority-badge priority-p1 mr-2">P1</span>
+                                        <span class="text-sm text-text-muted">TCK-20260722-0001</span>
+                                        <button class="ml-2 text-text-muted hover:text-primary"><i class="fa-regular fa-copy text-xs"></i></button>
+                                    </div>
+                                    <span class="status-tag status-processing">处理中</span>
+                                </div>
+                                <h2 class="text-lg font-semibold text-text-main mb-2">服务器无法登录</h2>
+                                <div class="text-sm text-text-sub mb-3">tech@test.com</div>
+                                <div class="text-xs text-text-muted">通过 <span class="text-text-sub">客户邮件</span> 提交于 2026-07-22 10:01</div>
+                            </div>
+                            
+                            <!-- 基本信息 -->
+                            <div class="p-4 border-b border-border-light">
+                                <h3 class="text-sm font-semibold text-text-main mb-3">基本信息</h3>
+                                <div class="space-y-3 text-sm">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-text-sub">负责人：</span>
+                                        <div class="flex items-center">
+                                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-medium mr-2">李</div>
+                                            <span class="text-text-main font-medium">李工</span>
+                                            <i class="fa-solid fa-chevron-down ml-1.5 text-text-muted text-xs"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-text-sub">优先级：</span>
+                                        <div class="flex items-center">
+                                            <span class="priority-badge priority-p1 mr-1.5">P1</span>
+                                            <span class="text-danger font-medium">紧急</span>
+                                            <i class="fa-solid fa-chevron-down ml-1.5 text-text-muted text-xs"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-text-sub">状态：</span>
+                                        <div class="flex items-center">
+                                            <span class="status-tag status-processing">处理中</span>
+                                            <i class="fa-solid fa-chevron-down ml-1.5 text-text-muted text-xs"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-text-sub">SLA：</span>
+                                        <span class="text-text-main font-medium">8 小时响应 / 24 小时解决</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-text-sub">创建时间：</span>
+                                        <span class="text-text-main">2026-07-22 10:01</span>
+                                    </div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-text-sub">更新时间：</span>
+                                        <span class="text-text-main">2026-07-22 10:11</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Tabs -->
+                            <div class="border-b border-border-light">
+                                <div class="flex px-2">
+                                    <div class="tab-item active text-sm font-medium">邮件内容</div>
+                                    <div class="tab-item text-sm font-medium">客户信息</div>
+                                    <div class="tab-item text-sm font-medium">工单日志</div>
+                                    <div class="tab-item text-sm font-medium">SLA</div>
+                                    <div class="tab-item text-sm font-medium">附件</div>
+                                </div>
+                            </div>
+                            
+                            <!-- 邮件内容 -->
+                            <div class="p-4">
+                                <div class="bg-bg-main rounded-lg p-4 mb-4">
+                                    <div class="grid grid-cols-[60px_1fr] gap-y-2 text-sm">
+                                        <span class="text-text-muted">发件人：</span>
+                                        <span class="text-text-main">tech@test.com</span>
+                                        <span class="text-text-muted">收件人：</span>
+                                        <span class="text-text-main">support@company.com</span>
+                                        <span class="text-text-muted">时间：</span>
+                                        <span class="text-text-main">2026-07-22 10:01</span>
+                                        <span class="text-text-muted">主题：</span>
+                                        <span class="text-text-main font-medium">服务器无法登录</span>
+                                    </div>
+                                </div>
+                                <div class="text-sm text-text-main leading-relaxed space-y-3">
+                                    <p>您好，</p>
+                                    <p>我们公司的服务器从今天早上开始无法登录，远程连接超时，请协助查看是什么问题。</p>
+                                    <p>谢谢！</p>
+                                </div>
+                            </div>
+                            
+                            <!-- 快速回复 -->
+                            <div class="p-4 border-t border-border-light">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-sm font-medium text-text-main">快速回复</span>
+                                    <i class="fa-solid fa-chevron-down text-text-muted text-xs"></i>
+                                </div>
+                                <button class="w-full h-10 bg-primary hover:bg-primary-hover text-white rounded-lg font-medium text-sm transition-colors">
+                                    回复客户
+                                </button>
+                            </div>
+                            
+                            <!-- 底部操作 -->
+                            <div class="p-4 border-t border-border-light">
+                                <div class="grid grid-cols-4 gap-2">
+                                    <button class="flex flex-col items-center justify-center py-2 rounded-lg hover:bg-bg-main text-text-sub transition-colors">
+                                        <i class="fa-solid fa-share-from-square mb-1"></i>
+                                        <span class="text-xs">转派</span>
+                                    </button>
+                                    <button class="flex flex-col items-center justify-center py-2 rounded-lg hover:bg-bg-main text-text-sub transition-colors">
+                                        <i class="fa-regular fa-star mb-1"></i>
+                                        <span class="text-xs">关注</span>
+                                    </button>
+                                    <button class="flex flex-col items-center justify-center py-2 rounded-lg hover:bg-bg-main text-text-sub transition-colors">
+                                        <i class="fa-solid fa-power-off mb-1"></i>
+                                        <span class="text-xs">关闭</span>
+                                    </button>
+                                    <button class="flex flex-col items-center justify-center py-2 rounded-lg hover:bg-bg-main text-text-sub transition-colors">
+                                        <i class="fa-solid fa-ellipsis mb-1"></i>
+                                        <span class="text-xs">更多</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>

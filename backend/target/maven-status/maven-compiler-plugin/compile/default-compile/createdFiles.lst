@@ -1,0 +1,7 @@
+com/sfonda/mailtrace/infrastructure/config/SecurityConfig.class
+com/sfonda/mailtrace/infrastructure/config/OpenApiConfig.class
+com/sfonda/mailtrace/MailtraceApplication.class
+com/sfonda/mailtrace/infrastructure/config/MybatisPlusConfig.class
+com/sfonda/mailtrace/infrastructure/basic/BasicResult.class
+com/sfonda/mailtrace/interfaces/api/system/HealthController$HealthVO.class
+com/sfonda/mailtrace/interfaces/api/system/HealthController.class
