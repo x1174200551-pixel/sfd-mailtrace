@@ -52,33 +52,25 @@
         .prototype-shell {
             position: fixed;
             inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             overflow: hidden;
         }
 
         .prototype-stage {
             position: relative;
-            width: calc(1309px * var(--prototype-scale, 1));
-            height: calc(1201px * var(--prototype-scale, 1));
-            flex: 0 0 auto;
+            width: 100%;
+            min-width: 1180px;
+            min-height: 100vh;
         }
 
         .prototype-artboard {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 1309px;
-            height: 1201px;
+            position: relative;
+            width: 100%;
+            min-height: 100vh;
             overflow: hidden;
-            transform: scale(var(--prototype-scale, 1));
-            transform-origin: top left;
             background:
                 radial-gradient(circle at 16% 20%, rgba(15, 107, 255, 0.14), transparent 30%),
                 radial-gradient(circle at 78% 24%, rgba(82, 142, 255, 0.10), transparent 26%),
                 linear-gradient(135deg, #f8fbff 0%, #eef6ff 52%, #f8fbff 100%);
-            box-shadow: 0 30px 80px rgba(39, 76, 130, 0.08);
         }
 
         .version-badge {
@@ -100,17 +92,20 @@
         }
 
         .page {
-            width: 1309px;
-            min-height: 1201px;
+            width: 100%;
+            height: 100vh;
+            min-height: 760px;
             margin: 0 auto;
-            padding: 116px 70px 72px 64px;
+            padding: clamp(64px, 7vh, 90px) clamp(48px, 5.8vw, 120px) clamp(38px, 4vh, 52px);
             display: grid;
-            grid-template-columns: 585px 540px;
-            gap: 50px;
+            grid-template-columns: minmax(620px, 1fr) 540px;
+            gap: clamp(56px, 5vw, 96px);
             align-items: start;
         }
 
         .intro {
+            width: min(680px, 100%);
+            justify-self: center;
             padding-top: 14px;
         }
 
@@ -118,7 +113,7 @@
             display: flex;
             align-items: center;
             gap: 18px;
-            margin-bottom: 64px;
+            margin-bottom: 54px;
         }
 
         .brand-icon {
@@ -163,7 +158,7 @@
 
         .hero-copy p {
             width: min(540px, 100%);
-            margin: 22px 0 72px;
+            margin: 22px 0 46px;
             color: var(--text-sub);
             font-size: 17px;
             line-height: 1.85;
@@ -172,9 +167,9 @@
 
         .workflow {
             position: relative;
-            width: 585px;
+            width: 620px;
             max-width: 100%;
-            height: 458px;
+            height: 410px;
         }
 
         .workflow::before,
@@ -257,7 +252,7 @@
         .screen-preview {
             position: absolute;
             left: 108px;
-            top: 104px;
+            top: 92px;
             z-index: 1;
             width: 410px;
             height: 274px;
@@ -348,7 +343,7 @@
         .shield {
             position: absolute;
             right: 24px;
-            bottom: 92px;
+            bottom: 70px;
             z-index: 3;
             width: 78px;
             height: 78px;
@@ -392,7 +387,9 @@
         }
 
         .login-panel {
-            min-height: 952px;
+            height: calc(100vh - clamp(112px, 11vh, 142px));
+            min-height: 700px;
+            max-height: 860px;
             border: 1px solid rgba(215, 225, 240, 0.92);
             border-radius: 12px;
             background: rgba(255, 255, 255, 0.92);
@@ -400,7 +397,7 @@
             display: flex;
             align-items: flex-start;
             justify-content: center;
-            padding: 128px 48px 50px;
+            padding: clamp(78px, 9vh, 108px) 48px 42px;
         }
 
         .form-box {
@@ -409,7 +406,7 @@
         }
 
         .form-header {
-            margin-bottom: 84px;
+            margin-bottom: clamp(54px, 6vh, 72px);
             text-align: center;
         }
 
@@ -1028,9 +1025,6 @@
     </div>
 
     <script>
-        const DESIGN_WIDTH = 1309;
-        const DESIGN_HEIGHT = 1201;
-        const prototypeStage = document.getElementById('prototypeStage');
         const form = document.getElementById('loginForm');
         const account = document.getElementById('account');
         const password = document.getElementById('password');
@@ -1048,15 +1042,6 @@
         const noAccountButton = document.getElementById('noAccountButton');
         const modalCancel = document.getElementById('modalCancel');
         const modalConfirm = document.getElementById('modalConfirm');
-
-        function fitPrototype() {
-            const scale = Math.min(window.innerWidth / DESIGN_WIDTH, window.innerHeight / DESIGN_HEIGHT);
-            const finalScale = Math.min(scale, 1);
-            prototypeStage.style.setProperty('--prototype-scale', finalScale.toFixed(4));
-        }
-
-        fitPrototype();
-        window.addEventListener('resize', fitPrototype);
 
         function setFieldError(input, errorNode, message) {
             input.classList.add('invalid');
