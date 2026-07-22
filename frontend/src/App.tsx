@@ -68,6 +68,18 @@ type ModalState = {
   text: string
 } | null
 
+class ApiError extends Error {
+  status: number
+  code?: number
+
+  constructor(message: string, status: number, code?: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
 type MenuItem = {
   title: string
   icon: LucideIcon
@@ -308,10 +320,14 @@ async function requestApi<T>(url: string, options: RequestInit = {}) {
     },
     ...options,
   })
-  const body = (await response.json()) as BasicResult<T>
+  const body = (await response.json().catch(() => ({
+    code: response.status,
+    message: `请求失败：${response.status}`,
+    data: null,
+  }))) as BasicResult<T>
 
   if (!response.ok || body.code !== 0) {
-    throw new Error(body.message || `请求失败：${response.status}`)
+    throw new ApiError(body.message || `请求失败：${response.status}`, response.status, body.code)
   }
 
   return body.data
@@ -413,6 +429,20 @@ function App() {
     [isAdmin],
   )
 
+  const handleAuthExpired = useCallback((error: unknown) => {
+    if (!(error instanceof ApiError) || (error.status !== 401 && error.code !== 40102)) {
+      return false
+    }
+
+    clearSession()
+    setToken('')
+    setUser(null)
+    setAccount('')
+    setPassword('')
+    setFormError(error.message || '登录状态已失效，请重新登录')
+    return true
+  }, [])
+
   useEffect(() => {
     if (!token) {
       setCheckingSession(false)
@@ -486,11 +516,12 @@ function App() {
       })
       setUsersData(data)
     } catch (error) {
+      if (handleAuthExpired(error)) return
       setUsersError(error instanceof Error ? error.message : '用户列表加载失败')
     } finally {
       setUsersLoading(false)
     }
-  }, [activeMenu, isAdmin, token, userEnabledFilter, userKeyword, userPage, userPageSize, userRoleFilter])
+  }, [activeMenu, handleAuthExpired, isAdmin, token, userEnabledFilter, userKeyword, userPage, userPageSize, userRoleFilter])
 
   useEffect(() => {
     void fetchUsers()
@@ -528,11 +559,12 @@ function App() {
         setTemplatePreview(null)
       }
     } catch (error) {
+      if (handleAuthExpired(error)) return
       setTemplatesError(error instanceof Error ? error.message : '模板列表加载失败')
     } finally {
       setTemplatesLoading(false)
     }
-  }, [activeMenu, isAdmin, selectedTemplateId, templateKeyword, token])
+  }, [activeMenu, handleAuthExpired, isAdmin, selectedTemplateId, templateKeyword, token])
 
   useEffect(() => {
     void fetchTemplates()
@@ -596,6 +628,7 @@ function App() {
       setUserFormOpen(false)
       await fetchUsers()
     } catch (error) {
+      if (handleAuthExpired(error)) return
       setUserFormError(error instanceof Error ? error.message : '保存失败，请稍后重试')
     } finally {
       setUserFormSubmitting(false)
@@ -645,6 +678,7 @@ function App() {
       setConfirmAction(null)
       await fetchUsers()
     } catch (error) {
+      if (handleAuthExpired(error)) return
       setUsersError(error instanceof Error ? error.message : '操作失败，请稍后重试')
     } finally {
       setActionLoading(false)
@@ -702,6 +736,7 @@ function App() {
       })
       setTemplatePreview(data)
     } catch (error) {
+      if (handleAuthExpired(error)) return
       setTemplatesError(error instanceof Error ? error.message : '预览生成失败')
     } finally {
       setTemplatePreviewLoading(false)
@@ -726,6 +761,7 @@ function App() {
       setTemplateConfirmOpen(false)
       await fetchTemplates()
     } catch (error) {
+      if (handleAuthExpired(error)) return
       setTemplatesError(error instanceof Error ? error.message : '模板保存失败')
     } finally {
       setTemplateSaving(false)
@@ -1362,7 +1398,9 @@ function App() {
                         <div className="template-vars">
                           {(templatesData?.variables || []).map((variable) => (
                             <button key={variable.key} onClick={() => insertVariable(variable.key)} type="button">
-                              {variable.key}
+                              <code>{variable.key}</code>
+                              <span>{variable.label}</span>
+                              <small>示例：{variable.sampleValue}</small>
                             </button>
                           ))}
                         </div>
@@ -1401,12 +1439,6 @@ function App() {
                     </aside>
                   </div>
 
-                  <div className="template-state-grid">
-                    <div className="state-card"><strong>空态</strong><p>无模板或搜索无结果时显示未找到模板，并提供清空搜索入口。</p></div>
-                    <div className="state-card"><strong>加载态</strong><p>刷新、切换模板和保存时按钮禁用，编辑区显示加载骨架。</p></div>
-                    <div className="state-card"><strong>错误态</strong><p>变量格式错误、主题为空、保存失败时在页面顶部提示。</p></div>
-                    <div className="state-card"><strong>权限态</strong><p>非管理员隐藏保存按钮和启停控件，仅管理员可维护模板。</p></div>
-                  </div>
                 </>
               )}
             </section>
