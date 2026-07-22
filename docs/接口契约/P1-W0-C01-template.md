@@ -104,14 +104,15 @@
 ```json
 {
   "subjectTpl": "您的工单已创建：{ticket_no}",
-  "contentTpl": "工单主题：{subject}",
-  "sampleData": {
-    "ticketNo": "TCK-20260722-0001",
-    "subject": "订单物流查询",
-    "assigneeName": "李强"
-  }
+  "contentTpl": "工单主题：{subject}"
 }
 ```
+
+| 字段 | 必填 | 校验 |
+|------|------|------|
+| subjectTpl | 是 | 1-512 字符 |
+| contentTpl | 是 | 1-10000 字符 |
+| sampleData | 否 | 调试扩展字段；正式前端不展示输入，默认由后端示例数据渲染 |
 
 ### 响应
 

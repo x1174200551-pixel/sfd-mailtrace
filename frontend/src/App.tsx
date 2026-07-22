@@ -416,9 +416,6 @@ function App() {
   const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false)
   const [templatePreview, setTemplatePreview] = useState<TemplatePreviewResponse | null>(null)
   const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false)
-  const [sampleTicketNo, setSampleTicketNo] = useState('TCK-20260722-0001')
-  const [sampleSubject, setSampleSubject] = useState('订单物流查询')
-  const [sampleAssignee, setSampleAssignee] = useState('李强')
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = user?.roleCode === 'ADMIN'
@@ -753,11 +750,6 @@ function App() {
         body: JSON.stringify({
           subjectTpl: templateForm.subjectTpl,
           contentTpl: templateForm.contentTpl,
-          sampleData: {
-            ticketNo: sampleTicketNo,
-            subject: sampleSubject,
-            assigneeName: sampleAssignee,
-          },
         }),
       })
       setTemplatePreview(data)
@@ -1464,22 +1456,8 @@ function App() {
                             {templatePreview?.subject || '点击生成预览后显示邮件主题'}
                           </div>
                           <div className="mail-body">
-                            {templatePreview?.content || '模板正文预览会使用下方示例数据进行变量替换。'}
+                            {templatePreview?.content || '模板正文预览会使用系统默认示例数据进行变量替换。'}
                           </div>
-                        </div>
-                        <div className="template-samples">
-                          <label>
-                            <span>示例工单号</span>
-                            <input onChange={(event) => setSampleTicketNo(event.target.value)} value={sampleTicketNo} />
-                          </label>
-                          <label>
-                            <span>示例主题</span>
-                            <input onChange={(event) => setSampleSubject(event.target.value)} value={sampleSubject} />
-                          </label>
-                          <label>
-                            <span>示例处理人</span>
-                            <input onChange={(event) => setSampleAssignee(event.target.value)} value={sampleAssignee} />
-                          </label>
                         </div>
                       </section>
                     </aside>
