@@ -20,6 +20,7 @@ final result: passed
 | Login card | passed | Card position, scale, title, inputs, remember row, forgot action, and primary button align with the reference. |
 | Interaction states | passed | Required, error, loading, success, password toggle, forgot password, and no-account states are implemented. |
 | Wide-screen scaling | passed | Prototype now uses a fixed 1309x1201 design canvas with viewport-fit scaling, preventing oversized display and footer overlap. |
+| Column balance | passed | Left content column is widened and the right login panel/form is narrowed so the two sides read with more balanced visual weight. |
 
 ## Follow-Up Notes
 
