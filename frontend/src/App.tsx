@@ -410,6 +410,7 @@ function App() {
   const [templatesError, setTemplatesError] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
   const [templateForm, setTemplateForm] = useState<TemplateFormState>(emptyTemplateForm)
+  const [templateDraftMode, setTemplateDraftMode] = useState(false)
   const [templateDirty, setTemplateDirty] = useState(false)
   const [templateSaving, setTemplateSaving] = useState(false)
   const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false)
@@ -550,6 +551,9 @@ function App() {
         { headers: authHeaders(token) },
       )
       setTemplatesData(data)
+      if (templateDraftMode) {
+        return
+      }
       const selected = data.records.find((template) => template.id === selectedTemplateId) || data.records[0] || null
       if (selected) {
         setSelectedTemplateId(selected.id)
@@ -568,7 +572,7 @@ function App() {
     } finally {
       setTemplatesLoading(false)
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, selectedTemplateId, templateKeyword, token])
+  }, [activeMenu, handleAuthExpired, isAdmin, selectedTemplateId, templateDraftMode, templateKeyword, token])
 
   useEffect(() => {
     void fetchTemplates()
@@ -690,6 +694,7 @@ function App() {
   }
 
   function selectTemplate(template: NotificationTemplate) {
+    setTemplateDraftMode(false)
     setSelectedTemplateId(template.id)
     setTemplateForm(toTemplateForm(template))
     setTemplateDirty(false)
@@ -698,6 +703,7 @@ function App() {
   }
 
   function openCreateTemplate() {
+    setTemplateDraftMode(true)
     setSelectedTemplateId(null)
     setTemplateKeyword('')
     setTemplateForm({
@@ -783,6 +789,7 @@ function App() {
         },
       )
       setSelectedTemplateId(saved.id)
+      setTemplateDraftMode(false)
       setTemplateForm(toTemplateForm(saved))
       setTemplateDirty(false)
       setTemplateConfirmOpen(false)
