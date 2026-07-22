@@ -212,6 +212,8 @@ type TicketRuleFormState = {
   description: string
 }
 
+type SystemGroupKey = 'ticket' | 'mail' | 'notice' | 'security'
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
@@ -293,6 +295,43 @@ const emptyTicketRuleForm: TicketRuleFormState = {
   separator: '-',
   description: '客户来信自动建单时生成唯一工单号；邮件线程关联会优先匹配主题中的工单号。',
 }
+
+const systemGroups: Array<{
+  key: SystemGroupKey
+  title: string
+  summary: string
+  detail: string
+  owner: string
+}> = [
+  {
+    key: 'ticket',
+    title: '工单编号规则',
+    summary: '前缀、日期格式、流水位数',
+    detail: '业务人员可在此维护工单号生成规则，保存后仅影响后续新建工单。',
+    owner: '业务可配',
+  },
+  {
+    key: 'mail',
+    title: '邮件处理策略',
+    summary: '重试次数、拉取间隔等由管理员维护',
+    detail: '邮件轮询、重试、附件限制等参数会影响后台任务稳定性，当前页面仅展示边界，不开放业务录入。',
+    owner: '运维维护',
+  },
+  {
+    key: 'notice',
+    title: '通知与提醒',
+    summary: 'SLA 预警、分配通知开关',
+    detail: '通知内容已在通知模板中维护，提醒策略后续会随 SLA 模块单独设计，不在编号规则页混合编辑。',
+    owner: '后续设计',
+  },
+  {
+    key: 'security',
+    title: '安全与审计',
+    summary: '会话超时、操作日志保留',
+    detail: '会话、安全和审计保留属于系统级策略，后续按管理员能力单独设计，不由业务人员直接填写参数。',
+    owner: '管理员维护',
+  },
+]
 
 const templateScenes: Record<string, string> = {
   AUTO_REPLY: '客户来信自动建单',
@@ -480,9 +519,11 @@ function App() {
   const [ticketRuleError, setTicketRuleError] = useState('')
   const [ticketRuleMessage, setTicketRuleMessage] = useState('')
   const [ticketRuleConfirmOpen, setTicketRuleConfirmOpen] = useState(false)
+  const [activeSystemGroup, setActiveSystemGroup] = useState<SystemGroupKey>('ticket')
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = user?.roleCode === 'ADMIN'
+  const activeSystemGroupConfig = systemGroups.find((group) => group.key === activeSystemGroup) || systemGroups[0]
   const visibleMenuGroups = useMemo(
     () =>
       menuGroups
@@ -1405,7 +1446,7 @@ function App() {
                   </button>
                   <button
                     className="primary-action"
-                    disabled={!ticketRuleDirty || ticketRuleSaving}
+                    disabled={activeSystemGroup !== 'ticket' || !ticketRuleDirty || ticketRuleSaving}
                     onClick={() => setTicketRuleConfirmOpen(true)}
                     type="button"
                   >
@@ -1447,8 +1488,18 @@ function App() {
                   </div>
 
                   <div className={ticketRuleError ? 'system-alert danger' : 'system-alert'}>
-                    <span>{ticketRuleError || ticketRuleMessage || '编号规则影响后续新建工单，历史工单号不会回写变更。'}</span>
-                    <button onClick={previewTicketRule} disabled={ticketRulePreviewLoading} type="button">
+                    <span>
+                      {ticketRuleError ||
+                        ticketRuleMessage ||
+                        (activeSystemGroup === 'ticket'
+                          ? '编号规则影响后续新建工单，历史工单号不会回写变更。'
+                          : `${activeSystemGroupConfig.title}当前不开放业务编辑，仅展示维护边界。`)}
+                    </span>
+                    <button
+                      onClick={previewTicketRule}
+                      disabled={activeSystemGroup !== 'ticket' || ticketRulePreviewLoading}
+                      type="button"
+                    >
                       {ticketRulePreviewLoading ? '生成中...' : '生成预览'}
                     </button>
                   </div>
@@ -1459,32 +1510,42 @@ function App() {
                         <strong>配置分组</strong>
                         <span className="template-code-pill">业务可配</span>
                       </div>
-                      <button className="system-group active" type="button">
-                        <strong>工单编号规则</strong>
-                        <small>前缀、日期格式、流水位数</small>
-                      </button>
-                      <button className="system-group" type="button">
-                        <strong>邮件处理策略</strong>
-                        <small>重试次数、拉取间隔等由管理员维护</small>
-                      </button>
-                      <button className="system-group" type="button">
-                        <strong>通知与提醒</strong>
-                        <small>SLA 预警、分配通知开关</small>
-                      </button>
-                      <button className="system-group" type="button">
-                        <strong>安全与审计</strong>
-                        <small>会话超时、操作日志保留</small>
-                      </button>
+                      {systemGroups.map((group) => (
+                        <button
+                          aria-pressed={activeSystemGroup === group.key}
+                          className={activeSystemGroup === group.key ? 'system-group active' : 'system-group'}
+                          key={group.key}
+                          onClick={() => {
+                            setActiveSystemGroup(group.key)
+                            setTicketRuleError('')
+                            setTicketRuleMessage('')
+                          }}
+                          type="button"
+                        >
+                          <strong>{group.title}</strong>
+                          <small>{group.summary}</small>
+                        </button>
+                      ))}
                     </aside>
 
                     <section className="system-panel system-editor">
                       <div className="system-panel__head">
-                        <strong>工单编号规则</strong>
-                        <span className={ticketRuleDirty ? 'template-code-pill dirty' : 'template-code-pill'}>
-                          {ticketRuleDirty ? '未保存' : '已保存'}
+                        <strong>{activeSystemGroupConfig.title}</strong>
+                        <span className={ticketRuleDirty && activeSystemGroup === 'ticket' ? 'template-code-pill dirty' : 'template-code-pill'}>
+                          {activeSystemGroup === 'ticket' ? (ticketRuleDirty ? '未保存' : '已保存') : activeSystemGroupConfig.owner}
                         </span>
                       </div>
-                      {ticketRuleLoading ? (
+                      {activeSystemGroup !== 'ticket' ? (
+                        <div className="system-readonly">
+                          <ShieldCheck size={38} />
+                          <strong>{activeSystemGroupConfig.title}不在当前页编辑</strong>
+                          <p>{activeSystemGroupConfig.detail}</p>
+                          <div className="readonly-facts">
+                            <span>当前状态</span>
+                            <strong>{activeSystemGroupConfig.owner}</strong>
+                          </div>
+                        </div>
+                      ) : ticketRuleLoading ? (
                         <div className="user-loading">
                           {[0, 1, 2, 3].map((item) => (
                             <span key={item} />
@@ -1570,7 +1631,12 @@ function App() {
                             <span>保存前会校验格式合法性和下一号预览。</span>
                             <div>
                               <button onClick={resetTicketRule} type="button">恢复默认</button>
-                              <button className="primary-action" onClick={() => setTicketRuleConfirmOpen(true)} type="button">
+                              <button
+                                className="primary-action"
+                                disabled={activeSystemGroup !== 'ticket'}
+                                onClick={() => setTicketRuleConfirmOpen(true)}
+                                type="button"
+                              >
                                 保存规则
                               </button>
                             </div>
@@ -1580,34 +1646,50 @@ function App() {
                     </section>
 
                     <aside className="system-side">
-                      <section className="system-panel">
-                        <div className="system-panel__head">
-                          <strong>规则预览</strong>
-                          <span className="state-pill enabled">可用</span>
-                        </div>
-                        <div className="rule-preview-card">
-                          <span>下一工单号</span>
-                          <strong>{ticketRule?.nextTicketNo || '点击生成预览'}</strong>
-                        </div>
-                        <div className="rule-preview-list">
-                          <div><span>今日日期</span><strong>{ticketRule?.todayDate || '--'}</strong></div>
-                          <div><span>当前日期维度</span><strong>{ticketRule?.dateKey || '--'}</strong></div>
-                          <div><span>当前已用流水</span><strong>{ticketRule?.usedSeq ?? '--'}</strong></div>
-                          <div><span>主题匹配样例</span><strong>{ticketRule?.subjectPreview || '--'}</strong></div>
-                        </div>
-                      </section>
+                      {activeSystemGroup === 'ticket' ? (
+                        <>
+                          <section className="system-panel">
+                            <div className="system-panel__head">
+                              <strong>规则预览</strong>
+                              <span className="state-pill enabled">可用</span>
+                            </div>
+                            <div className="rule-preview-card">
+                              <span>下一工单号</span>
+                              <strong>{ticketRule?.nextTicketNo || '点击生成预览'}</strong>
+                            </div>
+                            <div className="rule-preview-list">
+                              <div><span>今日日期</span><strong>{ticketRule?.todayDate || '--'}</strong></div>
+                              <div><span>当前日期维度</span><strong>{ticketRule?.dateKey || '--'}</strong></div>
+                              <div><span>当前已用流水</span><strong>{ticketRule?.usedSeq ?? '--'}</strong></div>
+                              <div><span>主题匹配样例</span><strong>{ticketRule?.subjectPreview || '--'}</strong></div>
+                            </div>
+                          </section>
 
-                      <section className="system-panel">
-                        <div className="system-panel__head">
-                          <strong>发布检查</strong>
-                          <span className="template-code-pill">自动校验</span>
-                        </div>
-                        <div className="system-check-list">
-                          <div><Check size={16} /><span><strong>规则格式合法</strong><small>前缀、日期和流水片段均可解析。</small></span></div>
-                          <div><Check size={16} /><span><strong>下一号可预览</strong><small>预览编号按当前日期维度生成。</small></span></div>
-                          <div><TriangleAlert size={16} /><span><strong>影响新工单</strong><small>保存后仅影响后续自动建单。</small></span></div>
-                        </div>
-                      </section>
+                          <section className="system-panel">
+                            <div className="system-panel__head">
+                              <strong>发布检查</strong>
+                              <span className="template-code-pill">自动校验</span>
+                            </div>
+                            <div className="system-check-list">
+                              <div><Check size={16} /><span><strong>规则格式合法</strong><small>前缀、日期和流水片段均可解析。</small></span></div>
+                              <div><Check size={16} /><span><strong>下一号可预览</strong><small>预览编号按当前日期维度生成。</small></span></div>
+                              <div><TriangleAlert size={16} /><span><strong>影响新工单</strong><small>保存后仅影响后续自动建单。</small></span></div>
+                            </div>
+                          </section>
+                        </>
+                      ) : (
+                        <section className="system-panel">
+                          <div className="system-panel__head">
+                            <strong>分组说明</strong>
+                            <span className="template-code-pill">{activeSystemGroupConfig.owner}</span>
+                          </div>
+                          <div className="system-readonly side">
+                            <ShieldCheck size={34} />
+                            <strong>{activeSystemGroupConfig.title}</strong>
+                            <p>{activeSystemGroupConfig.detail}</p>
+                          </div>
+                        </section>
+                      )}
                     </aside>
                   </div>
 

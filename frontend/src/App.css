@@ -2243,6 +2243,72 @@ body {
   font-weight: 800;
 }
 
+.system-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.system-readonly {
+  min-height: 360px;
+  padding: 42px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: #6b7280;
+  text-align: center;
+}
+
+.system-readonly.side {
+  min-height: 260px;
+}
+
+.system-readonly svg {
+  color: #2563eb;
+}
+
+.system-readonly strong {
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.system-readonly p {
+  width: min(520px, 100%);
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  line-height: 1.75;
+  font-weight: 600;
+}
+
+.readonly-facts {
+  min-width: 180px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.readonly-facts span,
+.readonly-facts strong {
+  display: block;
+}
+
+.readonly-facts span {
+  margin-bottom: 5px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.readonly-facts strong {
+  color: #1d4ed8;
+  font-size: 14px;
+}
+
 .system-side {
   display: grid;
   gap: 16px;
