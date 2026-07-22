@@ -1,5 +1,33 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import {
+  Bell,
+  CalendarDays,
+  ChevronDown,
+  CircleCheck,
+  CircleHelp,
+  Clock,
+  Folder,
+  Home,
+  Inbox,
+  Layers,
+  ListChecks,
+  LogOut,
+  Mail,
+  Menu,
+  MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PieChart,
+  Search,
+  Send,
+  Settings,
+  SlidersHorizontal,
+  Timer,
+  TriangleAlert,
+  UserRound,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import './App.css'
 
 type BasicResult<T> = {
@@ -28,9 +56,63 @@ type ModalState = {
   text: string
 } | null
 
+type MenuItem = {
+  title: string
+  icon: LucideIcon
+  badge?: string
+  tone?: 'primary' | 'warning' | 'danger' | 'new'
+}
+
+type MenuGroup = {
+  title: string
+  items: MenuItem[]
+}
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
+
+const menuGroups: MenuGroup[] = [
+  {
+    title: '工作空间',
+    items: [{ title: '工作台', icon: Home }],
+  },
+  {
+    title: '工单中心',
+    items: [
+      { title: '全部工单', icon: Layers },
+      { title: '我的工单', icon: Folder },
+      { title: '待处理', icon: Clock, badge: '39', tone: 'danger' },
+      { title: '待客户回复', icon: MessageCircle, badge: '15', tone: 'warning' },
+      { title: '已关闭', icon: CircleCheck },
+    ],
+  },
+  {
+    title: '邮件管理',
+    items: [
+      { title: '邮箱配置', icon: Settings },
+      { title: '收件记录', icon: Inbox },
+      { title: '发件记录', icon: Send, badge: '3', tone: 'primary' },
+    ],
+  },
+  {
+    title: 'SLA管理',
+    items: [
+      { title: 'SLA策略', icon: Timer },
+      { title: '工作日历', icon: CalendarDays },
+      { title: '超时记录', icon: TriangleAlert },
+      { title: '统计报表', icon: PieChart, badge: 'NEW', tone: 'new' },
+    ],
+  },
+  {
+    title: '系统管理',
+    items: [
+      { title: '系统设置', icon: SlidersHorizontal },
+      { title: '通知模板', icon: Bell },
+      { title: '操作日志', icon: ListChecks },
+    ],
+  },
+]
 
 const features = [
   { mark: 'M', title: '自动收取邮件', text: 'IMAP/POP3 实时同步' },
@@ -107,6 +189,12 @@ function App() {
   const [submitting, setSubmitting] = useState(false)
   const [checkingSession, setCheckingSession] = useState(Boolean(initialSession.token))
   const [modal, setModal] = useState<ModalState>(null)
+  const [activeMenu, setActiveMenu] = useState('工作台')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [searchKeyword, setSearchKeyword] = useState('')
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!token) {
@@ -136,6 +224,18 @@ function App() {
       active = false
     }
   }, [token])
+
+  useEffect(() => {
+    function focusSearch(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+
+    document.addEventListener('keydown', focusSearch)
+    return () => document.removeEventListener('keydown', focusSearch)
+  }, [])
 
   function validateForm() {
     const normalizedAccount = account.trim()
@@ -211,50 +311,199 @@ function App() {
   }
 
   if (user) {
+    const userInitial = user.displayName.trim().charAt(0) || user.account.trim().charAt(0).toUpperCase() || 'U'
+
     return (
-      <div className="app-workspace">
-        <aside className="app-sidebar">
-          <div className="workspace-brand">
-            <span className="brand-mark">M</span>
-            <span>
-              <strong>邮件工单系统</strong>
-              <small>MailTrace</small>
+      <div className={sidebarCollapsed ? 'app-workspace shell-collapsed' : 'app-workspace'}>
+        <aside className={sidebarCollapsed ? 'app-sidebar collapsed' : 'app-sidebar'} aria-label="左侧菜单">
+          <div className="app-logo">
+            <span className="app-logo__mark">
+              <Mail size={18} strokeWidth={2.4} />
             </span>
+            {!sidebarCollapsed && <strong>邮件工单系统</strong>}
           </div>
-          <nav className="workspace-nav" aria-label="主导航">
-            {['工作台', '全部工单', '邮件中心', '系统管理'].map((item, index) => (
-              <button className={index === 0 ? 'active' : ''} key={item} type="button">
-                {item}
-              </button>
+
+          <nav className="sidebar-nav" aria-label="主导航">
+            {menuGroups.map((group) => (
+              <section className="sidebar-group" key={group.title}>
+                {!sidebarCollapsed && <h2>{group.title}</h2>}
+                {group.items.map((item) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      className={activeMenu === item.title ? 'sidebar-item active' : 'sidebar-item'}
+                      key={item.title}
+                      onClick={() => {
+                        setActiveMenu(item.title)
+                        setProfileOpen(false)
+                        setNotificationsOpen(false)
+                      }}
+                      title={sidebarCollapsed ? item.title : undefined}
+                      type="button"
+                    >
+                      <span className="sidebar-item__main">
+                        <Icon size={18} strokeWidth={2.2} />
+                        {!sidebarCollapsed && <span>{item.title}</span>}
+                      </span>
+                      {!sidebarCollapsed && item.badge && (
+                        <span className={item.tone ? `menu-badge ${item.tone}` : 'menu-badge'}>
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </section>
             ))}
           </nav>
+
+          <button
+            className="sidebar-collapse"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            type="button"
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            {!sidebarCollapsed && <span>收起菜单</span>}
+          </button>
         </aside>
-        <main className="workspace-main">
-          <header className="workspace-header">
-            <div>
-              <h1>工作台</h1>
-              <p>登录功能已接入，后续页面按原型确认后继续开发。</p>
+
+        <main className="app-main">
+          <header className="app-topbar">
+            <div className="breadcrumb">
+              <Menu size={18} />
+              <span>邮件工单</span>
+              <i>/</i>
+              <strong>{activeMenu}</strong>
             </div>
-            <div className="user-chip">
-              <span>{user.displayName}</span>
-              <small>{user.roleCode}</small>
-              <button type="button" onClick={handleLogout}>
-                退出
+
+            <label className="global-search">
+              <Search size={16} />
+              <input
+                onChange={(event) => setSearchKeyword(event.target.value)}
+                placeholder="搜索工单、客户、邮件内容或功能"
+                ref={searchInputRef}
+                type="search"
+                value={searchKeyword}
+              />
+              <span className="shortcut-key">⌘</span>
+              <span className="shortcut-key">K</span>
+            </label>
+
+            <div className="topbar-actions">
+              <button
+                aria-label="帮助"
+                className="icon-button"
+                onClick={() =>
+                  setModal({
+                    title: '帮助',
+                    text: '帮助文档入口已固定在顶部栏。后续接入操作手册后，这里打开帮助抽屉或文档中心。',
+                  })
+                }
+                title="帮助"
+                type="button"
+              >
+                <CircleHelp size={20} />
               </button>
+
+              <div className="popover-wrap">
+                <button
+                  aria-expanded={notificationsOpen}
+                  aria-label="通知"
+                  className="icon-button has-dot"
+                  onClick={() => {
+                    setNotificationsOpen((value) => !value)
+                    setProfileOpen(false)
+                  }}
+                  title="通知"
+                  type="button"
+                >
+                  <Bell size={20} />
+                  <span />
+                </button>
+                {notificationsOpen && (
+                  <div className="topbar-popover notifications-panel">
+                    <strong>系统消息</strong>
+                    <button type="button">有 2 个工单已超时</button>
+                    <button type="button">有 6 个工单即将超时</button>
+                    <button type="button">有 3 个客户新回复待处理</button>
+                  </div>
+                )}
+              </div>
+
+              <div className="profile-area">
+                <button
+                  aria-expanded={profileOpen}
+                  className="profile-button"
+                  onClick={() => {
+                    setProfileOpen((value) => !value)
+                    setNotificationsOpen(false)
+                  }}
+                  type="button"
+                >
+                  <span className="profile-avatar">{userInitial}</span>
+                  <span className="profile-text">
+                    <strong>{user.displayName}</strong>
+                    <small>{user.roleCode === 'ADMIN' ? '系统管理员' : '客服处理人员'}</small>
+                  </span>
+                  <ChevronDown size={15} />
+                </button>
+                {profileOpen && (
+                  <div className="topbar-popover profile-menu">
+                    <div className="profile-summary">
+                      <span className="profile-avatar">{userInitial}</span>
+                      <div>
+                        <strong>{user.displayName}</strong>
+                        <small>{user.email}</small>
+                      </div>
+                    </div>
+                    <button type="button">
+                      <UserRound size={16} />
+                      个人信息
+                    </button>
+                    <button type="button" onClick={handleLogout}>
+                      <LogOut size={16} />
+                      退出登录
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
-          <section className="workspace-board" aria-label="登录状态">
-            <div>
-              <span className="status-label">当前账号</span>
-              <strong>{user.account}</strong>
+
+          <section className="app-content" aria-label="菜单内容区">
+            <div className="content-title">
+              <div>
+                <h1>{activeMenu}</h1>
+                <p>全局左侧菜单和右上角个人中心已固定；该区域后续按当前菜单对应原型逐项开发。</p>
+              </div>
+              <div className="content-actions">
+                <button type="button">
+                  <CalendarDays size={16} />
+                  2026-07-22
+                </button>
+                <button type="button">
+                  <Settings size={16} />
+                  刷新数据
+                </button>
+              </div>
             </div>
-            <div>
-              <span className="status-label">邮箱</span>
-              <strong>{user.email}</strong>
-            </div>
-            <div>
-              <span className="status-label">登录状态</span>
-              <strong>已认证</strong>
+
+            <div className="workspace-placeholder">
+              <div className="placeholder-card">
+                <span>当前账号</span>
+                <strong>{user.account}</strong>
+                <small>{user.email}</small>
+              </div>
+              <div className="placeholder-card">
+                <span>当前菜单</span>
+                <strong>{activeMenu}</strong>
+                <small>{searchKeyword ? `搜索关键字：${searchKeyword}` : '等待开发具体内容'}</small>
+              </div>
+              <div className="placeholder-card">
+                <span>开发边界</span>
+                <strong>AppShell 固定</strong>
+                <small>后续只替换内容区</small>
+              </div>
             </div>
           </section>
         </main>
