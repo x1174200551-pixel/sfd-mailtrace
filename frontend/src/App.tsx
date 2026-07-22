@@ -132,6 +132,49 @@ type UserConfirmAction = {
   type: 'enable' | 'disable' | 'reset'
 } | null
 
+type TemplateVariable = {
+  key: string
+  label: string
+  sampleValue: string
+}
+
+type NotificationTemplate = {
+  id: number
+  templateCode: string
+  templateName: string
+  subjectTpl: string
+  contentTpl: string
+  enabled: boolean
+  updatedAt: string | null
+}
+
+type NotificationTemplateSummary = {
+  totalTemplates: number
+  enabledTemplates: number
+  disabledTemplates: number
+  availableVariables: number
+}
+
+type NotificationTemplateListResponse = {
+  records: NotificationTemplate[]
+  summary: NotificationTemplateSummary
+  variables: TemplateVariable[]
+}
+
+type TemplateFormState = {
+  id: number | null
+  templateCode: string
+  templateName: string
+  subjectTpl: string
+  contentTpl: string
+  enabled: boolean
+}
+
+type TemplatePreviewResponse = {
+  subject: string
+  content: string
+}
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
@@ -194,6 +237,23 @@ const emptyUserForm: UserFormState = {
   roleCode: 'AGENT',
   password: '',
   enabled: true,
+}
+
+const emptyTemplateForm: TemplateFormState = {
+  id: null,
+  templateCode: '',
+  templateName: '',
+  subjectTpl: '',
+  contentTpl: '',
+  enabled: true,
+}
+
+const templateScenes: Record<string, string> = {
+  AUTO_REPLY: '客户来信自动建单',
+  ASSIGN_NOTIFY: '工单分配处理人',
+  AGENT_REPLY: '处理人回复客户',
+  SLA_WARNING: 'SLA 即将超时',
+  SLA_BREACH: 'SLA 已超时',
 }
 
 const features = [
@@ -270,8 +330,23 @@ function roleLabel(roleCode: string) {
   return roleCode === 'ADMIN' ? '管理员' : '客服处理人'
 }
 
+function templateSceneLabel(templateCode: string) {
+  return templateScenes[templateCode] || '系统通知场景'
+}
+
 function toRoleCode(value: string): RoleCode {
   return value === 'ADMIN' ? 'ADMIN' : 'AGENT'
+}
+
+function toTemplateForm(template: NotificationTemplate): TemplateFormState {
+  return {
+    id: template.id,
+    templateCode: template.templateCode,
+    templateName: template.templateName,
+    subjectTpl: template.subjectTpl,
+    contentTpl: template.contentTpl,
+    enabled: template.enabled,
+  }
 }
 
 function App() {
@@ -309,7 +384,22 @@ function App() {
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null)
   const [confirmAction, setConfirmAction] = useState<UserConfirmAction>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [templateKeyword, setTemplateKeyword] = useState('')
+  const [templatesData, setTemplatesData] = useState<NotificationTemplateListResponse | null>(null)
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [templatesError, setTemplatesError] = useState('')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null)
+  const [templateForm, setTemplateForm] = useState<TemplateFormState>(emptyTemplateForm)
+  const [templateDirty, setTemplateDirty] = useState(false)
+  const [templateSaving, setTemplateSaving] = useState(false)
+  const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false)
+  const [templatePreview, setTemplatePreview] = useState<TemplatePreviewResponse | null>(null)
+  const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false)
+  const [sampleTicketNo, setSampleTicketNo] = useState('TCK-20260722-0001')
+  const [sampleSubject, setSampleSubject] = useState('订单物流查询')
+  const [sampleAssignee, setSampleAssignee] = useState('李强')
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = user?.roleCode === 'ADMIN'
   const visibleMenuGroups = useMemo(
     () =>
@@ -405,6 +495,48 @@ function App() {
   useEffect(() => {
     void fetchUsers()
   }, [fetchUsers])
+
+  const fetchTemplates = useCallback(async () => {
+    if (!token || activeMenu !== '通知模板') return
+    if (!isAdmin) {
+      setTemplatesData(null)
+      setTemplatesError('当前账号没有通知模板管理权限')
+      return
+    }
+
+    const params = new URLSearchParams()
+    if (templateKeyword.trim()) params.set('keyword', templateKeyword.trim())
+
+    setTemplatesLoading(true)
+    setTemplatesError('')
+    try {
+      const data = await requestApi<NotificationTemplateListResponse>(
+        `/api/v1/notification-templates${params.toString() ? `?${params.toString()}` : ''}`,
+        { headers: authHeaders(token) },
+      )
+      setTemplatesData(data)
+      const selected = data.records.find((template) => template.id === selectedTemplateId) || data.records[0] || null
+      if (selected) {
+        setSelectedTemplateId(selected.id)
+        setTemplateForm(toTemplateForm(selected))
+        setTemplateDirty(false)
+        setTemplatePreview(null)
+      } else {
+        setSelectedTemplateId(null)
+        setTemplateForm(emptyTemplateForm)
+        setTemplateDirty(false)
+        setTemplatePreview(null)
+      }
+    } catch (error) {
+      setTemplatesError(error instanceof Error ? error.message : '模板列表加载失败')
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }, [activeMenu, isAdmin, selectedTemplateId, templateKeyword, token])
+
+  useEffect(() => {
+    void fetchTemplates()
+  }, [fetchTemplates])
 
   function resetUserFilters() {
     setUserKeyword('')
@@ -516,6 +648,87 @@ function App() {
       setUsersError(error instanceof Error ? error.message : '操作失败，请稍后重试')
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  function selectTemplate(template: NotificationTemplate) {
+    setSelectedTemplateId(template.id)
+    setTemplateForm(toTemplateForm(template))
+    setTemplateDirty(false)
+    setTemplatePreview(null)
+    setTemplatesError('')
+  }
+
+  function updateTemplateForm(patch: Partial<TemplateFormState>) {
+    setTemplateForm((value) => ({ ...value, ...patch }))
+    setTemplateDirty(true)
+    setTemplatePreview(null)
+  }
+
+  function insertVariable(variableKey: string) {
+    const textarea = templateContentRef.current
+    if (!textarea) {
+      updateTemplateForm({ contentTpl: `${templateForm.contentTpl}${variableKey}` })
+      return
+    }
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const contentTpl = `${templateForm.contentTpl.slice(0, start)}${variableKey}${templateForm.contentTpl.slice(end)}`
+    updateTemplateForm({ contentTpl })
+    window.requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.selectionStart = start + variableKey.length
+      textarea.selectionEnd = start + variableKey.length
+    })
+  }
+
+  async function previewTemplate() {
+    if (!token) return
+    setTemplatePreviewLoading(true)
+    setTemplatesError('')
+    try {
+      const data = await requestApi<TemplatePreviewResponse>('/api/v1/notification-templates/preview', {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          subjectTpl: templateForm.subjectTpl,
+          contentTpl: templateForm.contentTpl,
+          sampleData: {
+            ticketNo: sampleTicketNo,
+            subject: sampleSubject,
+            assigneeName: sampleAssignee,
+          },
+        }),
+      })
+      setTemplatePreview(data)
+    } catch (error) {
+      setTemplatesError(error instanceof Error ? error.message : '预览生成失败')
+    } finally {
+      setTemplatePreviewLoading(false)
+    }
+  }
+
+  async function saveTemplate() {
+    if (!token || !templateForm.id) return
+    setTemplateSaving(true)
+    setTemplatesError('')
+    try {
+      await requestApi<NotificationTemplate>(`/api/v1/notification-templates/${templateForm.id}`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          templateName: templateForm.templateName,
+          subjectTpl: templateForm.subjectTpl,
+          contentTpl: templateForm.contentTpl,
+          enabled: templateForm.enabled,
+        }),
+      })
+      setTemplateConfirmOpen(false)
+      await fetchTemplates()
+    } catch (error) {
+      setTemplatesError(error instanceof Error ? error.message : '模板保存失败')
+    } finally {
+      setTemplateSaving(false)
     }
   }
 
@@ -966,6 +1179,237 @@ function App() {
                 </>
               )}
             </section>
+          ) : activeMenu === '通知模板' ? (
+            <section className="app-content template-page" aria-label="通知模板">
+              <div className="content-title">
+                <div>
+                  <h1>通知模板</h1>
+                  <p>维护自动回执、分配通知、处理人回复和 SLA 提醒模板；支持变量插入、预览和保存。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={templatesLoading} onClick={fetchTemplates} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  <button
+                    className="primary-action"
+                    disabled={!templateDirty || !templateForm.id}
+                    onClick={() => setTemplateConfirmOpen(true)}
+                    type="button"
+                  >
+                    <Check size={16} />
+                    保存模板
+                  </button>
+                </div>
+              </div>
+
+              {!isAdmin ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无通知模板管理权限</strong>
+                  <p>非管理员只读自己的工作信息，通知模板编辑入口对处理人隐藏。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="user-metrics">
+                    <div className="user-metric">
+                      <span>模板总数</span>
+                      <strong>{templatesData?.summary.totalTemplates ?? '--'}</strong>
+                      <small>按业务场景唯一编码</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>启用模板</span>
+                      <strong>{templatesData?.summary.enabledTemplates ?? '--'}</strong>
+                      <small>可参与自动通知</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>停用模板</span>
+                      <strong>{templatesData?.summary.disabledTemplates ?? '--'}</strong>
+                      <small>保留配置但不发送</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>可用变量</span>
+                      <strong>{templatesData?.summary.availableVariables ?? '--'}</strong>
+                      <small>工单、客户、处理人信息</small>
+                    </div>
+                  </div>
+
+                  {templatesError && <div className="user-alert">{templatesError}</div>}
+
+                  <div className="template-layout">
+                    <aside className="template-panel template-list-panel">
+                      <div className="template-panel__head">
+                        <strong>模板列表</strong>
+                        <span className="template-code-pill">唯一编码</span>
+                      </div>
+                      <label className="template-search">
+                        <Search size={15} />
+                        <input
+                          onChange={(event) => setTemplateKeyword(event.target.value)}
+                          placeholder="搜索模板名称或编码"
+                          type="search"
+                          value={templateKeyword}
+                        />
+                      </label>
+
+                      {templatesLoading ? (
+                        <div className="user-loading">
+                          {[0, 1, 2, 3, 4].map((item) => (
+                            <span key={item} />
+                          ))}
+                        </div>
+                      ) : templatesData && templatesData.records.length > 0 ? (
+                        <div className="template-list">
+                          {templatesData.records.map((template) => (
+                            <button
+                              className={selectedTemplateId === template.id ? 'template-item active' : 'template-item'}
+                              key={template.id}
+                              onClick={() => selectTemplate(template)}
+                              type="button"
+                            >
+                              <span className="template-item__top">
+                                <strong>{template.templateName}</strong>
+                                <i className={template.enabled ? 'state-pill enabled' : 'state-pill disabled'}>
+                                  {template.enabled ? '启用' : '停用'}
+                                </i>
+                              </span>
+                              <code>{template.templateCode}</code>
+                              <small>{templateSceneLabel(template.templateCode)}</small>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="empty-state compact">
+                          <Bell size={34} />
+                          <strong>未找到模板</strong>
+                          <p>可清空搜索后重新查询。</p>
+                          <button onClick={() => setTemplateKeyword('')} type="button">清空搜索</button>
+                        </div>
+                      )}
+                    </aside>
+
+                    <section className="template-panel template-editor-panel">
+                      <div className="template-panel__head">
+                        <strong>模板编辑</strong>
+                        <span className={templateDirty ? 'template-code-pill dirty' : 'template-code-pill'}>
+                          {templateDirty ? '未保存' : '已保存'}
+                        </span>
+                      </div>
+                      <div className="template-editor">
+                        <div className="template-form-grid">
+                          <label>
+                            <span>模板编码</span>
+                            <input disabled value={templateForm.templateCode} />
+                            <small>编码唯一，不允许重复。</small>
+                          </label>
+                          <label>
+                            <span>模板名称</span>
+                            <input
+                              onChange={(event) => updateTemplateForm({ templateName: event.target.value })}
+                              value={templateForm.templateName}
+                            />
+                          </label>
+                          <label>
+                            <span>发送场景</span>
+                            <input disabled value={templateSceneLabel(templateForm.templateCode)} />
+                          </label>
+                          <label>
+                            <span>启用状态</span>
+                            <button
+                              className={templateForm.enabled ? 'template-switch enabled' : 'template-switch'}
+                              onClick={() => updateTemplateForm({ enabled: !templateForm.enabled })}
+                              type="button"
+                            >
+                              <span>{templateForm.enabled ? '启用后参与自动通知' : '停用后不参与发送'}</span>
+                              <i />
+                            </button>
+                          </label>
+                          <label className="full">
+                            <span>邮件主题</span>
+                            <input
+                              onChange={(event) => updateTemplateForm({ subjectTpl: event.target.value })}
+                              value={templateForm.subjectTpl}
+                            />
+                            <small>主题可插入变量，保存前需校验变量格式。</small>
+                          </label>
+                          <label className="full">
+                            <span>邮件正文</span>
+                            <div className="template-toolbar">
+                              <button type="button">B</button>
+                              <button type="button">I</button>
+                              <button type="button">列表</button>
+                              <button type="button">链接</button>
+                              <button type="button">撤销</button>
+                              <button type="button">重做</button>
+                            </div>
+                            <textarea
+                              onChange={(event) => updateTemplateForm({ contentTpl: event.target.value })}
+                              ref={templateContentRef}
+                              value={templateForm.contentTpl}
+                            />
+                            <small>第一版可降级为纯文本编辑；工具栏保留交互位，保存时写入正文模板。</small>
+                          </label>
+                        </div>
+                      </div>
+                    </section>
+
+                    <aside className="template-side">
+                      <section className="template-panel">
+                        <div className="template-panel__head">
+                          <strong>变量面板</strong>
+                          <span className="template-code-pill">点击插入</span>
+                        </div>
+                        <div className="template-vars">
+                          {(templatesData?.variables || []).map((variable) => (
+                            <button key={variable.key} onClick={() => insertVariable(variable.key)} type="button">
+                              {variable.key}
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+
+                      <section className="template-panel">
+                        <div className="template-panel__head">
+                          <strong>预览</strong>
+                          <button disabled={templatePreviewLoading} onClick={previewTemplate} type="button">
+                            {templatePreviewLoading ? '生成中...' : '生成预览'}
+                          </button>
+                        </div>
+                        <div className="template-preview">
+                          <div className="mail-subject">
+                            {templatePreview?.subject || '点击生成预览后显示邮件主题'}
+                          </div>
+                          <div className="mail-body">
+                            {templatePreview?.content || '模板正文预览会使用下方示例数据进行变量替换。'}
+                          </div>
+                        </div>
+                        <div className="template-samples">
+                          <label>
+                            <span>示例工单号</span>
+                            <input onChange={(event) => setSampleTicketNo(event.target.value)} value={sampleTicketNo} />
+                          </label>
+                          <label>
+                            <span>示例主题</span>
+                            <input onChange={(event) => setSampleSubject(event.target.value)} value={sampleSubject} />
+                          </label>
+                          <label>
+                            <span>示例处理人</span>
+                            <input onChange={(event) => setSampleAssignee(event.target.value)} value={sampleAssignee} />
+                          </label>
+                        </div>
+                      </section>
+                    </aside>
+                  </div>
+
+                  <div className="template-state-grid">
+                    <div className="state-card"><strong>空态</strong><p>无模板或搜索无结果时显示未找到模板，并提供清空搜索入口。</p></div>
+                    <div className="state-card"><strong>加载态</strong><p>刷新、切换模板和保存时按钮禁用，编辑区显示加载骨架。</p></div>
+                    <div className="state-card"><strong>错误态</strong><p>变量格式错误、主题为空、保存失败时在页面顶部提示。</p></div>
+                    <div className="state-card"><strong>权限态</strong><p>非管理员隐藏保存按钮和启停控件，仅管理员可维护模板。</p></div>
+                  </div>
+                </>
+              )}
+            </section>
           ) : (
             <section className="app-content" aria-label="菜单内容区">
               <div className="content-title">
@@ -1110,6 +1554,25 @@ function App() {
                 <button disabled={actionLoading} onClick={() => setConfirmAction(null)} type="button">取消</button>
                 <button className="primary-action" disabled={actionLoading} onClick={submitConfirmAction} type="button">
                   {actionLoading ? '处理中...' : confirmAction.actionLabel}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {templateConfirmOpen && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="template-confirm-title">
+            <div className="confirm-modal">
+              <h3 id="template-confirm-title">保存模板确认</h3>
+              <p>保存后新产生的自动回执和通知将使用当前模板内容，历史已发送邮件不受影响。</p>
+              <div className="confirm-target">
+                <strong>{templateForm.templateName || '未命名模板'}</strong>
+                <span>{templateForm.templateCode || '未选择模板'}</span>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={templateSaving} onClick={() => setTemplateConfirmOpen(false)} type="button">取消</button>
+                <button className="primary-action" disabled={templateSaving} onClick={saveTemplate} type="button">
+                  {templateSaving ? '保存中...' : '确认保存'}
                 </button>
               </div>
             </div>
