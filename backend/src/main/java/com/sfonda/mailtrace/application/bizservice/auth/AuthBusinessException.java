@@ -1,14 +1,10 @@
 package com.sfonda.mailtrace.application.bizservice.auth;
 
-import lombok.Getter;
+import com.sfonda.mailtrace.application.bizservice.common.BusinessException;
 
-@Getter
-public class AuthBusinessException extends RuntimeException {
-
-    private final int code;
+public class AuthBusinessException extends BusinessException {
 
     public AuthBusinessException(int code, String message) {
-        super(message);
-        this.code = code;
+        super(code, message);
     }
 }
