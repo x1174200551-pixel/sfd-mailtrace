@@ -187,6 +187,31 @@ type TemplatePreviewResponse = {
   content: string
 }
 
+type TicketNumberRule = {
+  enabled: boolean
+  prefix: string
+  dateFormat: string
+  seqLength: number
+  separator: string
+  description: string
+  todayDate: string
+  dateKey: string
+  usedSeq: number
+  nextSeq: string
+  nextTicketNo: string
+  subjectPreview: string
+  updatedAt: string | null
+}
+
+type TicketRuleFormState = {
+  enabled: boolean
+  prefix: string
+  dateFormat: string
+  seqLength: number
+  separator: string
+  description: string
+}
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
@@ -230,7 +255,7 @@ const menuGroups: MenuGroup[] = [
     adminOnly: true,
     items: [
       { title: '用户管理', icon: UserCog, adminOnly: true },
-      { title: '系统设置', icon: SlidersHorizontal },
+      { title: '编号规则', icon: SlidersHorizontal },
       { title: '通知模板', icon: Bell },
       { title: '操作日志', icon: ListChecks },
     ],
@@ -258,6 +283,15 @@ const emptyTemplateForm: TemplateFormState = {
   subjectTpl: '',
   contentTpl: '',
   enabled: true,
+}
+
+const emptyTicketRuleForm: TicketRuleFormState = {
+  enabled: true,
+  prefix: 'TCK',
+  dateFormat: 'yyyyMMdd',
+  seqLength: 4,
+  separator: '-',
+  description: '客户来信自动建单时生成唯一工单号；邮件线程关联会优先匹配主题中的工单号。',
 }
 
 const templateScenes: Record<string, string> = {
@@ -312,10 +346,20 @@ function clearSession() {
   sessionStorage.removeItem(USER_KEY)
 }
 
+function readStoredToken() {
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || ''
+}
+
 async function requestApi<T>(url: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers)
   if (!headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
+  }
+  if (!headers.has('Authorization') && !url.includes('/auth/login')) {
+    const storedToken = readStoredToken()
+    if (storedToken) {
+      headers.set('Authorization', `Bearer ${storedToken}`)
+    }
   }
 
   const response = await fetch(url, {
@@ -369,6 +413,17 @@ function toTemplateForm(template: NotificationTemplate): TemplateFormState {
   }
 }
 
+function toTicketRuleForm(rule: TicketNumberRule): TicketRuleFormState {
+  return {
+    enabled: rule.enabled,
+    prefix: rule.prefix,
+    dateFormat: rule.dateFormat,
+    seqLength: rule.seqLength,
+    separator: rule.separator,
+    description: rule.description,
+  }
+}
+
 function App() {
   const initialSession = useMemo(readStoredSession, [])
   const [account, setAccount] = useState('')
@@ -416,6 +471,15 @@ function App() {
   const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false)
   const [templatePreview, setTemplatePreview] = useState<TemplatePreviewResponse | null>(null)
   const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false)
+  const [ticketRule, setTicketRule] = useState<TicketNumberRule | null>(null)
+  const [ticketRuleForm, setTicketRuleForm] = useState<TicketRuleFormState>(emptyTicketRuleForm)
+  const [ticketRuleDirty, setTicketRuleDirty] = useState(false)
+  const [ticketRuleLoading, setTicketRuleLoading] = useState(false)
+  const [ticketRuleSaving, setTicketRuleSaving] = useState(false)
+  const [ticketRulePreviewLoading, setTicketRulePreviewLoading] = useState(false)
+  const [ticketRuleError, setTicketRuleError] = useState('')
+  const [ticketRuleMessage, setTicketRuleMessage] = useState('')
+  const [ticketRuleConfirmOpen, setTicketRuleConfirmOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = user?.roleCode === 'ADMIN'
@@ -575,6 +639,36 @@ function App() {
     void fetchTemplates()
   }, [fetchTemplates])
 
+  const fetchTicketRule = useCallback(async () => {
+    if (!token || activeMenu !== '编号规则') return
+    if (!isAdmin) {
+      setTicketRule(null)
+      setTicketRuleError('当前账号没有编号规则管理权限')
+      return
+    }
+
+    setTicketRuleLoading(true)
+    setTicketRuleError('')
+    setTicketRuleMessage('')
+    try {
+      const data = await requestApi<TicketNumberRule>('/api/v1/sys-params/ticket-number-rule', {
+        headers: authHeaders(token),
+      })
+      setTicketRule(data)
+      setTicketRuleForm(toTicketRuleForm(data))
+      setTicketRuleDirty(false)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setTicketRuleError(error instanceof Error ? error.message : '编号规则加载失败')
+    } finally {
+      setTicketRuleLoading(false)
+    }
+  }, [activeMenu, handleAuthExpired, isAdmin, token])
+
+  useEffect(() => {
+    void fetchTicketRule()
+  }, [fetchTicketRule])
+
   function resetUserFilters() {
     setUserKeyword('')
     setUserRoleFilter('ALL')
@@ -722,6 +816,12 @@ function App() {
     setTemplatePreview(null)
   }
 
+  function updateTicketRuleForm(patch: Partial<TicketRuleFormState>) {
+    setTicketRuleForm((value) => ({ ...value, ...patch }))
+    setTicketRuleDirty(true)
+    setTicketRuleMessage('')
+  }
+
   function insertVariable(variableKey: string) {
     const textarea = templateContentRef.current
     if (!textarea) {
@@ -792,6 +892,56 @@ function App() {
     } finally {
       setTemplateSaving(false)
     }
+  }
+
+  async function previewTicketRule() {
+    if (!token) return
+    setTicketRulePreviewLoading(true)
+    setTicketRuleError('')
+    setTicketRuleMessage('')
+    try {
+      const data = await requestApi<TicketNumberRule>('/api/v1/sys-params/ticket-number-rule/preview', {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify(ticketRuleForm),
+      })
+      setTicketRule(data)
+      setTicketRuleForm(toTicketRuleForm(data))
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setTicketRuleError(error instanceof Error ? error.message : '规则预览失败')
+    } finally {
+      setTicketRulePreviewLoading(false)
+    }
+  }
+
+  async function saveTicketRule() {
+    if (!token) return
+    setTicketRuleSaving(true)
+    setTicketRuleError('')
+    setTicketRuleMessage('')
+    try {
+      const data = await requestApi<TicketNumberRule>('/api/v1/sys-params/ticket-number-rule', {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify(ticketRuleForm),
+      })
+      setTicketRule(data)
+      setTicketRuleForm(toTicketRuleForm(data))
+      setTicketRuleDirty(false)
+      setTicketRuleConfirmOpen(false)
+      setTicketRuleMessage('编号规则已保存，后续新建工单将使用当前规则。')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setTicketRuleError(error instanceof Error ? error.message : '编号规则保存失败')
+    } finally {
+      setTicketRuleSaving(false)
+    }
+  }
+
+  function resetTicketRule() {
+    updateTicketRuleForm(emptyTicketRuleForm)
+    setTicketRuleMessage('已恢复默认规则，保存前可先生成预览确认。')
   }
 
   function validateForm() {
@@ -1241,6 +1391,249 @@ function App() {
                 </>
               )}
             </section>
+          ) : activeMenu === '编号规则' ? (
+            <section className="app-content system-page" aria-label="编号规则配置">
+              <div className="content-title">
+                <div>
+                  <h1>编号规则配置</h1>
+                  <p>维护业务可理解的工单号生成规则；系统技术参数由管理员或运维在后台维护。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={ticketRuleLoading} onClick={fetchTicketRule} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  <button
+                    className="primary-action"
+                    disabled={!ticketRuleDirty || ticketRuleSaving}
+                    onClick={() => setTicketRuleConfirmOpen(true)}
+                    type="button"
+                  >
+                    <Check size={16} />
+                    保存修改
+                  </button>
+                </div>
+              </div>
+
+              {!isAdmin ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无编号规则管理权限</strong>
+                  <p>非管理员只读自己的工作信息，编号规则配置入口对处理人隐藏。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="user-metrics">
+                    <div className="user-metric">
+                      <span>规则数量</span>
+                      <strong>{ticketRule ? 1 : '--'}</strong>
+                      <small>当前启用工单编号规则</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>编号规则</span>
+                      <strong>{ticketRuleForm.enabled ? 1 : 0}</strong>
+                      <small>当前前缀 {ticketRuleForm.prefix || '--'}</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>未保存变更</span>
+                      <strong>{ticketRuleDirty ? 1 : 0}</strong>
+                      <small>{ticketRuleDirty ? '规则待确认' : '暂无待保存内容'}</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>当前流水</span>
+                      <strong>{ticketRule?.usedSeq ?? '--'}</strong>
+                      <small>下一号 {ticketRule?.nextSeq ?? '--'}</small>
+                    </div>
+                  </div>
+
+                  <div className={ticketRuleError ? 'system-alert danger' : 'system-alert'}>
+                    <span>{ticketRuleError || ticketRuleMessage || '编号规则影响后续新建工单，历史工单号不会回写变更。'}</span>
+                    <button onClick={previewTicketRule} disabled={ticketRulePreviewLoading} type="button">
+                      {ticketRulePreviewLoading ? '生成中...' : '生成预览'}
+                    </button>
+                  </div>
+
+                  <div className="system-layout">
+                    <aside className="system-panel system-groups">
+                      <div className="system-panel__head">
+                        <strong>配置分组</strong>
+                        <span className="template-code-pill">业务可配</span>
+                      </div>
+                      <button className="system-group active" type="button">
+                        <strong>工单编号规则</strong>
+                        <small>前缀、日期格式、流水位数</small>
+                      </button>
+                      <button className="system-group" type="button">
+                        <strong>邮件处理策略</strong>
+                        <small>重试次数、拉取间隔等由管理员维护</small>
+                      </button>
+                      <button className="system-group" type="button">
+                        <strong>通知与提醒</strong>
+                        <small>SLA 预警、分配通知开关</small>
+                      </button>
+                      <button className="system-group" type="button">
+                        <strong>安全与审计</strong>
+                        <small>会话超时、操作日志保留</small>
+                      </button>
+                    </aside>
+
+                    <section className="system-panel system-editor">
+                      <div className="system-panel__head">
+                        <strong>工单编号规则</strong>
+                        <span className={ticketRuleDirty ? 'template-code-pill dirty' : 'template-code-pill'}>
+                          {ticketRuleDirty ? '未保存' : '已保存'}
+                        </span>
+                      </div>
+                      {ticketRuleLoading ? (
+                        <div className="user-loading">
+                          {[0, 1, 2, 3].map((item) => (
+                            <span key={item} />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="system-form">
+                          <label>
+                            <span>启用状态</span>
+                            <select
+                              onChange={(event) => updateTicketRuleForm({ enabled: event.target.value === 'true' })}
+                              value={String(ticketRuleForm.enabled)}
+                            >
+                              <option value="true">启用</option>
+                              <option value="false">停用</option>
+                            </select>
+                            <small>停用后使用默认规则 TCK-yyyyMMdd-0001。</small>
+                          </label>
+                          <label>
+                            <span>工单前缀</span>
+                            <input
+                              maxLength={8}
+                              onChange={(event) =>
+                                updateTicketRuleForm({
+                                  prefix: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''),
+                                })
+                              }
+                              value={ticketRuleForm.prefix}
+                            />
+                            <small>建议使用 2-8 位大写英文或数字。</small>
+                          </label>
+                          <label>
+                            <span>日期格式</span>
+                            <select
+                              onChange={(event) => updateTicketRuleForm({ dateFormat: event.target.value })}
+                              value={ticketRuleForm.dateFormat}
+                            >
+                              <option value="yyyyMMdd">yyyyMMdd</option>
+                              <option value="yyyyMM">yyyyMM</option>
+                              <option value="yyyy">yyyy</option>
+                            </select>
+                            <small>变更后新工单按新日期维度取流水。</small>
+                          </label>
+                          <label>
+                            <span>流水位数</span>
+                            <input
+                              max={8}
+                              min={3}
+                              onChange={(event) =>
+                                updateTicketRuleForm({ seqLength: Number(event.target.value || 4) })
+                              }
+                              type="number"
+                              value={ticketRuleForm.seqLength}
+                            />
+                            <small>示例：4 位生成 0001，6 位生成 000001。</small>
+                          </label>
+                          <label>
+                            <span>分隔符</span>
+                            <select
+                              onChange={(event) => updateTicketRuleForm({ separator: event.target.value })}
+                              value={ticketRuleForm.separator}
+                            >
+                              <option value="-">短横线 -</option>
+                              <option value="">无分隔符</option>
+                              <option value="_">下划线 _</option>
+                            </select>
+                            <small>建议保留短横线，便于邮件主题识别。</small>
+                          </label>
+                          <label className="full">
+                            <span>参数说明</span>
+                            <textarea
+                              onChange={(event) => updateTicketRuleForm({ description: event.target.value })}
+                              value={ticketRuleForm.description}
+                            />
+                          </label>
+                          <div className="system-token-row">
+                            <span>{'{prefix}'}</span>
+                            <span>{`{${ticketRuleForm.dateFormat}}`}</span>
+                            <span>{'{seq}'}</span>
+                            <span>{ticketRuleForm.separator || '无分隔符'}</span>
+                          </div>
+                          <div className="system-actions">
+                            <span>保存前会校验格式合法性和下一号预览。</span>
+                            <div>
+                              <button onClick={resetTicketRule} type="button">恢复默认</button>
+                              <button className="primary-action" onClick={() => setTicketRuleConfirmOpen(true)} type="button">
+                                保存规则
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </section>
+
+                    <aside className="system-side">
+                      <section className="system-panel">
+                        <div className="system-panel__head">
+                          <strong>规则预览</strong>
+                          <span className="state-pill enabled">可用</span>
+                        </div>
+                        <div className="rule-preview-card">
+                          <span>下一工单号</span>
+                          <strong>{ticketRule?.nextTicketNo || '点击生成预览'}</strong>
+                        </div>
+                        <div className="rule-preview-list">
+                          <div><span>今日日期</span><strong>{ticketRule?.todayDate || '--'}</strong></div>
+                          <div><span>当前日期维度</span><strong>{ticketRule?.dateKey || '--'}</strong></div>
+                          <div><span>当前已用流水</span><strong>{ticketRule?.usedSeq ?? '--'}</strong></div>
+                          <div><span>主题匹配样例</span><strong>{ticketRule?.subjectPreview || '--'}</strong></div>
+                        </div>
+                      </section>
+
+                      <section className="system-panel">
+                        <div className="system-panel__head">
+                          <strong>发布检查</strong>
+                          <span className="template-code-pill">自动校验</span>
+                        </div>
+                        <div className="system-check-list">
+                          <div><Check size={16} /><span><strong>规则格式合法</strong><small>前缀、日期和流水片段均可解析。</small></span></div>
+                          <div><Check size={16} /><span><strong>下一号可预览</strong><small>预览编号按当前日期维度生成。</small></span></div>
+                          <div><TriangleAlert size={16} /><span><strong>影响新工单</strong><small>保存后仅影响后续自动建单。</small></span></div>
+                        </div>
+                      </section>
+                    </aside>
+                  </div>
+
+                  <section className="system-panel system-boundary">
+                    <div className="system-panel__head">
+                      <strong>系统参数边界</strong>
+                      <span className="template-code-pill">非业务录入</span>
+                    </div>
+                    <div className="system-boundary__body">
+                      <div>
+                        <strong>编号规则面向业务配置</strong>
+                        <p>业务人员只维护前缀、日期格式、流水位数、分隔符和说明，不需要填写内部字段或数据库字段。</p>
+                      </div>
+                      <div>
+                        <strong>技术参数后台维护</strong>
+                        <p>邮件轮询间隔、重试次数、审计保留天数等属于运维参数，后续按管理员能力单独设计。</p>
+                      </div>
+                      <div>
+                        <strong>保存前统一校验</strong>
+                        <p>系统自动校验格式和下一号预览，确认后仅作用于后续新建工单。</p>
+                      </div>
+                    </div>
+                  </section>
+                </>
+              )}
+            </section>
           ) : activeMenu === '通知模板' ? (
             <section className="app-content template-page" aria-label="通知模板">
               <div className="content-title">
@@ -1633,6 +2026,27 @@ function App() {
                 <button disabled={templateSaving} onClick={() => setTemplateConfirmOpen(false)} type="button">取消</button>
                 <button className="primary-action" disabled={templateSaving} onClick={saveTemplate} type="button">
                   {templateSaving ? '保存中...' : templateForm.id ? '确认保存' : '确认创建'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {ticketRuleConfirmOpen && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="ticket-rule-confirm-title">
+            <div className="confirm-modal">
+              <h3 id="ticket-rule-confirm-title">保存编号规则确认</h3>
+              <p>保存后系统会用新规则生成后续工单号，历史工单号不受影响。请确认规则预览无误。</p>
+              <div className="confirm-target">
+                <strong>{ticketRule?.nextTicketNo || `${ticketRuleForm.prefix || 'TCK'} 规则`}</strong>
+                <span>影响范围：后续客户来信自动建单、自动回执、主题工单号匹配。</span>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={ticketRuleSaving} onClick={() => setTicketRuleConfirmOpen(false)} type="button">
+                  取消
+                </button>
+                <button className="primary-action" disabled={ticketRuleSaving} onClick={saveTicketRule} type="button">
+                  {ticketRuleSaving ? '保存中...' : '确认保存'}
                 </button>
               </div>
             </div>
