@@ -1294,7 +1294,7 @@ function App() {
                     <aside className="template-panel template-list-panel">
                       <div className="template-panel__head">
                         <strong>模板列表</strong>
-                        <button className="template-head-action" onClick={openCreateTemplate} type="button">
+                        <button className="template-head-action primary" onClick={openCreateTemplate} type="button">
                           <Plus size={14} />
                           新建
                         </button>
@@ -1424,18 +1424,6 @@ function App() {
                             />
                             <small>第一版可降级为纯文本编辑；工具栏保留交互位，保存时写入正文模板。</small>
                           </label>
-                        </div>
-                        <div className="template-editor-actions">
-                          <span>{templateForm.id ? '保存后立即更新后续自动通知模板。' : '创建后会进入模板列表，可继续编辑和启停。'}</span>
-                          <button
-                            className="primary-action"
-                            disabled={!templateDirty || templateSaving}
-                            onClick={() => setTemplateConfirmOpen(true)}
-                            type="button"
-                          >
-                            <Check size={16} />
-                            {templateSaving ? '保存中...' : templateForm.id ? '保存模板' : '创建模板'}
-                          </button>
                         </div>
                       </div>
                     </section>
