@@ -216,6 +216,7 @@ type TicketRuleFormState = {
 type SystemGroupKey = 'ticket' | 'mail' | 'notice' | 'security'
 
 type MailboxConnectionStatus = 'UNKNOWN' | 'OK' | 'ERROR'
+type MailboxStepKey = 'basic' | 'imap' | 'smtp' | 'reply' | 'test'
 
 type Mailbox = {
   id: number
@@ -406,6 +407,14 @@ const emptyMailboxForm: MailboxFormState = {
   autoReplyEnabled: true,
   autoReplyTemplateId: '',
 }
+
+const mailboxSteps: Array<{ key: MailboxStepKey; label: string; description: string }> = [
+  { key: 'basic', label: '基础信息', description: '邮箱名称、地址、默认处理人和启用状态' },
+  { key: 'imap', label: '收信配置', description: 'IMAP 服务器、账号、授权码和收件文件夹' },
+  { key: 'smtp', label: '发信配置', description: 'SMTP 服务器、账号、授权码和发件人' },
+  { key: 'reply', label: '自动回复', description: '拉取频率、自动回执和回执模板' },
+  { key: 'test', label: '连接测试', description: '保存前建议完成收信和发信连接测试' },
+]
 
 const systemGroups: Array<{
   key: SystemGroupKey
@@ -680,6 +689,7 @@ function App() {
   const [mailboxesLoading, setMailboxesLoading] = useState(false)
   const [mailboxesError, setMailboxesError] = useState('')
   const [mailboxAssignees, setMailboxAssignees] = useState<ManagedUser[]>([])
+  const [activeMailboxStep, setActiveMailboxStep] = useState<MailboxStepKey>('basic')
   const [mailboxForm, setMailboxForm] = useState<MailboxFormState>(emptyMailboxForm)
   const [mailboxDirty, setMailboxDirty] = useState(false)
   const [mailboxSaving, setMailboxSaving] = useState(false)
@@ -977,6 +987,7 @@ function App() {
     setMailboxDirty(false)
     setMailboxTestResult(null)
     setMailboxesError('')
+    setActiveMailboxStep('basic')
   }
 
   function openCreateMailbox() {
@@ -984,6 +995,13 @@ function App() {
     setMailboxDirty(true)
     setMailboxTestResult(null)
     setMailboxesError('')
+    setActiveMailboxStep('basic')
+  }
+
+  function moveMailboxStep(direction: 1 | -1) {
+    const currentIndex = mailboxSteps.findIndex((step) => step.key === activeMailboxStep)
+    const nextIndex = Math.min(Math.max(currentIndex + direction, 0), mailboxSteps.length - 1)
+    setActiveMailboxStep(mailboxSteps[nextIndex].key)
   }
 
   function buildMailboxPayload() {
@@ -1455,6 +1473,8 @@ function App() {
 
   if (user) {
     const userInitial = user.displayName.trim().charAt(0) || user.account.trim().charAt(0).toUpperCase() || 'U'
+    const activeMailboxStepIndex = mailboxSteps.findIndex((step) => step.key === activeMailboxStep)
+    const activeMailboxStepConfig = mailboxSteps[activeMailboxStepIndex] || mailboxSteps[0]
 
     return (
       <div className={sidebarCollapsed ? 'app-workspace shell-collapsed' : 'app-workspace'}>
@@ -2061,233 +2081,306 @@ function App() {
                       </div>
 
                       <div className="mailbox-editor">
-                        <div className="mailbox-form-grid">
-                          <label>
-                            <span>邮箱名称</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ mailboxName: event.target.value })}
-                              placeholder="例如 客服支持邮箱"
-                              value={mailboxForm.mailboxName}
-                            />
-                          </label>
-                          <label>
-                            <span>邮箱地址</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ emailAddress: event.target.value })}
-                              placeholder="support@example.com"
-                              type="email"
-                              value={mailboxForm.emailAddress}
-                            />
-                          </label>
-                          <label>
-                            <span>默认处理人</span>
-                            <select
-                              onChange={(event) => updateMailboxForm({ defaultAssigneeId: event.target.value })}
-                              value={mailboxForm.defaultAssigneeId}
-                            >
-                              <option value="">按分配规则处理</option>
-                              {mailboxAssignees.map((assignee) => (
-                                <option key={assignee.id} value={assignee.id}>
-                                  {assignee.displayName} / {assignee.account}
-                                </option>
-                              ))}
-                            </select>
-                            <small>为空时后续按自动分配规则选择处理人。</small>
-                          </label>
-                          <label>
-                            <span>启用状态</span>
+                        <div className="mailbox-step-tabs" role="tablist" aria-label="邮箱配置步骤">
+                          {mailboxSteps.map((step) => (
                             <button
-                              className={mailboxForm.enabled ? 'template-switch enabled' : 'template-switch'}
-                              onClick={() => updateMailboxForm({ enabled: !mailboxForm.enabled })}
+                              aria-selected={activeMailboxStep === step.key}
+                              className={activeMailboxStep === step.key ? 'mailbox-step active' : 'mailbox-step'}
+                              key={step.key}
+                              onClick={() => setActiveMailboxStep(step.key)}
+                              role="tab"
                               type="button"
                             >
-                              <span>{mailboxForm.enabled ? '启用后参与邮箱拉取' : '停用后不拉取邮件'}</span>
-                              <i />
+                              <span>{step.label}</span>
                             </button>
-                          </label>
+                          ))}
                         </div>
 
-                        <div className="mailbox-section-title">
-                          <strong>收信 IMAP</strong>
-                          <small>一期通过 IMAP 拉取客户来信并自动建单</small>
-                        </div>
-                        <div className="mailbox-form-grid three">
-                          <label>
-                            <span>IMAP 服务器</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ imapHost: event.target.value })}
-                              placeholder="imap.example.com"
-                              value={mailboxForm.imapHost}
-                            />
-                          </label>
-                          <label>
-                            <span>IMAP 端口</span>
-                            <input
-                              min={1}
-                              max={65535}
-                              onChange={(event) => updateMailboxForm({ imapPort: Number(event.target.value || 993) })}
-                              type="number"
-                              value={mailboxForm.imapPort}
-                            />
-                          </label>
-                          <label>
-                            <span>SSL</span>
-                            <button
-                              className={mailboxForm.imapSslEnabled ? 'template-switch enabled' : 'template-switch'}
-                              onClick={() => updateMailboxForm({ imapSslEnabled: !mailboxForm.imapSslEnabled })}
-                              type="button"
-                            >
-                              <span>{mailboxForm.imapSslEnabled ? '启用' : '关闭'}</span>
-                              <i />
-                            </button>
-                          </label>
-                          <label>
-                            <span>IMAP 账号</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ imapUsername: event.target.value })}
-                              placeholder="通常为邮箱地址"
-                              value={mailboxForm.imapUsername}
-                            />
-                          </label>
-                          <label>
-                            <span>IMAP 密码/授权码</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ imapPassword: event.target.value })}
-                              placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
-                              type="password"
-                              value={mailboxForm.imapPassword}
-                            />
-                          </label>
-                          <label>
-                            <span>收件文件夹</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ imapFolder: event.target.value })}
-                              placeholder="INBOX"
-                              value={mailboxForm.imapFolder}
-                            />
-                          </label>
+                        <div className="mailbox-step-summary">
+                          <strong>{activeMailboxStepConfig.label}</strong>
+                          <span>{activeMailboxStepConfig.description}</span>
                         </div>
 
-                        <div className="mailbox-section-title">
-                          <strong>发信 SMTP</strong>
-                          <small>用于后续处理人回复、自动回执和系统通知发信</small>
-                        </div>
-                        <div className="mailbox-form-grid three">
-                          <label>
-                            <span>SMTP 服务器</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ smtpHost: event.target.value })}
-                              placeholder="smtp.example.com"
-                              value={mailboxForm.smtpHost}
-                            />
-                          </label>
-                          <label>
-                            <span>SMTP 端口</span>
-                            <input
-                              min={1}
-                              max={65535}
-                              onChange={(event) => updateMailboxForm({ smtpPort: Number(event.target.value || 587) })}
-                              type="number"
-                              value={mailboxForm.smtpPort}
-                            />
-                          </label>
-                          <label>
-                            <span>SSL/TLS</span>
-                            <button
-                              className={mailboxForm.smtpSslEnabled ? 'template-switch enabled' : 'template-switch'}
-                              onClick={() => updateMailboxForm({ smtpSslEnabled: !mailboxForm.smtpSslEnabled })}
-                              type="button"
-                            >
-                              <span>{mailboxForm.smtpSslEnabled ? '启用' : '关闭'}</span>
-                              <i />
-                            </button>
-                          </label>
-                          <label>
-                            <span>SMTP 账号</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ smtpUsername: event.target.value })}
-                              placeholder="通常为邮箱地址"
-                              value={mailboxForm.smtpUsername}
-                            />
-                          </label>
-                          <label>
-                            <span>SMTP 密码/授权码</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ smtpPassword: event.target.value })}
-                              placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
-                              type="password"
-                              value={mailboxForm.smtpPassword}
-                            />
-                          </label>
-                          <label>
-                            <span>发件人显示名</span>
-                            <input
-                              onChange={(event) => updateMailboxForm({ smtpFromName: event.target.value })}
-                              placeholder="客服支持中心"
-                              value={mailboxForm.smtpFromName}
-                            />
-                          </label>
-                        </div>
+                        <div className="mailbox-step-body">
+                          {activeMailboxStep === 'basic' && (
+                            <div className="mailbox-form-grid">
+                              <label>
+                                <span>邮箱名称</span>
+                                <input
+                                  onChange={(event) => updateMailboxForm({ mailboxName: event.target.value })}
+                                  placeholder="例如 客服支持邮箱"
+                                  value={mailboxForm.mailboxName}
+                                />
+                              </label>
+                              <label>
+                                <span>邮箱地址</span>
+                                <input
+                                  onChange={(event) => updateMailboxForm({ emailAddress: event.target.value })}
+                                  placeholder="support@example.com"
+                                  type="email"
+                                  value={mailboxForm.emailAddress}
+                                />
+                              </label>
+                              <label>
+                                <span>默认处理人</span>
+                                <select
+                                  onChange={(event) => updateMailboxForm({ defaultAssigneeId: event.target.value })}
+                                  value={mailboxForm.defaultAssigneeId}
+                                >
+                                  <option value="">按分配规则处理</option>
+                                  {mailboxAssignees.map((assignee) => (
+                                    <option key={assignee.id} value={assignee.id}>
+                                      {assignee.displayName} / {assignee.account}
+                                    </option>
+                                  ))}
+                                </select>
+                                <small>为空时后续按自动分配规则选择处理人。</small>
+                              </label>
+                              <label>
+                                <span>启用状态</span>
+                                <button
+                                  className={mailboxForm.enabled ? 'template-switch enabled' : 'template-switch'}
+                                  onClick={() => updateMailboxForm({ enabled: !mailboxForm.enabled })}
+                                  type="button"
+                                >
+                                  <span>{mailboxForm.enabled ? '启用后参与邮箱拉取' : '停用后不拉取邮件'}</span>
+                                  <i />
+                                </button>
+                              </label>
+                            </div>
+                          )}
 
-                        <div className="mailbox-section-title">
-                          <strong>处理策略</strong>
-                          <small>拉取频率和自动回执仅影响后续新邮件</small>
-                        </div>
-                        <div className="mailbox-form-grid three">
-                          <label>
-                            <span>拉取频率（秒）</span>
-                            <input
-                              min={60}
-                              max={1800}
-                              onChange={(event) => updateMailboxForm({ fetchIntervalSec: Number(event.target.value || 120) })}
-                              type="number"
-                              value={mailboxForm.fetchIntervalSec}
-                            />
-                            <small>建议 60-1800 秒，过短会增加邮箱服务压力。</small>
-                          </label>
-                          <label>
-                            <span>自动回执</span>
-                            <button
-                              className={mailboxForm.autoReplyEnabled ? 'template-switch enabled' : 'template-switch'}
-                              onClick={() => updateMailboxForm({ autoReplyEnabled: !mailboxForm.autoReplyEnabled })}
-                              type="button"
-                            >
-                              <span>{mailboxForm.autoReplyEnabled ? '启用自动回执' : '不发送自动回执'}</span>
-                              <i />
-                            </button>
-                          </label>
-                          <label>
-                            <span>回执模板</span>
-                            <select
-                              onChange={(event) => updateMailboxForm({ autoReplyTemplateId: event.target.value })}
-                              value={mailboxForm.autoReplyTemplateId}
-                            >
-                              <option value="">使用默认自动回执模板</option>
-                            </select>
-                            <small>后续如需多模板选择，再接通知模板下拉。</small>
-                          </label>
-                        </div>
+                          {activeMailboxStep === 'imap' && (
+                            <>
+                              <div className="mailbox-section-title compact">
+                                <strong>收信 IMAP</strong>
+                                <small>一期通过 IMAP 拉取客户来信并自动建单</small>
+                              </div>
+                              <div className="mailbox-form-grid">
+                                <label>
+                                  <span>IMAP 服务器</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ imapHost: event.target.value })}
+                                    placeholder="imap.example.com"
+                                    value={mailboxForm.imapHost}
+                                  />
+                                </label>
+                                <label>
+                                  <span>IMAP 端口</span>
+                                  <input
+                                    min={1}
+                                    max={65535}
+                                    onChange={(event) => updateMailboxForm({ imapPort: Number(event.target.value || 993) })}
+                                    type="number"
+                                    value={mailboxForm.imapPort}
+                                  />
+                                </label>
+                                <label>
+                                  <span>SSL</span>
+                                  <button
+                                    className={mailboxForm.imapSslEnabled ? 'template-switch enabled' : 'template-switch'}
+                                    onClick={() => updateMailboxForm({ imapSslEnabled: !mailboxForm.imapSslEnabled })}
+                                    type="button"
+                                  >
+                                    <span>{mailboxForm.imapSslEnabled ? '启用' : '关闭'}</span>
+                                    <i />
+                                  </button>
+                                </label>
+                                <label>
+                                  <span>收件文件夹</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ imapFolder: event.target.value })}
+                                    placeholder="INBOX"
+                                    value={mailboxForm.imapFolder}
+                                  />
+                                </label>
+                                <label>
+                                  <span>IMAP 账号</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ imapUsername: event.target.value })}
+                                    placeholder="通常为邮箱地址"
+                                    value={mailboxForm.imapUsername}
+                                  />
+                                </label>
+                                <label>
+                                  <span>IMAP 密码/授权码</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ imapPassword: event.target.value })}
+                                    placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
+                                    type="password"
+                                    value={mailboxForm.imapPassword}
+                                  />
+                                </label>
+                              </div>
+                            </>
+                          )}
 
-                        {mailboxTestResult && (
-                          <div className={mailboxTestResult.success ? 'mailbox-test-result ok' : 'mailbox-test-result error'}>
-                            <strong>{mailboxTestResult.success ? '连接测试通过' : '连接测试未通过'}</strong>
-                            <span>{mailboxTestResult.imapMessage}</span>
-                            <span>{mailboxTestResult.smtpMessage}</span>
-                          </div>
-                        )}
+                          {activeMailboxStep === 'smtp' && (
+                            <>
+                              <div className="mailbox-section-title compact">
+                                <strong>发信 SMTP</strong>
+                                <small>用于后续处理人回复、自动回执和系统通知发信</small>
+                              </div>
+                              <div className="mailbox-form-grid">
+                                <label>
+                                  <span>SMTP 服务器</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ smtpHost: event.target.value })}
+                                    placeholder="smtp.example.com"
+                                    value={mailboxForm.smtpHost}
+                                  />
+                                </label>
+                                <label>
+                                  <span>SMTP 端口</span>
+                                  <input
+                                    min={1}
+                                    max={65535}
+                                    onChange={(event) => updateMailboxForm({ smtpPort: Number(event.target.value || 587) })}
+                                    type="number"
+                                    value={mailboxForm.smtpPort}
+                                  />
+                                </label>
+                                <label>
+                                  <span>SSL/TLS</span>
+                                  <button
+                                    className={mailboxForm.smtpSslEnabled ? 'template-switch enabled' : 'template-switch'}
+                                    onClick={() => updateMailboxForm({ smtpSslEnabled: !mailboxForm.smtpSslEnabled })}
+                                    type="button"
+                                  >
+                                    <span>{mailboxForm.smtpSslEnabled ? '启用' : '关闭'}</span>
+                                    <i />
+                                  </button>
+                                </label>
+                                <label>
+                                  <span>发件人显示名</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ smtpFromName: event.target.value })}
+                                    placeholder="客服支持中心"
+                                    value={mailboxForm.smtpFromName}
+                                  />
+                                </label>
+                                <label>
+                                  <span>SMTP 账号</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ smtpUsername: event.target.value })}
+                                    placeholder="通常为邮箱地址"
+                                    value={mailboxForm.smtpUsername}
+                                  />
+                                </label>
+                                <label>
+                                  <span>SMTP 密码/授权码</span>
+                                  <input
+                                    onChange={(event) => updateMailboxForm({ smtpPassword: event.target.value })}
+                                    placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
+                                    type="password"
+                                    value={mailboxForm.smtpPassword}
+                                  />
+                                </label>
+                              </div>
+                            </>
+                          )}
+
+                          {activeMailboxStep === 'reply' && (
+                            <>
+                              <div className="mailbox-section-title compact">
+                                <strong>自动回复</strong>
+                                <small>拉取频率和自动回执仅影响后续新邮件</small>
+                              </div>
+                              <div className="mailbox-form-grid">
+                                <label>
+                                  <span>拉取频率（秒）</span>
+                                  <input
+                                    min={60}
+                                    max={1800}
+                                    onChange={(event) => updateMailboxForm({ fetchIntervalSec: Number(event.target.value || 120) })}
+                                    type="number"
+                                    value={mailboxForm.fetchIntervalSec}
+                                  />
+                                  <small>建议 60-1800 秒，过短会增加邮箱服务压力。</small>
+                                </label>
+                                <label>
+                                  <span>自动回执</span>
+                                  <button
+                                    className={mailboxForm.autoReplyEnabled ? 'template-switch enabled' : 'template-switch'}
+                                    onClick={() => updateMailboxForm({ autoReplyEnabled: !mailboxForm.autoReplyEnabled })}
+                                    type="button"
+                                  >
+                                    <span>{mailboxForm.autoReplyEnabled ? '启用自动回执' : '不发送自动回执'}</span>
+                                    <i />
+                                  </button>
+                                </label>
+                                <label>
+                                  <span>回执模板</span>
+                                  <select
+                                    onChange={(event) => updateMailboxForm({ autoReplyTemplateId: event.target.value })}
+                                    value={mailboxForm.autoReplyTemplateId}
+                                  >
+                                    <option value="">使用默认自动回执模板</option>
+                                  </select>
+                                  <small>后续如需多模板选择，再接通知模板下拉。</small>
+                                </label>
+                              </div>
+                            </>
+                          )}
+
+                          {activeMailboxStep === 'test' && (
+                            <div className="mailbox-test-panel">
+                              <div className="mailbox-test-grid">
+                                <div>
+                                  <span>收信服务</span>
+                                  <strong>{mailboxForm.imapHost || '未填写'}:{mailboxForm.imapPort || '-'}</strong>
+                                  <small>{mailboxForm.imapUsername || 'IMAP 账号未填写'} / {mailboxForm.imapFolder || 'INBOX'}</small>
+                                </div>
+                                <div>
+                                  <span>发信服务</span>
+                                  <strong>{mailboxForm.smtpHost || '未填写'}:{mailboxForm.smtpPort || '-'}</strong>
+                                  <small>{mailboxForm.smtpUsername || 'SMTP 账号未填写'} / {mailboxForm.smtpFromName || '默认发件人'}</small>
+                                </div>
+                                <div>
+                                  <span>处理策略</span>
+                                  <strong>{mailboxForm.fetchIntervalSec || 120} 秒拉取</strong>
+                                  <small>{mailboxForm.autoReplyEnabled ? '启用自动回执' : '关闭自动回执'}</small>
+                                </div>
+                              </div>
+
+                              {mailboxTestResult ? (
+                                <div className={mailboxTestResult.success ? 'mailbox-test-result ok' : 'mailbox-test-result error'}>
+                                  <strong>{mailboxTestResult.success ? '连接测试通过' : '连接测试未通过'}</strong>
+                                  <span>{mailboxTestResult.imapMessage}</span>
+                                  <span>{mailboxTestResult.smtpMessage}</span>
+                                </div>
+                              ) : (
+                                <div className="mailbox-test-empty">
+                                  保存前建议完成收信和发信测试；编辑时密码为空会沿用原授权码。
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
 
                         <div className="mailbox-actions">
                           <span>{mailboxForm.id ? '编辑时密码为空会沿用原授权码。' : '新建邮箱保存前需填写收信和发信授权码。'}</span>
                           <div>
-                            <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('IMAP')} type="button">
-                              测试收信
+                            <button disabled={activeMailboxStepIndex <= 0} onClick={() => moveMailboxStep(-1)} type="button">
+                              上一步
                             </button>
-                            <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('SMTP')} type="button">
-                              测试发信
-                            </button>
-                            <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('ALL')} type="button">
-                              {mailboxTesting ? '测试中...' : '测试全部'}
-                            </button>
+                            {activeMailboxStep === 'test' ? (
+                              <>
+                                <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('IMAP')} type="button">
+                                  测试收信
+                                </button>
+                                <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('SMTP')} type="button">
+                                  测试发信
+                                </button>
+                                <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('ALL')} type="button">
+                                  {mailboxTesting ? '测试中...' : '测试全部'}
+                                </button>
+                              </>
+                            ) : (
+                              <button onClick={() => moveMailboxStep(1)} type="button">
+                                下一步
+                              </button>
+                            )}
                             <button className="primary-action" disabled={mailboxSaving} onClick={() => void saveMailbox()} type="button">
                               <Check size={16} />
                               {mailboxSaving ? '保存中...' : '保存配置'}

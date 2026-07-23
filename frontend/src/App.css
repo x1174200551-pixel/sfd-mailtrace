@@ -2539,7 +2539,62 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 16px 150px;
+  padding: 0 16px 138px;
+}
+
+.mailbox-step-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom: 1px solid #f3f4f6;
+  margin: 0 -16px 0;
+  padding: 0 16px;
+  display: flex;
+  background: #fff;
+}
+
+.mailbox-step {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b5563;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mailbox-step.active {
+  border-bottom-color: #2563eb;
+  color: #2563eb;
+}
+
+.mailbox-step-summary {
+  padding: 14px 0 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.mailbox-step-summary strong {
+  color: #111827;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.mailbox-step-summary span {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mailbox-step-body {
+  min-height: 250px;
 }
 
 .mailbox-form-grid {
@@ -2618,6 +2673,69 @@ body {
   font-size: 12px;
   font-weight: 700;
   text-align: right;
+}
+
+.mailbox-section-title.compact {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.mailbox-test-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.mailbox-test-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mailbox-test-grid div {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.mailbox-test-grid span,
+.mailbox-test-grid strong,
+.mailbox-test-grid small {
+  display: block;
+}
+
+.mailbox-test-grid span {
+  margin-bottom: 8px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mailbox-test-grid strong {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 900;
+  word-break: break-all;
+}
+
+.mailbox-test-grid small {
+  margin-top: 6px;
+  color: #9ca3af;
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 700;
+  word-break: break-all;
+}
+
+.mailbox-test-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 14px;
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .mailbox-test-result {
