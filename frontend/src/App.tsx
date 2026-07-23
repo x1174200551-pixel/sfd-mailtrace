@@ -1693,26 +1693,6 @@ function App() {
                     </aside>
                   </div>
 
-                  <section className="system-panel system-boundary">
-                    <div className="system-panel__head">
-                      <strong>系统参数边界</strong>
-                      <span className="template-code-pill">非业务录入</span>
-                    </div>
-                    <div className="system-boundary__body">
-                      <div>
-                        <strong>编号规则面向业务配置</strong>
-                        <p>业务人员只维护前缀、日期格式、流水位数、分隔符和说明，不需要填写内部字段或数据库字段。</p>
-                      </div>
-                      <div>
-                        <strong>技术参数后台维护</strong>
-                        <p>邮件轮询间隔、重试次数、审计保留天数等属于运维参数，后续按管理员能力单独设计。</p>
-                      </div>
-                      <div>
-                        <strong>保存前统一校验</strong>
-                        <p>系统自动校验格式和下一号预览，确认后仅作用于后续新建工单。</p>
-                      </div>
-                    </div>
-                  </section>
                 </>
               )}
             </section>

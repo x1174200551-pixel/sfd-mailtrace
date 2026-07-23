@@ -2416,40 +2416,6 @@ body {
   font-weight: 600;
 }
 
-.system-boundary {
-  margin-top: 16px;
-}
-
-.system-boundary__body {
-  padding: 16px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.system-boundary__body div {
-  min-height: 104px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 14px;
-  background: #fafafa;
-}
-
-.system-boundary__body strong {
-  display: block;
-  margin-bottom: 8px;
-  color: #111827;
-  font-weight: 800;
-}
-
-.system-boundary__body p {
-  margin: 0;
-  color: #6b7280;
-  font-size: 12px;
-  line-height: 1.65;
-  font-weight: 600;
-}
-
 @media (max-width: 1180px) {
   .login-page {
     grid-template-columns: minmax(0, 1fr) minmax(390px, 480px);
@@ -2657,8 +2623,7 @@ body {
   .template-form-grid,
   .system-layout,
   .system-form,
-  .system-side,
-  .system-boundary__body {
+  .system-side {
     grid-template-columns: 1fr;
   }
 
