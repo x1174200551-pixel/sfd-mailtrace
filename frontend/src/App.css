@@ -2421,7 +2421,67 @@ body {
 }
 
 .mailbox-page .user-metrics {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mailbox-page .user-metric {
+  min-height: 112px;
+  border-color: #e5e7eb;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+}
+
+.mailbox-page .user-metric strong {
+  margin: 7px 0 5px;
+  color: #0f172a;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.mailbox-page .user-metric span,
+.mailbox-page .user-metric small {
+  font-weight: 700;
+}
+
+.mailbox-page .user-metric small {
+  white-space: nowrap;
+}
+
+.mailbox-page .user-metric > div {
+  min-width: 0;
+}
+
+.mailbox-page .user-metric i {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: #64748b;
+  background: #f1f5f9;
+  font-style: normal;
+}
+
+.mailbox-page .user-metric i.green {
+  color: #059669;
+  background: #ecfdf5;
+}
+
+.mailbox-page .user-metric i.red {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.mailbox-page .user-metric i.orange {
+  color: #ea580c;
+  background: #fff7ed;
 }
 
 .mailbox-toolbar {
@@ -2458,6 +2518,17 @@ body {
   font-weight: 800;
 }
 
+.mailbox-head-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.mailbox-head-copy small {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .mailbox-panel__head button {
   height: 34px;
   border: 1px solid #e5e7eb;
@@ -2490,11 +2561,20 @@ body {
 }
 
 .mailbox-table {
-  min-width: 760px;
+  min-width: 820px;
 }
 
 .mailbox-table tr.selected-row td {
   background: #eff6ff;
+}
+
+.mailbox-table th {
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.mailbox-table td {
+  height: 76px;
 }
 
 .mailbox-selectable-row {
@@ -2516,6 +2596,90 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.mailbox-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.mailbox-name-cell > span {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.mailbox-protocols {
+  margin-bottom: 5px;
+  display: flex;
+  gap: 6px;
+}
+
+.mailbox-protocols .state-pill {
+  min-width: 44px;
+  height: 22px;
+}
+
+.mailbox-status-line {
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mailbox-status-line i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+  background: #10b981;
+}
+
+.mailbox-status-line i.red {
+  background: #ef4444;
+}
+
+.mailbox-status-line i.gray {
+  background: #94a3b8;
+}
+
+.mailbox-strong-blue {
+  color: #2563eb;
+}
+
+.mailbox-ops {
+  min-width: 116px;
+  gap: 8px;
+}
+
+.mailbox-ops button {
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: #2563eb;
+  background: transparent;
+  font-weight: 850;
+}
+
+.mailbox-ops button:hover {
+  color: #1d4ed8;
+  background: transparent;
+}
+
+.mailbox-ops button.danger,
+.mailbox-ops button.success {
+  border: 0;
+  color: #2563eb;
+  background: transparent;
 }
 
 .state-pill.status-ok {
