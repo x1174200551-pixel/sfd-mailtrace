@@ -2257,14 +2257,14 @@ function App() {
                             </button>
                           </label>
                           <label>
-                            <span>回执模板ID</span>
-                            <input
-                              min={1}
+                            <span>回执模板</span>
+                            <select
                               onChange={(event) => updateMailboxForm({ autoReplyTemplateId: event.target.value })}
-                              placeholder="为空则使用默认模板"
-                              type="number"
                               value={mailboxForm.autoReplyTemplateId}
-                            />
+                            >
+                              <option value="">使用默认自动回执模板</option>
+                            </select>
+                            <small>后续如需多模板选择，再接通知模板下拉。</small>
                           </label>
                         </div>
 

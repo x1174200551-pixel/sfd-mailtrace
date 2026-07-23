@@ -2539,7 +2539,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px 16px 90px;
+  padding: 16px 16px 150px;
 }
 
 .mailbox-form-grid {
@@ -2574,6 +2574,11 @@ body {
   color: #111827;
   background: #fff;
   font-weight: 600;
+}
+
+.mailbox-form-grid input::placeholder {
+  color: #9ca3af;
+  font-weight: 500;
 }
 
 .mailbox-form-grid input:focus,
