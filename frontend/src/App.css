@@ -2420,6 +2420,10 @@ body {
   background: #f5f6f8;
 }
 
+.mailbox-page .user-metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .mailbox-toolbar {
   grid-template-columns: minmax(300px, 1fr) 180px auto;
 }
@@ -2469,14 +2473,14 @@ body {
 }
 
 .mailbox-list-panel {
-  min-height: 560px;
+  min-height: 0;
 }
 
 .mailbox-editor-panel {
   position: sticky;
   top: 88px;
-  height: calc(100vh - 394px);
-  max-height: 788px;
+  height: auto;
+  max-height: none;
   display: flex;
   flex-direction: column;
 }
@@ -2539,7 +2543,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 16px 138px;
+  padding: 0 16px 116px;
 }
 
 .mailbox-step-tabs {
@@ -2575,26 +2579,9 @@ body {
   color: #2563eb;
 }
 
-.mailbox-step-summary {
-  padding: 14px 0 12px;
-  display: grid;
-  gap: 4px;
-}
-
-.mailbox-step-summary strong {
-  color: #111827;
-  font-size: 16px;
-  font-weight: 900;
-}
-
-.mailbox-step-summary span {
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .mailbox-step-body {
-  min-height: 250px;
+  min-height: 170px;
+  padding-top: 16px;
 }
 
 .mailbox-form-grid {
@@ -2617,6 +2604,10 @@ body {
   color: #374151;
   font-size: 13px;
   font-weight: 800;
+}
+
+.mailbox-form-grid .required {
+  color: #dc2626;
 }
 
 .mailbox-form-grid input,
@@ -2810,6 +2801,76 @@ body {
   opacity: 0.58;
 }
 
+.mailbox-below {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+.mailbox-mini-panel {
+  min-height: 210px;
+}
+
+.mailbox-mini-table-wrap {
+  overflow-x: auto;
+}
+
+.mailbox-mini-table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+}
+
+.mailbox-mini-table th,
+.mailbox-mini-table td {
+  border-bottom: 1px solid #f3f4f6;
+  padding: 12px 14px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.mailbox-mini-table th {
+  color: #64748b;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mailbox-mini-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.mailbox-progress {
+  width: 94px;
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #e0f2fe;
+}
+
+.mailbox-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #38bdf8;
+}
+
+.mailbox-mini-error {
+  color: #dc2626;
+  font-weight: 900;
+}
+
+.mailbox-mini-empty {
+  padding: 28px 16px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 @media (max-width: 1180px) {
   .login-page {
     grid-template-columns: minmax(0, 1fr) minmax(390px, 480px);
@@ -2891,6 +2952,11 @@ body {
   }
 
   .user-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mailbox-page .user-metrics,
+  .mailbox-below {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -3040,8 +3106,10 @@ body {
     .template-side,
     .template-form-grid,
     .mailbox-toolbar,
+    .mailbox-below,
     .mailbox-form-grid,
     .mailbox-form-grid.three,
+    .mailbox-page .user-metrics,
     .system-layout,
     .system-form,
     .system-side {

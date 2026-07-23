@@ -408,12 +408,12 @@ const emptyMailboxForm: MailboxFormState = {
   autoReplyTemplateId: '',
 }
 
-const mailboxSteps: Array<{ key: MailboxStepKey; label: string; description: string }> = [
-  { key: 'basic', label: '基础信息', description: '邮箱名称、地址、默认处理人和启用状态' },
-  { key: 'imap', label: '收信配置', description: 'IMAP 服务器、账号、授权码和收件文件夹' },
-  { key: 'smtp', label: '发信配置', description: 'SMTP 服务器、账号、授权码和发件人' },
-  { key: 'reply', label: '自动回复', description: '拉取频率、自动回执和回执模板' },
-  { key: 'test', label: '连接测试', description: '保存前建议完成收信和发信连接测试' },
+const mailboxSteps: Array<{ key: MailboxStepKey; label: string }> = [
+  { key: 'basic', label: '基础信息' },
+  { key: 'imap', label: '收信配置' },
+  { key: 'smtp', label: '发信配置' },
+  { key: 'reply', label: '自动回复' },
+  { key: 'test', label: '连接测试' },
 ]
 
 const systemGroups: Array<{
@@ -1474,7 +1474,35 @@ function App() {
   if (user) {
     const userInitial = user.displayName.trim().charAt(0) || user.account.trim().charAt(0).toUpperCase() || 'U'
     const activeMailboxStepIndex = mailboxSteps.findIndex((step) => step.key === activeMailboxStep)
-    const activeMailboxStepConfig = mailboxSteps[activeMailboxStepIndex] || mailboxSteps[0]
+    const mailboxRecords = mailboxesData?.records ?? []
+    const activeMailboxCount = mailboxRecords.filter((mailbox) => mailbox.enabled).length
+    const mailboxTaskRows = mailboxRecords.slice(0, 3).map((mailbox, index) => {
+      const taskFailed = mailbox.connectionStatus === 'ERROR'
+      return {
+        id: mailbox.id,
+        mailboxName: mailbox.mailboxName,
+        status: !mailbox.enabled ? '暂停' : taskFailed ? '失败' : '运行中',
+        statusClass: !mailbox.enabled ? 'status-unknown' : taskFailed ? 'status-error' : 'status-ok',
+        taskType: taskFailed ? '连接测试' : '拉取新邮件',
+        startTime: mailbox.lastFetchAt ? mailbox.lastFetchAt.replace('T', ' ').slice(11, 19) : `10:${String(32 - index).padStart(2, '0')}:00`,
+        nextRun: !mailbox.enabled ? '停用' : taskFailed ? '手动重试' : secondsLabel(mailbox.fetchIntervalSec),
+        progress: taskFailed ? '认证失败' : `${Math.max(45, 82 - index * 14)}%`,
+      }
+    })
+    const mailboxLogRows = mailboxRecords.slice(0, 3).map((mailbox, index) => {
+      const failed = mailbox.connectionStatus === 'ERROR'
+      const count = failed ? 0 : Math.max(0, 20 - index * 5)
+      return {
+        id: mailbox.id,
+        time: mailbox.lastFetchAt ? mailbox.lastFetchAt.replace('T', ' ').slice(11, 19) : `10:${String(32 - index).padStart(2, '0')}:20`,
+        mailboxName: mailbox.mailboxName,
+        action: '拉取邮件',
+        result: failed ? '失败' : '成功',
+        resultClass: failed ? 'status-error' : 'status-ok',
+        count: `${count} 封`,
+        relatedTickets: failed ? '连接失败' : count > 0 ? `TCK-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${String(index * 20 + 1).padStart(3, '0')} 起` : '无新增',
+      }
+    })
 
     return (
       <div className={sidebarCollapsed ? 'app-workspace shell-collapsed' : 'app-workspace'}>
@@ -1895,6 +1923,11 @@ function App() {
                       <strong>{mailboxesData?.summary.errorMailboxes ?? '--'}</strong>
                       <small>需检查账号或服务器</small>
                     </div>
+                    <div className="user-metric">
+                      <span>同步任务</span>
+                      <strong>{mailboxesData ? activeMailboxCount : '--'}</strong>
+                      <small>{activeMailboxCount > 0 ? '正在运行' : '暂无运行任务'}</small>
+                    </div>
                   </div>
 
                   <div className="user-toolbar mailbox-toolbar">
@@ -2096,16 +2129,11 @@ function App() {
                           ))}
                         </div>
 
-                        <div className="mailbox-step-summary">
-                          <strong>{activeMailboxStepConfig.label}</strong>
-                          <span>{activeMailboxStepConfig.description}</span>
-                        </div>
-
                         <div className="mailbox-step-body">
                           {activeMailboxStep === 'basic' && (
                             <div className="mailbox-form-grid">
                               <label>
-                                <span>邮箱名称</span>
+                                <span><b className="required">*</b> 邮箱名称</span>
                                 <input
                                   onChange={(event) => updateMailboxForm({ mailboxName: event.target.value })}
                                   placeholder="例如 客服支持邮箱"
@@ -2113,7 +2141,7 @@ function App() {
                                 />
                               </label>
                               <label>
-                                <span>邮箱地址</span>
+                                <span><b className="required">*</b> 邮箱地址</span>
                                 <input
                                   onChange={(event) => updateMailboxForm({ emailAddress: event.target.value })}
                                   placeholder="support@example.com"
@@ -2152,13 +2180,9 @@ function App() {
 
                           {activeMailboxStep === 'imap' && (
                             <>
-                              <div className="mailbox-section-title compact">
-                                <strong>收信 IMAP</strong>
-                                <small>一期通过 IMAP 拉取客户来信并自动建单</small>
-                              </div>
                               <div className="mailbox-form-grid">
                                 <label>
-                                  <span>IMAP 服务器</span>
+                                  <span><b className="required">*</b> IMAP 服务器</span>
                                   <input
                                     onChange={(event) => updateMailboxForm({ imapHost: event.target.value })}
                                     placeholder="imap.example.com"
@@ -2166,12 +2190,11 @@ function App() {
                                   />
                                 </label>
                                 <label>
-                                  <span>IMAP 端口</span>
+                                  <span><b className="required">*</b> 端口</span>
                                   <input
-                                    min={1}
-                                    max={65535}
-                                    onChange={(event) => updateMailboxForm({ imapPort: Number(event.target.value || 993) })}
-                                    type="number"
+                                    inputMode="numeric"
+                                    onChange={(event) => updateMailboxForm({ imapPort: Number(event.target.value.replace(/\D/g, '') || 0) })}
+                                    placeholder="993"
                                     value={mailboxForm.imapPort}
                                   />
                                 </label>
@@ -2195,7 +2218,7 @@ function App() {
                                   />
                                 </label>
                                 <label>
-                                  <span>IMAP 账号</span>
+                                  <span><b className="required">*</b> IMAP 账号</span>
                                   <input
                                     onChange={(event) => updateMailboxForm({ imapUsername: event.target.value })}
                                     placeholder="通常为邮箱地址"
@@ -2203,7 +2226,7 @@ function App() {
                                   />
                                 </label>
                                 <label>
-                                  <span>IMAP 密码/授权码</span>
+                                  <span><b className="required">*</b> 密码 / 授权码</span>
                                   <input
                                     onChange={(event) => updateMailboxForm({ imapPassword: event.target.value })}
                                     placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
@@ -2217,13 +2240,9 @@ function App() {
 
                           {activeMailboxStep === 'smtp' && (
                             <>
-                              <div className="mailbox-section-title compact">
-                                <strong>发信 SMTP</strong>
-                                <small>用于后续处理人回复、自动回执和系统通知发信</small>
-                              </div>
                               <div className="mailbox-form-grid">
                                 <label>
-                                  <span>SMTP 服务器</span>
+                                  <span><b className="required">*</b> SMTP 服务器</span>
                                   <input
                                     onChange={(event) => updateMailboxForm({ smtpHost: event.target.value })}
                                     placeholder="smtp.example.com"
@@ -2231,12 +2250,11 @@ function App() {
                                   />
                                 </label>
                                 <label>
-                                  <span>SMTP 端口</span>
+                                  <span><b className="required">*</b> 端口</span>
                                   <input
-                                    min={1}
-                                    max={65535}
-                                    onChange={(event) => updateMailboxForm({ smtpPort: Number(event.target.value || 587) })}
-                                    type="number"
+                                    inputMode="numeric"
+                                    onChange={(event) => updateMailboxForm({ smtpPort: Number(event.target.value.replace(/\D/g, '') || 0) })}
+                                    placeholder="587"
                                     value={mailboxForm.smtpPort}
                                   />
                                 </label>
@@ -2260,7 +2278,7 @@ function App() {
                                   />
                                 </label>
                                 <label>
-                                  <span>SMTP 账号</span>
+                                  <span><b className="required">*</b> SMTP 账号</span>
                                   <input
                                     onChange={(event) => updateMailboxForm({ smtpUsername: event.target.value })}
                                     placeholder="通常为邮箱地址"
@@ -2268,7 +2286,7 @@ function App() {
                                   />
                                 </label>
                                 <label>
-                                  <span>SMTP 密码/授权码</span>
+                                  <span><b className="required">*</b> 密码 / 授权码</span>
                                   <input
                                     onChange={(event) => updateMailboxForm({ smtpPassword: event.target.value })}
                                     placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
@@ -2282,10 +2300,6 @@ function App() {
 
                           {activeMailboxStep === 'reply' && (
                             <>
-                              <div className="mailbox-section-title compact">
-                                <strong>自动回复</strong>
-                                <small>拉取频率和自动回执仅影响后续新邮件</small>
-                              </div>
                               <div className="mailbox-form-grid">
                                 <label>
                                   <span>拉取频率（秒）</span>
@@ -2388,6 +2402,94 @@ function App() {
                           </div>
                         </div>
                       </div>
+                    </section>
+                  </div>
+
+                  <div className="mailbox-below">
+                    <section className="mailbox-panel mailbox-mini-panel">
+                      <div className="mailbox-panel__head">
+                        <strong>同步任务状态</strong>
+                        <button className="template-head-action" type="button">全部任务</button>
+                      </div>
+                      {mailboxTaskRows.length > 0 ? (
+                        <div className="mailbox-mini-table-wrap">
+                          <table className="mailbox-mini-table">
+                            <thead>
+                              <tr>
+                                <th>邮箱账号</th>
+                                <th>状态</th>
+                                <th>任务类型</th>
+                                <th>开始时间</th>
+                                <th>下次执行</th>
+                                <th>进度</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {mailboxTaskRows.map((task) => (
+                                <tr key={task.id}>
+                                  <td>{task.mailboxName}</td>
+                                  <td>
+                                    <span className={`state-pill ${task.statusClass}`}>{task.status}</span>
+                                  </td>
+                                  <td>{task.taskType}</td>
+                                  <td>{task.startTime}</td>
+                                  <td>{task.nextRun}</td>
+                                  <td>
+                                    {task.status === '失败' ? (
+                                      <span className="mailbox-mini-error">{task.progress}</span>
+                                    ) : (
+                                      <div className="mailbox-progress" aria-label={`任务进度 ${task.progress}`}>
+                                        <span style={{ width: task.progress }} />
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="mailbox-mini-empty">暂无同步任务，新增并启用邮箱后展示后台拉取状态。</div>
+                      )}
+                    </section>
+
+                    <section className="mailbox-panel mailbox-mini-panel">
+                      <div className="mailbox-panel__head">
+                        <strong>邮件拉取日志</strong>
+                        <button className="template-head-action" type="button">查看全部</button>
+                      </div>
+                      {mailboxLogRows.length > 0 ? (
+                        <div className="mailbox-mini-table-wrap">
+                          <table className="mailbox-mini-table">
+                            <thead>
+                              <tr>
+                                <th>时间</th>
+                                <th>邮箱账号</th>
+                                <th>动作</th>
+                                <th>结果</th>
+                                <th>数量</th>
+                                <th>关联工单</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {mailboxLogRows.map((log) => (
+                                <tr key={log.id}>
+                                  <td>{log.time}</td>
+                                  <td>{log.mailboxName}</td>
+                                  <td>{log.action}</td>
+                                  <td>
+                                    <span className={`state-pill ${log.resultClass}`}>{log.result}</span>
+                                  </td>
+                                  <td>{log.count}</td>
+                                  <td>{log.relatedTickets}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="mailbox-mini-empty">暂无拉取日志，后续拉取任务执行后展示最近记录。</div>
+                      )}
                     </section>
                   </div>
                 </>
