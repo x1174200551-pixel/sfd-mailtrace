@@ -17,6 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 @Configuration
 @RequiredArgsConstructor
@@ -38,11 +39,11 @@ public class SecurityConfig {
         } else {
             http.authorizeHttpRequests(auth -> auth
                             .requestMatchers(
-                                    "/v3/api-docs/**",
-                                    "/swagger-ui/**",
-                                    "/swagger-ui.html",
-                                    "/v1/auth/login",
-                                    "/v1/system/health"
+                                    AntPathRequestMatcher.antMatcher("/v3/api-docs/**"),
+                                    AntPathRequestMatcher.antMatcher("/swagger-ui/**"),
+                                    AntPathRequestMatcher.antMatcher("/swagger-ui.html"),
+                                    AntPathRequestMatcher.antMatcher("/v1/auth/login"),
+                                    AntPathRequestMatcher.antMatcher("/v1/system/health")
                             ).permitAll()
                             .anyRequest().authenticated())
                     .exceptionHandling(exception -> exception.authenticationEntryPoint((request, response, authException) -> {

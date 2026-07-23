@@ -30,6 +30,8 @@ dist/
 frontend/dist/
 dist-ssr/
 frontend/dist-ssr/
+frontend/_tmp_*
+_tmp_*
 
 # Test and coverage output
 coverage/

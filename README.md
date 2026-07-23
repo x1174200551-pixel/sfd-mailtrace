@@ -14,7 +14,7 @@
 ```
 sfd-mailtrace/
 ├── backend/     # Spring Boot 3.2 + Java 17
-├── frontend/    # React + Vite + TypeScript
+├── frontend/    # React + Ant Design 6 + Vite
 ├── deploy/      # Docker / Nginx
 └── docs/        # 需求、架构、数据库设计
 ```

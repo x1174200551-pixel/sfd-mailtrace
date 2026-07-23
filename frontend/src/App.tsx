@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  Card, Table, Select, Button, Drawer, Tag, Row, Col,
+  DatePicker, Empty, Typography,
+} from 'antd'
+import { ReloadOutlined, CloseOutlined, SearchOutlined } from '@ant-design/icons'
+import dayjs from 'dayjs'
+import {
   Bell,
   CalendarDays,
   Check,
@@ -302,6 +308,39 @@ type MailboxConfirmAction = {
   mailbox: Mailbox
 } | null
 
+// ---- 拉取日志类型 ----
+
+type MailFetchLog = {
+  id: number
+  mailboxId: number
+  mailboxName: string | null
+  emailAddress: string | null
+  triggerType: string
+  startedAt: string
+  finishedAt: string | null
+  success: boolean
+  fetchedCount: number
+  createdTicketCount: number
+  linkedCount: number
+  errorMessage: string | null
+  createdAt: string
+}
+
+type MailFetchLogPageResponse = {
+  records: MailFetchLog[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
+type MailFetchLogStats = {
+  totalCount: number
+  successCount: number
+  failCount: number
+  totalCreatedTickets: number
+}
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
@@ -561,6 +600,15 @@ function templateSceneLabel(templateCode: string) {
   return templateScenes[templateCode] || '自定义通知场景'
 }
 
+function formatDuration(start: string, end: string) {
+  const diff = new Date(end).getTime() - new Date(start).getTime()
+  if (diff < 0) return '-'
+  const sec = Math.round(diff / 1000)
+  if (sec < 60) return `${sec}s`
+  if (sec < 3600) return `${Math.floor(sec / 60)}m${sec % 60}s`
+  return `${Math.floor(sec / 3600)}h${Math.floor((sec % 3600) / 60)}m`
+}
+
 function toRoleCode(value: string): RoleCode {
   return value === 'ADMIN' ? 'ADMIN' : 'AGENT'
 }
@@ -696,6 +744,18 @@ function App() {
   const [mailboxTestResult, setMailboxTestResult] = useState<MailboxConnectionTestResponse | null>(null)
   const [mailboxConfirmAction, setMailboxConfirmAction] = useState<MailboxConfirmAction>(null)
   const [mailboxActionLoading, setMailboxActionLoading] = useState(false)
+  const [fetchLogMailboxFilter, setFetchLogMailboxFilter] = useState('')
+  const [fetchLogSuccessFilter, setFetchLogSuccessFilter] = useState('ALL')
+  const [fetchLogStartFrom, setFetchLogStartFrom] = useState('')
+  const [fetchLogStartTo, setFetchLogStartTo] = useState('')
+  const [fetchLogPage, setFetchLogPage] = useState(1)
+  const [fetchLogPageSize, setFetchLogPageSize] = useState(10)
+  const [fetchLogsData, setFetchLogsData] = useState<MailFetchLogPageResponse | null>(null)
+  const [fetchLogsLoading, setFetchLogsLoading] = useState(false)
+  const [fetchLogsError, setFetchLogsError] = useState('')
+  const [fetchLogDetail, setFetchLogDetail] = useState<MailFetchLog | null>(null)
+  const [fetchLogStats, setFetchLogStats] = useState<MailFetchLogStats | null>(null)
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = user?.roleCode === 'ADMIN'
@@ -960,6 +1020,70 @@ function App() {
   useEffect(() => {
     void fetchMailboxAssignees()
   }, [fetchMailboxAssignees])
+
+  // ---- 拉取日志 ----
+  const fetchFetchLogs = useCallback(async () => {
+    if (!token || activeMenu !== '收件记录') return
+
+    const params = new URLSearchParams({
+      page: String(fetchLogPage),
+      size: String(fetchLogPageSize),
+    })
+    if (fetchLogMailboxFilter) params.set('mailboxId', fetchLogMailboxFilter)
+    if (fetchLogSuccessFilter !== 'ALL') params.set('success', fetchLogSuccessFilter)
+    if (fetchLogStartFrom) params.set('startFrom', fetchLogStartFrom)
+    if (fetchLogStartTo) params.set('startTo', fetchLogStartTo)
+
+    setFetchLogsLoading(true)
+    setFetchLogsError('')
+    try {
+      const data = await requestApi<MailFetchLogPageResponse>(`/api/v1/mail-fetch-logs?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setFetchLogsData(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      const msg = error instanceof ApiError ? error.message : '加载拉取日志失败'
+      setFetchLogsError(msg)
+    } finally {
+      setFetchLogsLoading(false)
+    }
+  }, [token, activeMenu, fetchLogPage, fetchLogPageSize, fetchLogMailboxFilter,
+      fetchLogSuccessFilter, fetchLogStartFrom, fetchLogStartTo, handleAuthExpired])
+
+  useEffect(() => {
+    if (activeMenu === '收件记录') {
+      void fetchFetchLogs()
+      void fetchFetchLogStats()
+    }
+  }, [fetchFetchLogs, activeMenu])
+
+  const fetchFetchLogStats = useCallback(async () => {
+    if (!token) return
+    try {
+      const data = await requestApi<MailFetchLogStats>('/api/v1/mail-fetch-logs/stats', {
+        headers: authHeaders(token),
+      })
+      setFetchLogStats(data)
+    } catch { /* stats 加载失败不影响主列表 */ }
+  }, [token])
+
+  // 加载邮箱列表用于下拉筛选
+  const fetchMailboxList = useCallback(async () => {
+    if (!token) return
+    try {
+      const data = await requestApi<MailboxPageResponse>('/api/v1/mailboxes?page=1&size=100', {
+        headers: authHeaders(token),
+      })
+      setMailboxes(data.records)
+    } catch { /* ignore */ }
+  }, [token])
+
+  useEffect(() => {
+    if (activeMenu === '收件记录') {
+      void fetchMailboxList()
+    }
+  }, [fetchMailboxList, activeMenu])
 
   function resetUserFilters() {
     setUserKeyword('')
@@ -2525,6 +2649,223 @@ function App() {
                 </>
               )}
             </section>
+          ) : activeMenu === '收件记录' ? (
+            <div style={{ padding: '24px', overflow: 'auto', height: '100%' }}>
+              {/* 标题 + 刷新 */}
+              <Row justify="space-between" align="middle" style={{ marginBottom: 20 }}>
+                <Typography.Title level={4} style={{ margin: 0 }}>拉取日志</Typography.Title>
+                <Button icon={<ReloadOutlined />} onClick={() => void fetchFetchLogs()} loading={fetchLogsLoading}>刷新数据</Button>
+              </Row>
+
+              {/* 统计卡片 */}
+              {fetchLogStats && (
+                <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+                  {[
+                    { label: '拉取次数', value: fetchLogStats.totalCount, sub: '含定时与手动触发' },
+                    { label: '成功任务', value: fetchLogStats.successCount, sub: 'IMAP 连接与解析正常' },
+                    { label: '失败任务', value: fetchLogStats.failCount, sub: '可查看原因并重试' },
+                    { label: '新建工单', value: fetchLogStats.totalCreatedTickets, sub: '由成功拉取任务创建' },
+                  ].map((card, i) => (
+                    <Col key={i} xs={24} sm={12} lg={6}>
+                      <Card size="small" styles={{ body: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '14px 16px' } }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: '#8c8c8c', fontWeight: 600 }}>{card.label}</div>
+                          <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.2, marginTop: 6 }}>{card.value}</div>
+                          <div style={{ fontSize: 12, color: '#bfbfbf', marginTop: 4 }}>{card.sub}</div>
+                        </div>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: 10,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontWeight: 900, fontSize: 16,
+                          background: ['#eff6ff', '#ecfdf5', '#fef2f2', '#fffbeb'][i],
+                          color: ['#2563eb', '#10b981', '#ef4444', '#f59e0b'][i],
+                        }}>
+                          {['F','O','E','T'][i]}
+                        </div>
+                      </Card>
+                    </Col>
+                  ))}
+                </Row>
+              )}
+
+              {/* 筛选栏 */}
+              <Card size="small" style={{ marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 3fr auto', alignItems: 'center', gap: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>邮箱</span>
+                    <Select value={fetchLogMailboxFilter || undefined} onChange={v => { setFetchLogMailboxFilter(v || ''); setFetchLogPage(1) }} placeholder="全部邮箱" allowClear style={{ width: '100%' }} options={mailboxes.map(m => ({ value: String(m.id), label: m.mailboxName }))} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>结果</span>
+                    <Select value={fetchLogSuccessFilter === 'ALL' ? undefined : fetchLogSuccessFilter} onChange={v => { setFetchLogSuccessFilter(v ?? 'ALL'); setFetchLogPage(1) }} placeholder="全部结果" allowClear style={{ width: '100%' }} options={[{ value: 'true', label: '成功' }, { value: 'false', label: '失败' }]} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>时间</span>
+                    <DatePicker.RangePicker
+                      showTime={{ format: 'HH:mm' }}
+                      format="YYYY-MM-DD HH:mm"
+                      style={{ width: '100%' }}
+                      value={fetchLogStartFrom && fetchLogStartTo ? [dayjs(fetchLogStartFrom), dayjs(fetchLogStartTo)] : null}
+                      onChange={(dates) => {
+                        setFetchLogStartFrom(dates?.[0]?.format('YYYY-MM-DDTHH:mm:ss') || '')
+                        setFetchLogStartTo(dates?.[1]?.format('YYYY-MM-DDTHH:mm:ss') || '')
+                        setFetchLogPage(1)
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <Button onClick={() => { setFetchLogMailboxFilter(''); setFetchLogSuccessFilter('ALL'); setFetchLogStartFrom(''); setFetchLogStartTo(''); setFetchLogPage(1) }}>清空筛选</Button>
+                    <Button type="primary" icon={<SearchOutlined />} onClick={() => { setFetchLogPage(1); void fetchFetchLogs() }}>查询</Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* 错误提示 */}
+              {fetchLogsError && (
+                <Card size="small" style={{ marginBottom: 16, borderColor: '#ffccc7', background: '#fff2f0' }}>
+                  <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>日志查询失败</div>
+                    <Typography.Text type="secondary">{fetchLogsError}</Typography.Text>
+                    <div style={{ marginTop: 8 }}><Button size="small" onClick={() => void fetchFetchLogs()}>重新加载</Button></div>
+                  </div>
+                </Card>
+              )}
+
+              {/* 表格 */}
+              <Card size="small" title={<span style={{ fontSize: 14 }}>IMAP 拉取任务记录</span>} extra={fetchLogsData && <Tag color="blue">共 {fetchLogsData.total} 条</Tag>}>
+                <Table<MailFetchLog>
+                  rowKey="id"
+                  dataSource={fetchLogsData?.records}
+                  loading={fetchLogsLoading}
+                  locale={{ emptyText: <Empty description="未找到拉取日志" /> }}
+                  pagination={{
+                    current: fetchLogPage,
+                    pageSize: fetchLogPageSize,
+                    total: fetchLogsData?.total || 0,
+                    showSizeChanger: true,
+                    pageSizeOptions: ['10', '20'],
+                    showTotal: (total) => `共 ${total} 条`,
+                    onChange: (page, size) => { setFetchLogPage(page); setFetchLogPageSize(size) },
+                  }}
+                  onRow={(record) => ({
+                    onClick: () => setFetchLogDetail(record),
+                    style: { cursor: 'pointer' },
+                  })}
+                  columns={[
+                    { title: '#', width: 50, render: (_: unknown, __: unknown, index: number) => (fetchLogPage - 1) * fetchLogPageSize + index + 1 },
+                    { title: '开始时间', dataIndex: 'startedAt', render: (v: string) => formatDateTime(v), width: 160 },
+                    { title: '邮箱地址', dataIndex: 'emailAddress', render: (v: string) => v || '-', width: 180 },
+                    { title: '邮箱名称', dataIndex: 'mailboxName', render: (v: string) => v || '-', width: 120 },
+                    { title: '结果', dataIndex: 'success', width: 80, render: (v: boolean) => v ? <Tag color="success">成功</Tag> : <Tag color="error">失败</Tag> },
+                    { title: '拉取数', dataIndex: 'fetchedCount', width: 70 },
+                    { title: '新建工单', dataIndex: 'createdTicketCount', width: 80 },
+                    { title: '关联工单', dataIndex: 'linkedCount', width: 80 },
+                    { title: '耗时', width: 80, render: (_, r) => r.finishedAt ? formatDuration(r.startedAt, r.finishedAt) : '-' },
+                    { title: '错误摘要', dataIndex: 'errorMessage', width: 200, ellipsis: true, render: (v: string) => v ? <Typography.Text type="danger" style={{ fontSize: 12 }}>{v}</Typography.Text> : '' },
+                    { title: '操作', width: 60, render: (_, r) => <Button type="link" size="small" onClick={e => { e.stopPropagation(); setFetchLogDetail(r) }}>详情</Button> },
+                  ]}
+                  scroll={{ x: 1050 }}
+                  size="middle"
+                />
+              </Card>
+
+              {/* 详情抽屉 */}
+              <Drawer
+                title={<span style={{ fontSize: 16, fontWeight: 700 }}>拉取任务详情</span>}
+                placement="right"
+                width={520}
+                onClose={() => setFetchLogDetail(null)}
+                open={!!fetchLogDetail}
+                extra={<Button size="small" onClick={() => setFetchLogDetail(null)} icon={<CloseOutlined />}>关闭</Button>}
+              >
+                {fetchLogDetail && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* 状态头部 */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: '#fafafa', borderRadius: 10, padding: '14px 18px',
+                      border: '1px solid #f0f0f0',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 500 }}>任务编号</span>
+                        <span style={{ fontWeight: 700, fontSize: 15, color: '#262626' }}>{fetchLogDetail.id}</span>
+                        <span style={{ width: 1, height: 20, background: '#e8e8e8' }} />
+                        <Tag style={{ margin: 0 }} color={fetchLogDetail.success ? 'success' : 'error'}>
+                          {fetchLogDetail.success ? '成功' : '失败'}
+                        </Tag>
+                      </div>
+                      <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+                        {fetchLogDetail.triggerType === 'SCHEDULED' ? '⏱ 定时任务' : '👤 手动触发'}
+                      </span>
+                    </div>
+
+                    {/* 邮箱信息 */}
+                    <Card size="small" title={<span style={{ fontSize: 13, fontWeight: 600 }}>📬 邮箱信息</span>}
+                      styles={{ body: { padding: '12px 16px' } }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        {[
+                          ['邮箱地址', fetchLogDetail.emailAddress || '-'],
+                          ['邮箱名称', fetchLogDetail.mailboxName || '-'],
+                          ['触发方式', fetchLogDetail.triggerType === 'SCHEDULED' ? '定时任务' : '手动触发'],
+                          ['开始时间', formatDateTime(fetchLogDetail.startedAt)],
+                          ['结束时间', fetchLogDetail.finishedAt ? formatDateTime(fetchLogDetail.finishedAt) : '-'],
+                          ['耗时', fetchLogDetail.finishedAt ? formatDuration(fetchLogDetail.startedAt, fetchLogDetail.finishedAt) : '-'],
+                        ].map(([label, value]) => (
+                          <div key={label}>
+                            <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 2 }}>{label}</div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+
+                    {/* 执行结果 */}
+                    <Card size="small" title={<span style={{ fontSize: 13, fontWeight: 600 }}>📊 执行结果</span>}
+                      styles={{ body: { padding: '12px 16px' } }}>
+                      <Row gutter={[12, 12]}>
+                        <Col span={8}>
+                          <div style={{ background: '#f6ffed', borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: '#52c41a' }}>{fetchLogDetail.fetchedCount}</div>
+                            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>拉取邮件数</div>
+                          </div>
+                        </Col>
+                        <Col span={8}>
+                          <div style={{ background: '#e6f7ff', borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: '#1890ff' }}>{fetchLogDetail.createdTicketCount}</div>
+                            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>新建工单</div>
+                          </div>
+                        </Col>
+                        <Col span={8}>
+                          <div style={{ background: '#fff7e6', borderRadius: 8, padding: '10px 14px', textAlign: 'center' }}>
+                            <div style={{ fontSize: 22, fontWeight: 800, color: '#fa8c16' }}>{fetchLogDetail.linkedCount}</div>
+                            <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>关联工单</div>
+                          </div>
+                        </Col>
+                      </Row>
+                    </Card>
+
+                    {/* 错误详情 */}
+                    {fetchLogDetail.errorMessage && (
+                      <Card size="small"
+                        styles={{
+                          header: { background: '#fff2f0', borderBottom: '1px solid #ffccc7' },
+                          body: { padding: '12px 16px', background: '#fff2f0' },
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ color: '#ff4d4f', fontWeight: 700, fontSize: 13 }}>⚠ 错误详情</span>
+                        </div>
+                        <pre style={{
+                          fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto',
+                          margin: 0, color: '#cf1322', background: '#fff', borderRadius: 6,
+                          padding: 10, border: '1px solid #ffccc7', lineHeight: 1.6,
+                        }}>{fetchLogDetail.errorMessage}</pre>
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </Drawer>
+            </div>
           ) : activeMenu === '编号规则' ? (
             <section className="app-content system-page" aria-label="编号规则配置">
               <div className="content-title">

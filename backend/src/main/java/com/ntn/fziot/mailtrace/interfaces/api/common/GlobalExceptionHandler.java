@@ -3,13 +3,16 @@ package com.ntn.fziot.mailtrace.interfaces.api.common;
 import com.ntn.fziot.mailtrace.application.bizservice.auth.AuthBusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -40,6 +43,23 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(BasicResult.fail(CODE_BAD_REQUEST, message));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<BasicResult<Void>> handleMethodArgumentTypeMismatch(MethodArgumentTypeMismatchException exception) {
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(BasicResult.fail(CODE_BAD_REQUEST,
+                        "参数格式错误：" + exception.getName() + " 需要 " +
+                                (exception.getRequiredType() != null ? exception.getRequiredType().getSimpleName() : "正确格式")));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<BasicResult<Void>> handleException(Exception exception) {
+        log.error("未捕获的运行时异常", exception);
+        return ResponseEntity
+                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(BasicResult.fail(50000, "服务器繁忙，请稍后重试"));
     }
 
     private HttpStatus resolveStatus(int code) {
