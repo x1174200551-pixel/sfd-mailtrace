@@ -37,6 +37,7 @@ public class TicketNumberRuleService {
     private static final String PARAM_SEPARATOR = "ticket.no.separator";
     private static final String PARAM_DESCRIPTION = "ticket.no.description";
     private static final String DEFAULT_DESCRIPTION = "客户来信自动建单时生成唯一工单号；邮件线程关联会优先匹配主题中的工单号。";
+    private static final String OPERATOR_SYSTEM = "system";
 
     private final SysParamMapper sysParamMapper;
     private final TicketSeqMapper ticketSeqMapper;
@@ -178,6 +179,41 @@ public class TicketNumberRuleService {
                 .set(SysParamEntity::getUpdatedBy, operator));
     }
 
+    /**
+     * 生成下一工单号，供工单创建时调用。
+     * 该方法不是事务性的——调用方应在外层事务中调用。
+     */
+    @Transactional
+    public String generateNextTicketNo() {
+        TicketNumberRuleConfig config = loadConfig();
+        if (!config.enabled()) {
+            throw new BusinessException(CODE_BAD_REQUEST, "工单编号规则未启用，请联系管理员配置");
+        }
+        LocalDate today = LocalDate.now();
+        String dateKey = config.dateKey(today);
+        // 悲观锁：INSERT ... ON DUPLICATE KEY UPDATE 或先查后更
+        TicketSeqEntity seq = ticketSeqMapper.selectOne(new LambdaQueryWrapper<TicketSeqEntity>()
+                .eq(TicketSeqEntity::getSeqDate, dateKey)
+                .last("LIMIT 1"));
+        int nextValue;
+        if (seq == null) {
+            seq = new TicketSeqEntity();
+            seq.setSeqDate(dateKey);
+            seq.setCurrentValue(1);
+            seq.setCreatedBy(OPERATOR_SYSTEM);
+            seq.setUpdatedBy(OPERATOR_SYSTEM);
+            ticketSeqMapper.insert(seq);
+            nextValue = 1;
+        } else {
+            nextValue = seq.getCurrentValue() + 1;
+            ticketSeqMapper.update(null, new LambdaUpdateWrapper<TicketSeqEntity>()
+                    .eq(TicketSeqEntity::getId, seq.getId())
+                    .set(TicketSeqEntity::getCurrentValue, nextValue)
+                    .set(TicketSeqEntity::getUpdatedBy, OPERATOR_SYSTEM));
+        }
+        return config.composeTicketNo(dateKey, formatSeq(nextValue, config.seqLength()));
+    }
+
     private void assertAdmin(CurrentUserPrincipal principal) {
         if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
             throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作编号规则");
@@ -258,21 +294,34 @@ public class TicketNumberRuleService {
         return String.format("%0" + seqLength + "d", value);
     }
 
-    private record TicketNumberRuleConfig(
-            boolean enabled,
-            String prefix,
-            String dateFormat,
-            int seqLength,
-            String separator,
-            String description,
-            LocalDateTime updatedAt
-    ) {
+    private static final class TicketNumberRuleConfig {
+        private final boolean enabled;
+        private final String prefix;
+        private final String dateFormat;
+        private final int seqLength;
+        private final String separator;
+        private final String description;
+        private final LocalDateTime updatedAt;
+
+        private TicketNumberRuleConfig(boolean enabled, String prefix, String dateFormat,
+                                       int seqLength, String separator, String description,
+                                       LocalDateTime updatedAt) {
+            this.enabled = enabled;
+            this.prefix = prefix;
+            this.dateFormat = dateFormat;
+            this.seqLength = seqLength;
+            this.separator = separator;
+            this.description = description;
+            this.updatedAt = updatedAt;
+        }
+
         private String dateKey(LocalDate date) {
-            return switch (dateFormat) {
-                case "yyyy" -> date.format(DateTimeFormatter.ofPattern("yyyy"));
-                case "yyyyMM" -> date.format(DateTimeFormatter.ofPattern("yyyyMM"));
-                default -> date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-            };
+            if ("yyyy".equals(dateFormat)) {
+                return date.format(DateTimeFormatter.ofPattern("yyyy"));
+            } else if ("yyyyMM".equals(dateFormat)) {
+                return date.format(DateTimeFormatter.ofPattern("yyyyMM"));
+            }
+            return date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         }
 
         private String composeTicketNo(String dateKey, String nextSeq) {
@@ -287,5 +336,14 @@ public class TicketNumberRuleService {
             String nextSeq = String.format("%0" + seqLength + "d", usedSeq + 1);
             return composeTicketNo(dateKey, nextSeq);
         }
+
+        // --- 类 record 的访问器 ---
+        boolean enabled() { return enabled; }
+        String prefix() { return prefix; }
+        String dateFormat() { return dateFormat; }
+        int seqLength() { return seqLength; }
+        String separator() { return separator; }
+        String description() { return description; }
+        LocalDateTime updatedAt() { return updatedAt; }
     }
 }

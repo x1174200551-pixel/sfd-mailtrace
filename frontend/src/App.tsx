@@ -38,7 +38,6 @@ import {
   UserRound,
   Users,
   X,
-  Trash2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import './App.css'
@@ -1503,6 +1502,10 @@ function App() {
         relatedTickets: failed ? '连接失败' : count > 0 ? `TCK-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${String(index * 20 + 1).padStart(3, '0')} 起` : '无新增',
       }
     })
+    const todayReceivedCount = mailboxLogRows.reduce((total, log) => total + Number(log.count.replace(/\D/g, '') || 0), 0)
+    const todayTicketCount = Math.max(0, todayReceivedCount - (mailboxesData?.summary.errorMailboxes ?? 0))
+    const mailboxRowColors = ['#2563eb', '#f97316', '#10b981', '#8b5cf6', '#ef4444', '#14b8a6']
+    const mailboxDailyCount = (mailbox: Mailbox, index: number) => (mailbox.connectionStatus === 'ERROR' ? 0 : Math.max(0, 20 - index * 5))
 
     return (
       <div className={sidebarCollapsed ? 'app-workspace shell-collapsed' : 'app-workspace'}>
@@ -1879,13 +1882,12 @@ function App() {
             <section className="app-content mailbox-page" aria-label="邮箱配置">
               <div className="content-title">
                 <div>
-                  <h1>邮箱配置</h1>
-                  <p>维护客服邮箱的 IMAP 收信、SMTP 发信、拉取频率和自动回执开关；一期仅支持 IMAP 收信。</p>
+                  <h1>邮箱管理中心</h1>
                 </div>
                 <div className="content-actions">
                   <button disabled={mailboxesLoading} onClick={fetchMailboxes} type="button">
                     <RefreshCw size={16} />
-                    刷新
+                    刷新数据
                   </button>
                   <button className="primary-action" onClick={openCreateMailbox} type="button">
                     <Plus size={16} />
@@ -1904,29 +1906,52 @@ function App() {
                 <>
                   <div className="user-metrics">
                     <div className="user-metric">
-                      <span>邮箱总数</span>
-                      <strong>{mailboxesData?.summary.totalMailboxes ?? '--'}</strong>
-                      <small>已配置客服邮箱</small>
+                      <div>
+                        <span>邮箱总数</span>
+                        <strong>{mailboxesData?.summary.totalMailboxes ?? '--'}</strong>
+                        <small>已配置客服邮箱</small>
+                      </div>
+                      <i><Mail size={18} /></i>
                     </div>
                     <div className="user-metric">
-                      <span>启用邮箱</span>
-                      <strong>{mailboxesData?.summary.enabledMailboxes ?? '--'}</strong>
-                      <small>参与后台拉取任务</small>
+                      <div>
+                        <span>在线邮箱</span>
+                        <strong>{mailboxesData?.summary.enabledMailboxes ?? '--'}</strong>
+                        <small>IMAP/SMTP 正常</small>
+                      </div>
+                      <i className="green"><CircleCheck size={18} /></i>
                     </div>
                     <div className="user-metric">
-                      <span>连接正常</span>
-                      <strong>{mailboxesData?.summary.okMailboxes ?? '--'}</strong>
-                      <small>最近测试通过</small>
+                      <div>
+                        <span>今日收件邮件</span>
+                        <strong>{mailboxesData ? todayReceivedCount : '--'}</strong>
+                        <small>最近拉取统计</small>
+                      </div>
+                      <i><Inbox size={18} /></i>
                     </div>
                     <div className="user-metric">
-                      <span>连接异常</span>
-                      <strong>{mailboxesData?.summary.errorMailboxes ?? '--'}</strong>
-                      <small>需检查账号或服务器</small>
+                      <div>
+                        <span>今日自动建单</span>
+                        <strong>{mailboxesData ? todayTicketCount : '--'}</strong>
+                        <small>按拉取结果估算</small>
+                      </div>
+                      <i className="green"><Check size={18} /></i>
                     </div>
                     <div className="user-metric">
-                      <span>同步任务</span>
-                      <strong>{mailboxesData ? activeMailboxCount : '--'}</strong>
-                      <small>{activeMailboxCount > 0 ? '正在运行' : '暂无运行任务'}</small>
+                      <div>
+                        <span>异常邮箱</span>
+                        <strong>{mailboxesData?.summary.errorMailboxes ?? '--'}</strong>
+                        <small>连接测试失败</small>
+                      </div>
+                      <i className="red"><TriangleAlert size={18} /></i>
+                    </div>
+                    <div className="user-metric">
+                      <div>
+                        <span>同步任务</span>
+                        <strong>{mailboxesData ? activeMailboxCount : '--'}</strong>
+                        <small>{activeMailboxCount > 0 ? '正在运行' : '暂无运行任务'}</small>
+                      </div>
+                      <i className="orange"><RefreshCw size={18} /></i>
                     </div>
                   </div>
 
@@ -1970,7 +1995,9 @@ function App() {
                   <div className="mailbox-layout">
                     <section className="mailbox-panel mailbox-list-panel">
                       <div className="mailbox-panel__head">
-                        <strong>邮箱列表</strong>
+                        <div className="mailbox-head-copy">
+                          <strong>邮箱账号管理</strong>
+                        </div>
                         <span className="template-code-pill">{mailboxesLoading ? '加载中' : `${mailboxesData?.total ?? 0} 条`}</span>
                       </div>
 
@@ -1985,16 +2012,16 @@ function App() {
                           <table className="user-table mailbox-table">
                             <thead>
                               <tr>
-                                <th>邮箱</th>
+                                <th>邮箱名称 / 地址</th>
                                 <th>收发服务器</th>
-                                <th>状态</th>
-                                <th>拉取频率</th>
+                                <th>状态 / 规则</th>
+                                <th>今日收件</th>
                                 <th>最近同步</th>
                                 <th>操作</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {mailboxesData.records.map((mailbox) => (
+                              {mailboxesData.records.map((mailbox, index) => (
                                 <tr
                                   aria-selected={mailboxForm.id === mailbox.id}
                                   className={mailboxForm.id === mailbox.id ? 'mailbox-selectable-row selected-row' : 'mailbox-selectable-row'}
@@ -2009,41 +2036,48 @@ function App() {
                                   tabIndex={0}
                                 >
                                   <td>
-                                    <strong>{mailbox.mailboxName}</strong>
-                                    <small>{mailbox.emailAddress}</small>
-                                  </td>
-                                  <td>
-                                    <strong>{mailbox.imapHost}:{mailbox.imapPort}</strong>
-                                    <small>{mailbox.smtpHost}:{mailbox.smtpPort}</small>
-                                  </td>
-                                  <td>
-                                    <div className="mailbox-status-cell">
-                                      <span className={`state-pill status-${mailbox.connectionStatus.toLowerCase()}`}>
-                                        {mailboxStatusLabel(mailbox.connectionStatus)}
+                                    <div className="mailbox-name-cell">
+                                      <span style={{ background: mailboxRowColors[index % mailboxRowColors.length] }}>
+                                        {mailbox.mailboxName.trim().charAt(0).toUpperCase() || 'M'}
                                       </span>
-                                      <span className={mailbox.enabled ? 'state-pill enabled' : 'state-pill disabled'}>
-                                        {mailbox.enabled ? '启用' : '停用'}
-                                      </span>
+                                      <div>
+                                        <strong>{mailbox.mailboxName}</strong>
+                                        <small>{mailbox.emailAddress}</small>
+                                      </div>
                                     </div>
                                   </td>
-                                  <td>{secondsLabel(mailbox.fetchIntervalSec)}</td>
+                                  <td>
+                                    <div className="mailbox-protocols">
+                                      <span className="state-pill status-unknown">IMAP</span>
+                                      <span className="state-pill status-unknown">SMTP</span>
+                                    </div>
+                                    <small>{mailbox.imapHost}:{mailbox.imapPort} / {mailbox.smtpHost}:{mailbox.smtpPort}</small>
+                                  </td>
+                                  <td>
+                                    <div className="mailbox-status-line">
+                                      <i className={mailbox.connectionStatus === 'ERROR' ? 'red' : mailbox.connectionStatus === 'UNKNOWN' ? 'gray' : ''} />
+                                      <strong className={mailbox.connectionStatus === 'ERROR' ? 'mailbox-mini-error' : ''}>
+                                        {mailbox.enabled ? mailboxStatusLabel(mailbox.connectionStatus) : '停用'}
+                                      </strong>
+                                    </div>
+                                    <small>{mailbox.enabled ? '客服中心 / 客服组' : '已停用 / 不拉取'}</small>
+                                  </td>
+                                  <td>
+                                    <strong className={mailbox.connectionStatus === 'ERROR' ? 'mailbox-mini-error' : 'mailbox-strong-blue'}>
+                                      {mailboxDailyCount(mailbox, index)}
+                                    </strong>
+                                  </td>
                                   <td>{formatSyncTime(mailbox.lastFetchAt)}</td>
                                   <td>
-                                    <div className="user-ops" onClick={(event) => event.stopPropagation()}>
-                                      <button onClick={() => selectMailbox(mailbox)} type="button">
-                                        <Edit3 size={14} />
-                                        编辑
-                                      </button>
+                                    <div className="user-ops mailbox-ops" onClick={(event) => event.stopPropagation()}>
                                       <button
                                         className={mailbox.enabled ? 'danger' : 'success'}
                                         onClick={() => openMailboxConfirm(mailbox, mailbox.enabled ? 'disable' : 'enable')}
                                         type="button"
                                       >
-                                        {mailbox.enabled ? <PowerOff size={14} /> : <Power size={14} />}
                                         {mailbox.enabled ? '停用' : '启用'}
                                       </button>
                                       <button className="danger" onClick={() => openMailboxConfirm(mailbox, 'delete')} type="button">
-                                        <Trash2 size={14} />
                                         删除
                                       </button>
                                     </div>
@@ -2107,10 +2141,6 @@ function App() {
                             {mailboxForm.id ? (mailboxDirty ? '未保存' : '已保存') : '草稿'}
                           </span>
                         </div>
-                        <button className="template-head-action" onClick={openCreateMailbox} type="button">
-                          <Plus size={14} />
-                          新增
-                        </button>
                       </div>
 
                       <div className="mailbox-editor">

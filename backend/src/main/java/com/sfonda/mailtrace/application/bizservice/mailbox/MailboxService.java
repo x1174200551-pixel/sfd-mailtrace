@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sfonda.mailtrace.application.bizservice.common.BusinessException;
 import com.sfonda.mailtrace.infrastructure.crypto.MailPasswordCipher;
+import com.sfonda.mailtrace.infrastructure.mail.ImapStoreSupport;
 import com.sfonda.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.sfonda.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestRequest;
 import com.sfonda.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestResponse;
@@ -24,12 +25,14 @@ import jakarta.mail.Session;
 import jakarta.mail.Store;
 import jakarta.mail.Transport;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Properties;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class MailboxService {
@@ -168,10 +171,13 @@ public class MailboxService {
      */
     @Transactional
     public MailboxConnectionTestResponse testSavedMailbox(CurrentUserPrincipal principal, Long id, String testType) {
+        long start = System.currentTimeMillis();
         // 1、校验当前用户具备管理员权限
         assertAdmin(principal);
         // 2、读取已保存邮箱并解密 IMAP/SMTP 密码
         MailboxEntity mailbox = requireMailbox(id);
+        log.info("开始已保存邮箱连接测试 mailboxId={} email={} testType={} operator={}",
+                id, mailbox.getEmailAddress(), testType, principal.account());
         // 3、按测试类型分别执行 IMAP 和 SMTP 连接测试
         MailboxConnectionTestResponse response = testConnection(
                 toConnectionConfig(mailbox, mailPasswordCipher.decrypt(mailbox.getImapPasswordEnc()),
@@ -183,6 +189,9 @@ public class MailboxService {
                 .eq(MailboxEntity::getId, id)
                 .set(MailboxEntity::getConnectionStatus, response.success() ? STATUS_OK : STATUS_ERROR)
                 .set(MailboxEntity::getUpdatedBy, principal.account()));
+        long elapsed = System.currentTimeMillis() - start;
+        log.info("已保存邮箱连接测试完成 mailboxId={} email={} success={} imapOk={} smtpOk={} 耗时={}ms",
+                id, mailbox.getEmailAddress(), response.success(), response.imapSuccess(), response.smtpSuccess(), elapsed);
         recordLog(principal, "TEST_CONNECTION", id,
                 "测试邮箱连接：" + mailbox.getEmailAddress() + "，结果：" + response.connectionStatus());
         // 5、返回连接测试结果
@@ -193,14 +202,24 @@ public class MailboxService {
      * 对页面草稿配置执行连接测试，不写入数据库。
      */
     public MailboxConnectionTestResponse testDraftMailbox(CurrentUserPrincipal principal, MailboxConnectionTestRequest request) {
+        long start = System.currentTimeMillis();
         // 1、校验当前用户具备管理员权限
         assertAdmin(principal);
         // 2、规范化连接测试类型
         String testType = normalizeTestType(request.getTestType());
+        log.info("开始草稿邮箱连接测试 testType={} imap={}:{} smtp={}:{} operator={}",
+                testType,
+                request.getImapHost(), request.getImapPort(),
+                request.getSmtpHost(), request.getSmtpPort(),
+                principal.account());
         // 3、规范化草稿配置，并按测试类型要求输入对应明文密码或授权码
         MailboxConnectionConfig config = toConnectionConfig(request, testType);
         // 4、按测试类型分别执行 IMAP 和 SMTP 连接测试
-        return testConnection(config, testType);
+        MailboxConnectionTestResponse response = testConnection(config, testType);
+        long elapsed = System.currentTimeMillis() - start;
+        log.info("草稿邮箱连接测试完成 testType={} success={} imapOk={} smtpOk={} 耗时={}ms",
+                testType, response.success(), response.imapSuccess(), response.smtpSuccess(), elapsed);
+        return response;
     }
 
     private LambdaQueryWrapper<MailboxEntity> buildQuery(String keyword, String status, Boolean enabled) {
@@ -274,8 +293,8 @@ public class MailboxService {
     }
 
     private MailboxConnectionTestResponse testConnection(MailboxConnectionConfig config, String testType) {
-        TestPartResult imap = shouldTestImap(testType) ? testImap(config) : TestPartResult.skipped("未执行 IMAP 测试");
-        TestPartResult smtp = shouldTestSmtp(testType) ? testSmtp(config) : TestPartResult.skipped("未执行 SMTP 测试");
+        TestPartResult imap = shouldTestImap(testType) ? testImap(config) : skipped("未执行 IMAP 测试");
+        TestPartResult smtp = shouldTestSmtp(testType) ? testSmtp(config) : skipped("未执行 SMTP 测试");
         boolean success = (!shouldTestImap(testType) || imap.success()) && (!shouldTestSmtp(testType) || smtp.success());
         return new MailboxConnectionTestResponse(
                 success,
@@ -289,6 +308,9 @@ public class MailboxService {
     }
 
     private TestPartResult testImap(MailboxConnectionConfig config) {
+        long start = System.currentTimeMillis();
+        log.info("开始 IMAP 连接测试 host={} port={} ssl={} username={} folder={}",
+                config.imapHost(), config.imapPort(), config.imapSslEnabled(), config.imapUsername(), config.imapFolder());
         Store store = null;
         Folder folder = null;
         try {
@@ -296,13 +318,28 @@ public class MailboxService {
             Session session = Session.getInstance(properties);
             store = session.getStore(config.imapSslEnabled() ? "imaps" : "imap");
             store.connect(config.imapHost(), config.imapPort(), config.imapUsername(), config.imapPassword());
+            log.info("IMAP 服务器连接成功 host={} port={} username={} 耗时={}ms",
+                    config.imapHost(), config.imapPort(), config.imapUsername(), System.currentTimeMillis() - start);
+            // 网易等邮箱要求登录后发送 ID，否则后续打开文件夹会失败
+            ImapStoreSupport.identifyClient(store);
             folder = store.getFolder(config.imapFolder());
             if (!folder.exists()) {
-                return TestPartResult.fail("IMAP 连接成功，但收件文件夹不存在：" + config.imapFolder());
+                log.warn("IMAP 连接成功但文件夹不存在 host={} folder={} username={}",
+                        config.imapHost(), config.imapFolder(), config.imapUsername());
+                return fail("IMAP 连接成功，但收件文件夹不存在：" + config.imapFolder());
             }
-            return TestPartResult.ok("IMAP 连接成功，收件文件夹可访问");
+            // 真正打开文件夹，与定时拉信路径一致，避免"测试通过、拉取失败"
+            folder.open(Folder.READ_ONLY);
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("IMAP 测试通过 host={} folder={} 总耗时={}ms",
+                    config.imapHost(), config.imapFolder(), elapsed);
+            return ok("IMAP 连接成功，收件文件夹可访问");
         } catch (Exception exception) {
-            return TestPartResult.fail("IMAP 连接失败：" + normalizeException(exception));
+            long elapsed = System.currentTimeMillis() - start;
+            log.error("IMAP 测试失败 host={} port={} username={} folder={} 耗时={}ms error={}",
+                    config.imapHost(), config.imapPort(), config.imapUsername(), config.imapFolder(),
+                    elapsed, normalizeException(exception), exception);
+            return fail("IMAP 连接失败：" + normalizeException(exception));
         } finally {
             closeFolder(folder);
             closeStore(store);
@@ -310,20 +347,39 @@ public class MailboxService {
     }
 
     private TestPartResult testSmtp(MailboxConnectionConfig config) {
+        long start = System.currentTimeMillis();
+        log.info("开始 SMTP 连接测试 host={} port={} ssl={} username={}",
+                config.smtpHost(), config.smtpPort(), config.smtpSslEnabled(), config.smtpUsername());
         Transport transport = null;
         try {
+            // 1、465 + SSL 走隐式 SSL（smtps）；其余端口在开启 SSL 时走 STARTTLS（smtp）
             boolean implicitSsl = Boolean.TRUE.equals(config.smtpSslEnabled()) && config.smtpPort() == 465;
             String protocol = implicitSsl ? "smtps" : "smtp";
-            Properties properties = baseMailProperties("mail." + protocol);
-            properties.put("mail.smtp.auth", "true");
-            properties.put("mail.smtp.starttls.enable", String.valueOf(Boolean.TRUE.equals(config.smtpSslEnabled()) && !implicitSsl));
-            properties.put("mail.smtp.ssl.enable", String.valueOf(implicitSsl));
+            String prefix = "mail." + protocol;
+            Properties properties = baseMailProperties(prefix);
+            properties.put(prefix + ".auth", "true");
+        properties.put(prefix + ".starttls.enable", String.valueOf(Boolean.TRUE.equals(config.smtpSslEnabled()) && !implicitSsl));
+        properties.put(prefix + ".ssl.enable", String.valueOf(implicitSsl));
+        // smtp.163.com:587 的 STARTTLS 存在兼容性问题（连接后无响应），
+        // 如遇到 15 秒超时 "Exception reading response"，请改用 465 端口 + SSL
+        log.debug("SMTP 协议选择 protocol={} implicitSsl={} starttls={} ssl={}",
+                protocol, implicitSsl,
+                Boolean.TRUE.equals(config.smtpSslEnabled()) && !implicitSsl,
+                implicitSsl);
+            // 2、建立会话并使用账号/授权码连接 SMTP
             Session session = Session.getInstance(properties);
             transport = session.getTransport(protocol);
             transport.connect(config.smtpHost(), config.smtpPort(), config.smtpUsername(), config.smtpPassword());
-            return TestPartResult.ok("SMTP 连接成功，账号认证通过");
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("SMTP 测试通过 host={} port={} username={} 耗时={}ms",
+                    config.smtpHost(), config.smtpPort(), config.smtpUsername(), elapsed);
+            return ok("SMTP 连接成功，账号认证通过");
         } catch (Exception exception) {
-            return TestPartResult.fail("SMTP 连接失败：" + normalizeException(exception));
+            long elapsed = System.currentTimeMillis() - start;
+            log.error("SMTP 测试失败 host={} port={} ssl={} username={} 耗时={}ms error={}",
+                    config.smtpHost(), config.smtpPort(), config.smtpSslEnabled(), config.smtpUsername(),
+                    elapsed, normalizeException(exception), exception);
+            return fail("SMTP 连接失败：" + normalizeException(exception));
         } finally {
             closeTransport(transport);
         }
@@ -331,9 +387,9 @@ public class MailboxService {
 
     private Properties baseMailProperties(String prefix) {
         Properties properties = new Properties();
-        properties.put(prefix + ".connectiontimeout", "5000");
-        properties.put(prefix + ".timeout", "5000");
-        properties.put(prefix + ".writetimeout", "5000");
+        properties.put(prefix + ".connectiontimeout", "15000");
+        properties.put(prefix + ".timeout", "15000");
+        properties.put(prefix + ".writetimeout", "15000");
         return properties;
     }
 
@@ -572,18 +628,18 @@ public class MailboxService {
     ) {
     }
 
+    private static TestPartResult ok(String message) {
+        return new TestPartResult(true, message);
+    }
+
+    private static TestPartResult fail(String message) {
+        return new TestPartResult(false, message);
+    }
+
+    private static TestPartResult skipped(String message) {
+        return new TestPartResult(false, message);
+    }
+
     private record TestPartResult(boolean success, String message) {
-
-        private static TestPartResult ok(String message) {
-            return new TestPartResult(true, message);
-        }
-
-        private static TestPartResult fail(String message) {
-            return new TestPartResult(false, message);
-        }
-
-        private static TestPartResult skipped(String message) {
-            return new TestPartResult(false, message);
-        }
     }
 }

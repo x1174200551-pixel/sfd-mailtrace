@@ -41,3 +41,5 @@ mailtrace:
     jwt:
       secret: mailtrace-local-dev-secret-change-before-production
       expires-in-seconds: 7200
+  mail:
+    fetch-fixed-delay-ms: 60000
