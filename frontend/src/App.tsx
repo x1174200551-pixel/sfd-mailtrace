@@ -38,6 +38,7 @@ import {
   UserRound,
   Users,
   X,
+  Trash2,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import './App.css'
@@ -214,6 +215,93 @@ type TicketRuleFormState = {
 
 type SystemGroupKey = 'ticket' | 'mail' | 'notice' | 'security'
 
+type MailboxConnectionStatus = 'UNKNOWN' | 'OK' | 'ERROR'
+
+type Mailbox = {
+  id: number
+  mailboxName: string
+  emailAddress: string
+  enabled: boolean
+  defaultAssigneeId: number | null
+  defaultAssigneeName: string | null
+  imapHost: string
+  imapPort: number
+  imapSslEnabled: boolean
+  imapUsername: string
+  imapFolder: string
+  fetchIntervalSec: number
+  smtpHost: string
+  smtpPort: number
+  smtpSslEnabled: boolean
+  smtpUsername: string
+  smtpFromName: string | null
+  autoReplyEnabled: boolean
+  autoReplyTemplateId: number | null
+  lastFetchAt: string | null
+  connectionStatus: MailboxConnectionStatus
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+type MailboxSummary = {
+  totalMailboxes: number
+  enabledMailboxes: number
+  disabledMailboxes: number
+  okMailboxes: number
+  errorMailboxes: number
+  unknownMailboxes: number
+}
+
+type MailboxPageResponse = {
+  records: Mailbox[]
+  total: number
+  page: number
+  size: number
+  pages: number
+  summary: MailboxSummary
+}
+
+type MailboxFormState = {
+  id: number | null
+  mailboxName: string
+  emailAddress: string
+  enabled: boolean
+  defaultAssigneeId: string
+  imapHost: string
+  imapPort: number
+  imapSslEnabled: boolean
+  imapUsername: string
+  imapPassword: string
+  imapFolder: string
+  fetchIntervalSec: number
+  smtpHost: string
+  smtpPort: number
+  smtpSslEnabled: boolean
+  smtpUsername: string
+  smtpPassword: string
+  smtpFromName: string
+  autoReplyEnabled: boolean
+  autoReplyTemplateId: string
+}
+
+type MailboxConnectionTestResponse = {
+  success: boolean
+  connectionStatus: MailboxConnectionStatus
+  imapSuccess: boolean
+  imapMessage: string
+  smtpSuccess: boolean
+  smtpMessage: string
+  testedAt: string
+}
+
+type MailboxConfirmAction = {
+  title: string
+  text: string
+  actionLabel: string
+  type: 'enable' | 'disable' | 'delete'
+  mailbox: Mailbox
+} | null
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
@@ -296,6 +384,29 @@ const emptyTicketRuleForm: TicketRuleFormState = {
   description: '客户来信自动建单时生成唯一工单号；邮件线程关联会优先匹配主题中的工单号。',
 }
 
+const emptyMailboxForm: MailboxFormState = {
+  id: null,
+  mailboxName: '',
+  emailAddress: '',
+  enabled: true,
+  defaultAssigneeId: '',
+  imapHost: '',
+  imapPort: 993,
+  imapSslEnabled: true,
+  imapUsername: '',
+  imapPassword: '',
+  imapFolder: 'INBOX',
+  fetchIntervalSec: 120,
+  smtpHost: '',
+  smtpPort: 587,
+  smtpSslEnabled: true,
+  smtpUsername: '',
+  smtpPassword: '',
+  smtpFromName: '',
+  autoReplyEnabled: true,
+  autoReplyTemplateId: '',
+}
+
 const systemGroups: Array<{
   key: SystemGroupKey
   title: string
@@ -342,7 +453,7 @@ const templateScenes: Record<string, string> = {
 }
 
 const features = [
-  { mark: 'M', title: '自动收取邮件', text: 'IMAP/POP3 实时同步' },
+  { mark: 'M', title: '自动收取邮件', text: 'IMAP 实时同步' },
   { mark: 'T', title: '自动生成工单', text: '智能解析，快速建单' },
   { mark: 'U', title: '分配处理人', text: '按规则自动分配' },
   { mark: 'S', title: 'SLA 监控', text: '超时提醒，保障服务' },
@@ -429,6 +540,11 @@ function formatDateTime(value: string | null) {
   return value.replace('T', ' ').slice(0, 16)
 }
 
+function formatSyncTime(value: string | null) {
+  if (!value) return '未同步'
+  return value.replace('T', ' ').slice(0, 16)
+}
+
 function roleLabel(roleCode: string) {
   return roleCode === 'ADMIN' ? '管理员' : '客服处理人'
 }
@@ -461,6 +577,42 @@ function toTicketRuleForm(rule: TicketNumberRule): TicketRuleFormState {
     separator: rule.separator,
     description: rule.description,
   }
+}
+
+function toMailboxForm(mailbox: Mailbox): MailboxFormState {
+  return {
+    id: mailbox.id,
+    mailboxName: mailbox.mailboxName,
+    emailAddress: mailbox.emailAddress,
+    enabled: mailbox.enabled,
+    defaultAssigneeId: mailbox.defaultAssigneeId == null ? '' : String(mailbox.defaultAssigneeId),
+    imapHost: mailbox.imapHost,
+    imapPort: mailbox.imapPort,
+    imapSslEnabled: mailbox.imapSslEnabled,
+    imapUsername: mailbox.imapUsername,
+    imapPassword: '',
+    imapFolder: mailbox.imapFolder,
+    fetchIntervalSec: mailbox.fetchIntervalSec,
+    smtpHost: mailbox.smtpHost,
+    smtpPort: mailbox.smtpPort,
+    smtpSslEnabled: mailbox.smtpSslEnabled,
+    smtpUsername: mailbox.smtpUsername,
+    smtpPassword: '',
+    smtpFromName: mailbox.smtpFromName || '',
+    autoReplyEnabled: mailbox.autoReplyEnabled,
+    autoReplyTemplateId: mailbox.autoReplyTemplateId == null ? '' : String(mailbox.autoReplyTemplateId),
+  }
+}
+
+function mailboxStatusLabel(status: MailboxConnectionStatus) {
+  if (status === 'OK') return '正常'
+  if (status === 'ERROR') return '异常'
+  return '未知'
+}
+
+function secondsLabel(value: number) {
+  if (value % 60 === 0) return `${value / 60} 分钟`
+  return `${value} 秒`
 }
 
 function App() {
@@ -520,6 +672,20 @@ function App() {
   const [ticketRuleMessage, setTicketRuleMessage] = useState('')
   const [ticketRuleConfirmOpen, setTicketRuleConfirmOpen] = useState(false)
   const [activeSystemGroup, setActiveSystemGroup] = useState<SystemGroupKey>('ticket')
+  const [mailboxKeyword, setMailboxKeyword] = useState('')
+  const [mailboxStatusFilter, setMailboxStatusFilter] = useState('ALL')
+  const [mailboxPage, setMailboxPage] = useState(1)
+  const [mailboxPageSize, setMailboxPageSize] = useState(10)
+  const [mailboxesData, setMailboxesData] = useState<MailboxPageResponse | null>(null)
+  const [mailboxesLoading, setMailboxesLoading] = useState(false)
+  const [mailboxesError, setMailboxesError] = useState('')
+  const [mailboxForm, setMailboxForm] = useState<MailboxFormState>(emptyMailboxForm)
+  const [mailboxDirty, setMailboxDirty] = useState(false)
+  const [mailboxSaving, setMailboxSaving] = useState(false)
+  const [mailboxTesting, setMailboxTesting] = useState(false)
+  const [mailboxTestResult, setMailboxTestResult] = useState<MailboxConnectionTestResponse | null>(null)
+  const [mailboxConfirmAction, setMailboxConfirmAction] = useState<MailboxConfirmAction>(null)
+  const [mailboxActionLoading, setMailboxActionLoading] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = user?.roleCode === 'ADMIN'
@@ -710,11 +876,221 @@ function App() {
     void fetchTicketRule()
   }, [fetchTicketRule])
 
+  const fetchMailboxes = useCallback(async () => {
+    if (!token || activeMenu !== '邮箱配置') return
+    if (!isAdmin) {
+      setMailboxesData(null)
+      setMailboxesError('当前账号没有邮箱配置管理权限')
+      return
+    }
+
+    const params = new URLSearchParams({
+      page: String(mailboxPage),
+      size: String(mailboxPageSize),
+    })
+    if (mailboxKeyword.trim()) params.set('keyword', mailboxKeyword.trim())
+    if (mailboxStatusFilter !== 'ALL') params.set('status', mailboxStatusFilter)
+
+    setMailboxesLoading(true)
+    setMailboxesError('')
+    try {
+      const data = await requestApi<MailboxPageResponse>(`/api/v1/mailboxes?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setMailboxesData(data)
+      const selected =
+        data.records.find((mailbox) => mailbox.id === mailboxForm.id) ||
+        data.records[0] ||
+        null
+      if (selected && !mailboxDirty) {
+        setMailboxForm(toMailboxForm(selected))
+        setMailboxTestResult(null)
+      }
+      if (!selected && !mailboxDirty) {
+        setMailboxForm(emptyMailboxForm)
+        setMailboxTestResult(null)
+      }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setMailboxesError(error instanceof Error ? error.message : '邮箱列表加载失败')
+    } finally {
+      setMailboxesLoading(false)
+    }
+  }, [
+    activeMenu,
+    handleAuthExpired,
+    isAdmin,
+    mailboxDirty,
+    mailboxForm.id,
+    mailboxKeyword,
+    mailboxPage,
+    mailboxPageSize,
+    mailboxStatusFilter,
+    token,
+  ])
+
+  useEffect(() => {
+    void fetchMailboxes()
+  }, [fetchMailboxes])
+
   function resetUserFilters() {
     setUserKeyword('')
     setUserRoleFilter('ALL')
     setUserEnabledFilter('ALL')
     setUserPage(1)
+  }
+
+  function resetMailboxFilters() {
+    setMailboxKeyword('')
+    setMailboxStatusFilter('ALL')
+    setMailboxPage(1)
+  }
+
+  function updateMailboxForm(patch: Partial<MailboxFormState>) {
+    setMailboxForm((value) => ({ ...value, ...patch }))
+    setMailboxDirty(true)
+    setMailboxTestResult(null)
+    setMailboxesError('')
+  }
+
+  function selectMailbox(mailbox: Mailbox) {
+    setMailboxForm(toMailboxForm(mailbox))
+    setMailboxDirty(false)
+    setMailboxTestResult(null)
+    setMailboxesError('')
+  }
+
+  function openCreateMailbox() {
+    setMailboxForm(emptyMailboxForm)
+    setMailboxDirty(true)
+    setMailboxTestResult(null)
+    setMailboxesError('')
+  }
+
+  function buildMailboxPayload() {
+    return {
+      mailboxName: mailboxForm.mailboxName,
+      emailAddress: mailboxForm.emailAddress,
+      enabled: mailboxForm.enabled,
+      defaultAssigneeId: mailboxForm.defaultAssigneeId ? Number(mailboxForm.defaultAssigneeId) : null,
+      imapHost: mailboxForm.imapHost,
+      imapPort: Number(mailboxForm.imapPort),
+      imapSslEnabled: mailboxForm.imapSslEnabled,
+      imapUsername: mailboxForm.imapUsername,
+      imapPassword: mailboxForm.imapPassword,
+      imapFolder: mailboxForm.imapFolder,
+      fetchIntervalSec: Number(mailboxForm.fetchIntervalSec),
+      smtpHost: mailboxForm.smtpHost,
+      smtpPort: Number(mailboxForm.smtpPort),
+      smtpSslEnabled: mailboxForm.smtpSslEnabled,
+      smtpUsername: mailboxForm.smtpUsername,
+      smtpPassword: mailboxForm.smtpPassword,
+      smtpFromName: mailboxForm.smtpFromName,
+      autoReplyEnabled: mailboxForm.autoReplyEnabled,
+      autoReplyTemplateId: mailboxForm.autoReplyTemplateId ? Number(mailboxForm.autoReplyTemplateId) : null,
+    }
+  }
+
+  async function saveMailbox() {
+    if (!token) return
+    setMailboxSaving(true)
+    setMailboxesError('')
+    try {
+      const saved = await requestApi<Mailbox>(
+        mailboxForm.id ? `/api/v1/mailboxes/${mailboxForm.id}` : '/api/v1/mailboxes',
+        {
+          method: mailboxForm.id ? 'PUT' : 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify(buildMailboxPayload()),
+        },
+      )
+      setMailboxForm(toMailboxForm(saved))
+      setMailboxDirty(false)
+      await fetchMailboxes()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setMailboxesError(error instanceof Error ? error.message : '邮箱配置保存失败')
+    } finally {
+      setMailboxSaving(false)
+    }
+  }
+
+  async function testMailboxConnection(testType = 'ALL') {
+    if (!token) return
+    setMailboxTesting(true)
+    setMailboxesError('')
+    try {
+      const data = mailboxForm.id && !mailboxDirty
+        ? await requestApi<MailboxConnectionTestResponse>(`/api/v1/mailboxes/${mailboxForm.id}/test-connection?testType=${testType}`, {
+            method: 'POST',
+            headers: authHeaders(token),
+          })
+        : await requestApi<MailboxConnectionTestResponse>('/api/v1/mailboxes/test-connection', {
+            method: 'POST',
+            headers: authHeaders(token),
+            body: JSON.stringify({ ...buildMailboxPayload(), testType }),
+          })
+      setMailboxTestResult(data)
+      if (mailboxForm.id && !mailboxDirty) {
+        await fetchMailboxes()
+      }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setMailboxesError(error instanceof Error ? error.message : '连接测试失败')
+    } finally {
+      setMailboxTesting(false)
+    }
+  }
+
+  function openMailboxConfirm(mailbox: Mailbox, type: 'enable' | 'disable' | 'delete') {
+    if (type === 'delete') {
+      setMailboxConfirmAction({
+        mailbox,
+        type,
+        title: '删除邮箱配置',
+        text: '删除后该邮箱不再参与拉取，历史邮件、工单和发送记录保留。',
+        actionLabel: '确认删除',
+      })
+      return
+    }
+    setMailboxConfirmAction({
+      mailbox,
+      type,
+      title: type === 'enable' ? '启用邮箱配置' : '停用邮箱配置',
+      text: type === 'enable' ? '启用后后台任务可继续拉取该邮箱。' : '停用后后台任务将不再拉取该邮箱。',
+      actionLabel: type === 'enable' ? '确认启用' : '确认停用',
+    })
+  }
+
+  async function submitMailboxConfirm() {
+    if (!token || !mailboxConfirmAction) return
+    setMailboxActionLoading(true)
+    setMailboxesError('')
+    try {
+      if (mailboxConfirmAction.type === 'delete') {
+        await requestApi<void>(`/api/v1/mailboxes/${mailboxConfirmAction.mailbox.id}`, {
+          method: 'DELETE',
+          headers: authHeaders(token),
+        })
+        if (mailboxForm.id === mailboxConfirmAction.mailbox.id) {
+          setMailboxForm(emptyMailboxForm)
+          setMailboxDirty(false)
+        }
+      } else {
+        await requestApi<Mailbox>(`/api/v1/mailboxes/${mailboxConfirmAction.mailbox.id}/enabled`, {
+          method: 'PATCH',
+          headers: authHeaders(token),
+          body: JSON.stringify({ enabled: mailboxConfirmAction.type === 'enable' }),
+        })
+      }
+      setMailboxConfirmAction(null)
+      await fetchMailboxes()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setMailboxesError(error instanceof Error ? error.message : '邮箱操作失败')
+    } finally {
+      setMailboxActionLoading(false)
+    }
   }
 
   function openCreateUser() {
@@ -1432,6 +1808,462 @@ function App() {
                 </>
               )}
             </section>
+          ) : activeMenu === '邮箱配置' ? (
+            <section className="app-content mailbox-page" aria-label="邮箱配置">
+              <div className="content-title">
+                <div>
+                  <h1>邮箱配置</h1>
+                  <p>维护客服邮箱的 IMAP 收信、SMTP 发信、拉取频率和自动回执开关；一期仅支持 IMAP 收信。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={mailboxesLoading} onClick={fetchMailboxes} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  <button className="primary-action" onClick={openCreateMailbox} type="button">
+                    <Plus size={16} />
+                    新增邮箱
+                  </button>
+                </div>
+              </div>
+
+              {!isAdmin ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无邮箱配置管理权限</strong>
+                  <p>邮箱账号、密码和连接测试仅管理员可维护，处理人入口隐藏。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="user-metrics">
+                    <div className="user-metric">
+                      <span>邮箱总数</span>
+                      <strong>{mailboxesData?.summary.totalMailboxes ?? '--'}</strong>
+                      <small>已配置客服邮箱</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>启用邮箱</span>
+                      <strong>{mailboxesData?.summary.enabledMailboxes ?? '--'}</strong>
+                      <small>参与后台拉取任务</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>连接正常</span>
+                      <strong>{mailboxesData?.summary.okMailboxes ?? '--'}</strong>
+                      <small>最近测试通过</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>连接异常</span>
+                      <strong>{mailboxesData?.summary.errorMailboxes ?? '--'}</strong>
+                      <small>需检查账号或服务器</small>
+                    </div>
+                  </div>
+
+                  <div className="user-toolbar mailbox-toolbar">
+                    <label className="user-search">
+                      <Search size={16} />
+                      <input
+                        onChange={(event) => {
+                          setMailboxKeyword(event.target.value)
+                          setMailboxPage(1)
+                        }}
+                        placeholder="搜索邮箱名称、地址或服务器"
+                        type="search"
+                        value={mailboxKeyword}
+                      />
+                    </label>
+                    <label>
+                      <span>状态</span>
+                      <select
+                        onChange={(event) => {
+                          setMailboxStatusFilter(event.target.value)
+                          setMailboxPage(1)
+                        }}
+                        value={mailboxStatusFilter}
+                      >
+                        <option value="ALL">全部状态</option>
+                        <option value="OK">连接正常</option>
+                        <option value="ERROR">连接异常</option>
+                        <option value="UNKNOWN">未测试</option>
+                        <option value="DISABLED">已停用</option>
+                      </select>
+                    </label>
+                    <button onClick={resetMailboxFilters} type="button">
+                      <RotateCcw size={15} />
+                      清空筛选
+                    </button>
+                  </div>
+
+                  {mailboxesError && <div className="user-alert">{mailboxesError}</div>}
+
+                  <div className="mailbox-layout">
+                    <section className="mailbox-panel mailbox-list-panel">
+                      <div className="mailbox-panel__head">
+                        <strong>邮箱列表</strong>
+                        <span className="template-code-pill">{mailboxesLoading ? '加载中' : `${mailboxesData?.total ?? 0} 条`}</span>
+                      </div>
+
+                      {mailboxesLoading ? (
+                        <div className="user-loading">
+                          {[0, 1, 2, 3, 4].map((item) => (
+                            <span key={item} />
+                          ))}
+                        </div>
+                      ) : mailboxesData && mailboxesData.records.length > 0 ? (
+                        <div className="mailbox-table-wrap">
+                          <table className="user-table mailbox-table">
+                            <thead>
+                              <tr>
+                                <th>邮箱</th>
+                                <th>收发服务器</th>
+                                <th>状态</th>
+                                <th>拉取频率</th>
+                                <th>最近同步</th>
+                                <th>操作</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {mailboxesData.records.map((mailbox) => (
+                                <tr className={mailboxForm.id === mailbox.id ? 'selected-row' : undefined} key={mailbox.id}>
+                                  <td>
+                                    <strong>{mailbox.mailboxName}</strong>
+                                    <small>{mailbox.emailAddress}</small>
+                                  </td>
+                                  <td>
+                                    <strong>{mailbox.imapHost}:{mailbox.imapPort}</strong>
+                                    <small>{mailbox.smtpHost}:{mailbox.smtpPort}</small>
+                                  </td>
+                                  <td>
+                                    <div className="mailbox-status-cell">
+                                      <span className={`state-pill status-${mailbox.connectionStatus.toLowerCase()}`}>
+                                        {mailboxStatusLabel(mailbox.connectionStatus)}
+                                      </span>
+                                      <span className={mailbox.enabled ? 'state-pill enabled' : 'state-pill disabled'}>
+                                        {mailbox.enabled ? '启用' : '停用'}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td>{secondsLabel(mailbox.fetchIntervalSec)}</td>
+                                  <td>{formatSyncTime(mailbox.lastFetchAt)}</td>
+                                  <td>
+                                    <div className="user-ops">
+                                      <button onClick={() => selectMailbox(mailbox)} type="button">
+                                        <Edit3 size={14} />
+                                        编辑
+                                      </button>
+                                      <button
+                                        className={mailbox.enabled ? 'danger' : 'success'}
+                                        onClick={() => openMailboxConfirm(mailbox, mailbox.enabled ? 'disable' : 'enable')}
+                                        type="button"
+                                      >
+                                        {mailbox.enabled ? <PowerOff size={14} /> : <Power size={14} />}
+                                        {mailbox.enabled ? '停用' : '启用'}
+                                      </button>
+                                      <button className="danger" onClick={() => openMailboxConfirm(mailbox, 'delete')} type="button">
+                                        <Trash2 size={14} />
+                                        删除
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="empty-state compact">
+                          <Mail size={38} />
+                          <strong>未找到邮箱</strong>
+                          <p>可清空筛选重新查询，或新增第一个客服邮箱。</p>
+                          <div>
+                            <button onClick={resetMailboxFilters} type="button">清空筛选</button>
+                            <button className="primary-action" onClick={openCreateMailbox} type="button">新增邮箱</button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="user-pagination mailbox-pagination">
+                        <span>
+                          共 {mailboxesData?.total ?? 0} 条，每页
+                          <select
+                            onChange={(event) => {
+                              setMailboxPageSize(Number(event.target.value))
+                              setMailboxPage(1)
+                            }}
+                            value={mailboxPageSize}
+                          >
+                            <option value={10}>10</option>
+                            <option value={20}>20</option>
+                            <option value={50}>50</option>
+                          </select>
+                          条
+                        </span>
+                        <div>
+                          <button disabled={mailboxPage <= 1} onClick={() => setMailboxPage((value) => value - 1)} type="button">
+                            上一页
+                          </button>
+                          <strong>
+                            {mailboxesData?.page ?? mailboxPage} / {Math.max(mailboxesData?.pages ?? 1, 1)}
+                          </strong>
+                          <button
+                            disabled={!mailboxesData || mailboxPage >= Math.max(mailboxesData.pages, 1)}
+                            onClick={() => setMailboxPage((value) => value + 1)}
+                            type="button"
+                          >
+                            下一页
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="mailbox-panel mailbox-editor-panel">
+                      <div className="mailbox-panel__head">
+                        <div className="template-editor-title">
+                          <strong>{mailboxForm.id ? '编辑邮箱配置' : '新增邮箱配置'}</strong>
+                          <span className={mailboxDirty ? 'template-code-pill dirty' : 'template-code-pill'}>
+                            {mailboxForm.id ? (mailboxDirty ? '未保存' : '已保存') : '草稿'}
+                          </span>
+                        </div>
+                        <button className="template-head-action" onClick={openCreateMailbox} type="button">
+                          <Plus size={14} />
+                          新增
+                        </button>
+                      </div>
+
+                      <div className="mailbox-editor">
+                        <div className="mailbox-form-grid">
+                          <label>
+                            <span>邮箱名称</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ mailboxName: event.target.value })}
+                              placeholder="例如 客服支持邮箱"
+                              value={mailboxForm.mailboxName}
+                            />
+                          </label>
+                          <label>
+                            <span>邮箱地址</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ emailAddress: event.target.value })}
+                              placeholder="support@example.com"
+                              type="email"
+                              value={mailboxForm.emailAddress}
+                            />
+                          </label>
+                          <label>
+                            <span>默认处理人ID</span>
+                            <input
+                              min={1}
+                              onChange={(event) => updateMailboxForm({ defaultAssigneeId: event.target.value })}
+                              placeholder="为空则后续按分配规则处理"
+                              type="number"
+                              value={mailboxForm.defaultAssigneeId}
+                            />
+                          </label>
+                          <label>
+                            <span>启用状态</span>
+                            <button
+                              className={mailboxForm.enabled ? 'template-switch enabled' : 'template-switch'}
+                              onClick={() => updateMailboxForm({ enabled: !mailboxForm.enabled })}
+                              type="button"
+                            >
+                              <span>{mailboxForm.enabled ? '启用后参与邮箱拉取' : '停用后不拉取邮件'}</span>
+                              <i />
+                            </button>
+                          </label>
+                        </div>
+
+                        <div className="mailbox-section-title">
+                          <strong>收信 IMAP</strong>
+                          <small>一期通过 IMAP 拉取客户来信并自动建单</small>
+                        </div>
+                        <div className="mailbox-form-grid three">
+                          <label>
+                            <span>IMAP 服务器</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ imapHost: event.target.value })}
+                              placeholder="imap.example.com"
+                              value={mailboxForm.imapHost}
+                            />
+                          </label>
+                          <label>
+                            <span>IMAP 端口</span>
+                            <input
+                              min={1}
+                              max={65535}
+                              onChange={(event) => updateMailboxForm({ imapPort: Number(event.target.value || 993) })}
+                              type="number"
+                              value={mailboxForm.imapPort}
+                            />
+                          </label>
+                          <label>
+                            <span>SSL</span>
+                            <button
+                              className={mailboxForm.imapSslEnabled ? 'template-switch enabled' : 'template-switch'}
+                              onClick={() => updateMailboxForm({ imapSslEnabled: !mailboxForm.imapSslEnabled })}
+                              type="button"
+                            >
+                              <span>{mailboxForm.imapSslEnabled ? '启用' : '关闭'}</span>
+                              <i />
+                            </button>
+                          </label>
+                          <label>
+                            <span>IMAP 账号</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ imapUsername: event.target.value })}
+                              placeholder="通常为邮箱地址"
+                              value={mailboxForm.imapUsername}
+                            />
+                          </label>
+                          <label>
+                            <span>IMAP 密码/授权码</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ imapPassword: event.target.value })}
+                              placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
+                              type="password"
+                              value={mailboxForm.imapPassword}
+                            />
+                          </label>
+                          <label>
+                            <span>收件文件夹</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ imapFolder: event.target.value })}
+                              placeholder="INBOX"
+                              value={mailboxForm.imapFolder}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mailbox-section-title">
+                          <strong>发信 SMTP</strong>
+                          <small>用于后续处理人回复、自动回执和系统通知发信</small>
+                        </div>
+                        <div className="mailbox-form-grid three">
+                          <label>
+                            <span>SMTP 服务器</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ smtpHost: event.target.value })}
+                              placeholder="smtp.example.com"
+                              value={mailboxForm.smtpHost}
+                            />
+                          </label>
+                          <label>
+                            <span>SMTP 端口</span>
+                            <input
+                              min={1}
+                              max={65535}
+                              onChange={(event) => updateMailboxForm({ smtpPort: Number(event.target.value || 587) })}
+                              type="number"
+                              value={mailboxForm.smtpPort}
+                            />
+                          </label>
+                          <label>
+                            <span>SSL/TLS</span>
+                            <button
+                              className={mailboxForm.smtpSslEnabled ? 'template-switch enabled' : 'template-switch'}
+                              onClick={() => updateMailboxForm({ smtpSslEnabled: !mailboxForm.smtpSslEnabled })}
+                              type="button"
+                            >
+                              <span>{mailboxForm.smtpSslEnabled ? '启用' : '关闭'}</span>
+                              <i />
+                            </button>
+                          </label>
+                          <label>
+                            <span>SMTP 账号</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ smtpUsername: event.target.value })}
+                              placeholder="通常为邮箱地址"
+                              value={mailboxForm.smtpUsername}
+                            />
+                          </label>
+                          <label>
+                            <span>SMTP 密码/授权码</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ smtpPassword: event.target.value })}
+                              placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
+                              type="password"
+                              value={mailboxForm.smtpPassword}
+                            />
+                          </label>
+                          <label>
+                            <span>发件人显示名</span>
+                            <input
+                              onChange={(event) => updateMailboxForm({ smtpFromName: event.target.value })}
+                              placeholder="客服支持中心"
+                              value={mailboxForm.smtpFromName}
+                            />
+                          </label>
+                        </div>
+
+                        <div className="mailbox-section-title">
+                          <strong>处理策略</strong>
+                          <small>拉取频率和自动回执仅影响后续新邮件</small>
+                        </div>
+                        <div className="mailbox-form-grid three">
+                          <label>
+                            <span>拉取频率（秒）</span>
+                            <input
+                              min={60}
+                              max={1800}
+                              onChange={(event) => updateMailboxForm({ fetchIntervalSec: Number(event.target.value || 120) })}
+                              type="number"
+                              value={mailboxForm.fetchIntervalSec}
+                            />
+                            <small>建议 60-1800 秒，过短会增加邮箱服务压力。</small>
+                          </label>
+                          <label>
+                            <span>自动回执</span>
+                            <button
+                              className={mailboxForm.autoReplyEnabled ? 'template-switch enabled' : 'template-switch'}
+                              onClick={() => updateMailboxForm({ autoReplyEnabled: !mailboxForm.autoReplyEnabled })}
+                              type="button"
+                            >
+                              <span>{mailboxForm.autoReplyEnabled ? '启用自动回执' : '不发送自动回执'}</span>
+                              <i />
+                            </button>
+                          </label>
+                          <label>
+                            <span>回执模板ID</span>
+                            <input
+                              min={1}
+                              onChange={(event) => updateMailboxForm({ autoReplyTemplateId: event.target.value })}
+                              placeholder="为空则使用默认模板"
+                              type="number"
+                              value={mailboxForm.autoReplyTemplateId}
+                            />
+                          </label>
+                        </div>
+
+                        {mailboxTestResult && (
+                          <div className={mailboxTestResult.success ? 'mailbox-test-result ok' : 'mailbox-test-result error'}>
+                            <strong>{mailboxTestResult.success ? '连接测试通过' : '连接测试未通过'}</strong>
+                            <span>{mailboxTestResult.imapMessage}</span>
+                            <span>{mailboxTestResult.smtpMessage}</span>
+                          </div>
+                        )}
+
+                        <div className="mailbox-actions">
+                          <span>{mailboxForm.id ? '编辑时密码为空会沿用原授权码。' : '新建邮箱保存前需填写收信和发信授权码。'}</span>
+                          <div>
+                            <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('IMAP')} type="button">
+                              测试收信
+                            </button>
+                            <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('SMTP')} type="button">
+                              测试发信
+                            </button>
+                            <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('ALL')} type="button">
+                              {mailboxTesting ? '测试中...' : '测试全部'}
+                            </button>
+                            <button className="primary-action" disabled={mailboxSaving} onClick={() => void saveMailbox()} type="button">
+                              <Check size={16} />
+                              {mailboxSaving ? '保存中...' : '保存配置'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </>
+              )}
+            </section>
           ) : activeMenu === '编号规则' ? (
             <section className="app-content system-page" aria-label="编号规则配置">
               <div className="content-title">
@@ -2088,6 +2920,27 @@ function App() {
                 <button disabled={templateSaving} onClick={() => setTemplateConfirmOpen(false)} type="button">取消</button>
                 <button className="primary-action" disabled={templateSaving} onClick={saveTemplate} type="button">
                   {templateSaving ? '保存中...' : templateForm.id ? '确认保存' : '确认创建'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {mailboxConfirmAction && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="mailbox-confirm-title">
+            <div className="confirm-modal">
+              <h3 id="mailbox-confirm-title">{mailboxConfirmAction.title}</h3>
+              <p>{mailboxConfirmAction.text}</p>
+              <div className="confirm-target">
+                <strong>{mailboxConfirmAction.mailbox.mailboxName}</strong>
+                <span>{mailboxConfirmAction.mailbox.emailAddress}</span>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={mailboxActionLoading} onClick={() => setMailboxConfirmAction(null)} type="button">
+                  取消
+                </button>
+                <button className="primary-action" disabled={mailboxActionLoading} onClick={submitMailboxConfirm} type="button">
+                  {mailboxActionLoading ? '处理中...' : mailboxConfirmAction.actionLabel}
                 </button>
               </div>
             </div>
