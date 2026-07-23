@@ -679,6 +679,7 @@ function App() {
   const [mailboxesData, setMailboxesData] = useState<MailboxPageResponse | null>(null)
   const [mailboxesLoading, setMailboxesLoading] = useState(false)
   const [mailboxesError, setMailboxesError] = useState('')
+  const [mailboxAssignees, setMailboxAssignees] = useState<ManagedUser[]>([])
   const [mailboxForm, setMailboxForm] = useState<MailboxFormState>(emptyMailboxForm)
   const [mailboxDirty, setMailboxDirty] = useState(false)
   const [mailboxSaving, setMailboxSaving] = useState(false)
@@ -932,6 +933,24 @@ function App() {
   useEffect(() => {
     void fetchMailboxes()
   }, [fetchMailboxes])
+
+  const fetchMailboxAssignees = useCallback(async () => {
+    if (!token || activeMenu !== '邮箱配置' || !isAdmin) return
+
+    try {
+      const data = await requestApi<UserPageResponse>('/api/v1/users?page=1&size=100&roleCode=AGENT&enabled=true', {
+        headers: authHeaders(token),
+      })
+      setMailboxAssignees(data.records)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setMailboxAssignees([])
+    }
+  }, [activeMenu, handleAuthExpired, isAdmin, token])
+
+  useEffect(() => {
+    void fetchMailboxAssignees()
+  }, [fetchMailboxAssignees])
 
   function resetUserFilters() {
     setUserKeyword('')
@@ -1923,7 +1942,19 @@ function App() {
                             </thead>
                             <tbody>
                               {mailboxesData.records.map((mailbox) => (
-                                <tr className={mailboxForm.id === mailbox.id ? 'selected-row' : undefined} key={mailbox.id}>
+                                <tr
+                                  aria-selected={mailboxForm.id === mailbox.id}
+                                  className={mailboxForm.id === mailbox.id ? 'mailbox-selectable-row selected-row' : 'mailbox-selectable-row'}
+                                  key={mailbox.id}
+                                  onClick={() => selectMailbox(mailbox)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                      event.preventDefault()
+                                      selectMailbox(mailbox)
+                                    }
+                                  }}
+                                  tabIndex={0}
+                                >
                                   <td>
                                     <strong>{mailbox.mailboxName}</strong>
                                     <small>{mailbox.emailAddress}</small>
@@ -1945,7 +1976,7 @@ function App() {
                                   <td>{secondsLabel(mailbox.fetchIntervalSec)}</td>
                                   <td>{formatSyncTime(mailbox.lastFetchAt)}</td>
                                   <td>
-                                    <div className="user-ops">
+                                    <div className="user-ops" onClick={(event) => event.stopPropagation()}>
                                       <button onClick={() => selectMailbox(mailbox)} type="button">
                                         <Edit3 size={14} />
                                         编辑
@@ -2049,14 +2080,19 @@ function App() {
                             />
                           </label>
                           <label>
-                            <span>默认处理人ID</span>
-                            <input
-                              min={1}
+                            <span>默认处理人</span>
+                            <select
                               onChange={(event) => updateMailboxForm({ defaultAssigneeId: event.target.value })}
-                              placeholder="为空则后续按分配规则处理"
-                              type="number"
                               value={mailboxForm.defaultAssigneeId}
-                            />
+                            >
+                              <option value="">按分配规则处理</option>
+                              {mailboxAssignees.map((assignee) => (
+                                <option key={assignee.id} value={assignee.id}>
+                                  {assignee.displayName} / {assignee.account}
+                                </option>
+                              ))}
+                            </select>
+                            <small>为空时后续按自动分配规则选择处理人。</small>
                           </label>
                           <label>
                             <span>启用状态</span>
