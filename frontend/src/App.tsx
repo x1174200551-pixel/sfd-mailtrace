@@ -3089,7 +3089,7 @@ function App() {
                   <input
                     disabled={userFormSubmitting}
                     onChange={(event) => setUserForm((value) => ({ ...value, email: event.target.value }))}
-                    placeholder="agent01@sfonda.local"
+                    placeholder="agent01@ntn.fziot"
                     type="email"
                     value={userForm.email}
                   />

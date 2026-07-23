@@ -33,7 +33,7 @@ springdoc:
 
 logging:
   level:
-    com.sfonda.mailtrace: INFO
+    com.ntn.fziot.mailtrace: INFO
 
 mailtrace:
   security:

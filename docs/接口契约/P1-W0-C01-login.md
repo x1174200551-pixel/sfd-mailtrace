@@ -48,7 +48,7 @@
       "id": 1,
       "account": "admin",
       "displayName": "系统管理员",
-      "email": "admin@sfonda.local",
+      "email": "admin@ntn.fziot",
       "roleCode": "ADMIN"
     }
   }
@@ -88,7 +88,7 @@ Authorization: Bearer <token>
     "id": 1,
     "account": "admin",
     "displayName": "系统管理员",
-    "email": "admin@sfonda.local",
+    "email": "admin@ntn.fziot",
     "roleCode": "ADMIN"
   }
 }

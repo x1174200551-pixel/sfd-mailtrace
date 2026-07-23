@@ -1,20 +1,19 @@
 # MailTrace 邮迹工单
 
-sfonda 邮件工单系统（前后端同仓）。
+邮件工单系统（前后端同仓）。
 
 | 项 | 值 |
 |----|-----|
-| 公司 | sfonda |
 | 产品 | MailTrace（邮迹工单） |
 | 路径 | `/Users/tanzhixing/workSpace/sfd-mailtrace` |
-| 后端包名 | `com.sfonda.mailtrace` |
+| 后端包名 | `com.ntn.fziot.mailtrace` |
 | 表前缀 | `mt_` |
 
 ## 目录
 
 ```
 sfd-mailtrace/
-├── backend/     # Spring Boot 3 + Java 21
+├── backend/     # Spring Boot 3.2 + Java 17
 ├── frontend/    # React + Vite + TypeScript
 ├── deploy/      # Docker / Nginx
 └── docs/        # 需求、架构、数据库设计

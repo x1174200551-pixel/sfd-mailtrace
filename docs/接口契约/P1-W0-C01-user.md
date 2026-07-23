@@ -39,7 +39,7 @@
         "id": 1,
         "account": "admin",
         "displayName": "系统管理员",
-        "email": "admin@sfonda.local",
+        "email": "admin@ntn.fziot",
         "roleCode": "ADMIN",
         "enabled": true,
         "lastLoginAt": "2026-07-22T16:10:00",
@@ -70,7 +70,7 @@
 {
   "account": "agent01",
   "displayName": "客服一号",
-  "email": "agent01@sfonda.local",
+  "email": "agent01@ntn.fziot",
   "roleCode": "AGENT",
   "password": "agent123",
   "enabled": true
@@ -93,7 +93,7 @@
 ```json
 {
   "displayName": "客服一号",
-  "email": "agent01@sfonda.local",
+  "email": "agent01@ntn.fziot",
   "roleCode": "AGENT",
   "enabled": true
 }

@@ -13,7 +13,7 @@ INSERT INTO `mt_user` (
   'admin',
   '$2a$10$Z/c6q5zPa5L3Zz4ATiapEeGv/gYDsBxn17yPGyEcSMAGDsms7Nbp2',
   '系统管理员',
-  'admin@sfonda.local',
+  'admin@ntn.fziot',
   'ADMIN',
   1,
   'SYSTEM',
