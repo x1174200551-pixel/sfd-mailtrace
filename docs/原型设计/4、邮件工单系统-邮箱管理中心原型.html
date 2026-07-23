@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邮件工单系统 - 邮箱管理中心原型</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-soft: #eff6ff;
+            --success: #10b981;
+            --success-soft: #ecfdf5;
+            --warning: #f59e0b;
+            --warning-soft: #fffbeb;
+            --danger: #ef4444;
+            --danger-soft: #fef2f2;
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --line: #e5e7eb;
+            --line-soft: #f1f5f9;
+            --text: #111827;
+            --sub: #4b5563;
+            --muted: #9ca3af;
+            --shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            color: var(--text);
+            background: var(--bg);
+            font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+        }
+        button, input, select, textarea { font: inherit; }
+        button { cursor: pointer; }
+
+        .shell {
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            overflow: hidden;
+        }
+
+        .sidebar {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--line);
+            background: #fff;
+        }
+        .logo {
+            height: 64px;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo-mark {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--primary);
+            font-weight: 800;
+        }
+        .logo strong { font-size: 16px; font-weight: 800; }
+        .nav { flex: 1; overflow-y: auto; padding: 12px; }
+        .nav-group { margin-bottom: 16px; }
+        .nav-title {
+            padding: 8px 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .nav-item {
+            min-height: 40px;
+            border-radius: 8px;
+            padding: 0 12px;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--sub);
+            text-decoration: none;
+            font-weight: 650;
+        }
+        .nav-item.active { color: var(--primary); background: var(--primary-soft); }
+        .nav-main { min-width: 0; display: flex; align-items: center; gap: 10px; }
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 900;
+        }
+        .active .nav-icon { background: #dbeafe; color: var(--primary); }
+        .badge {
+            min-width: 20px;
+            border-radius: 999px;
+            padding: 2px 7px;
+            color: #fff;
+            background: var(--danger);
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 1.3;
+            text-align: center;
+        }
+        .badge.warning { background: var(--warning); }
+        .badge.primary { background: var(--primary); }
+        .collapse {
+            height: 48px;
+            border-top: 1px solid var(--line);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--sub);
+            font-weight: 650;
+        }
+
+        .main { min-width: 0; height: 100vh; display: flex; flex-direction: column; }
+        .topbar {
+            height: 64px;
+            flex: 0 0 64px;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--line);
+            display: grid;
+            grid-template-columns: minmax(180px, 260px) minmax(300px, 560px) auto;
+            align-items: center;
+            gap: 24px;
+            background: #fff;
+        }
+        .breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--sub); }
+        .breadcrumb strong { color: var(--text); }
+        .menu-button {
+            width: 32px;
+            height: 32px;
+            border: 0;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: var(--sub);
+            font-weight: 900;
+        }
+        .search {
+            height: 36px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 11px;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            background: #fff;
+            color: var(--muted);
+        }
+        .search input {
+            flex: 1;
+            min-width: 0;
+            border: 0;
+            outline: 0;
+            color: var(--text);
+        }
+        .kbd {
+            border-radius: 6px;
+            padding: 2px 6px;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .top-actions { justify-self: end; display: flex; align-items: center; gap: 14px; }
+        .icon-button {
+            width: 36px;
+            height: 36px;
+            border: 0;
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            font-weight: 900;
+            position: relative;
+        }
+        .notice-dot {
+            position: absolute;
+            right: 5px;
+            top: 3px;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            padding: 0 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 900;
+        }
+        .user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #059669;
+            color: #fff;
+            font-weight: 900;
+        }
+        .user strong { display: block; font-size: 13px; }
+        .user small { color: var(--sub); font-weight: 650; }
+
+        .content {
+            min-height: 0;
+            flex: 1;
+            overflow: auto;
+            padding: 22px 24px 26px;
+        }
+        .page-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .page-head h1 {
+            margin: 0 0 6px;
+            font-size: 24px;
+            line-height: 1.25;
+            letter-spacing: 0;
+        }
+        .page-head p {
+            margin: 0;
+            color: var(--sub);
+            font-weight: 650;
+        }
+        .actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .btn {
+            height: 36px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: #fff;
+            color: var(--text);
+            font-weight: 750;
+            white-space: nowrap;
+        }
+        .btn.primary {
+            border-color: var(--primary);
+            background: var(--primary);
+            color: #fff;
+            box-shadow: 0 12px 22px rgba(37, 99, 235, 0.18);
+        }
+        .btn.primary:hover { background: var(--primary-dark); }
+        .btn.subtle {
+            border-color: #dbeafe;
+            background: var(--primary-soft);
+            color: var(--primary);
+        }
+        .btn.danger {
+            border-color: #fecaca;
+            background: #fff;
+            color: #dc2626;
+        }
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.62;
+            box-shadow: none;
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .metric {
+            min-width: 0;
+            min-height: 112px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 42px;
+            gap: 10px;
+            align-items: center;
+            background: #fff;
+            box-shadow: var(--shadow);
+        }
+        .metric span { color: var(--sub); font-size: 13px; font-weight: 750; }
+        .metric strong { display: block; margin: 8px 0 4px; font-size: 28px; line-height: 1; }
+        .metric small { color: var(--sub); font-weight: 650; }
+        .metric-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary-soft);
+            color: var(--primary);
+            font-weight: 900;
+        }
+        .metric-icon.green { background: var(--success-soft); color: #059669; }
+        .metric-icon.orange { background: #fff7ed; color: #ea580c; }
+        .metric-icon.red { background: var(--danger-soft); color: #dc2626; }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(680px, 1fr) 420px;
+            gap: 16px;
+            align-items: start;
+        }
+        .panel {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .panel-head {
+            min-height: 58px;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .panel-head strong { font-size: 16px; }
+        .panel-head small { color: var(--sub); font-weight: 650; }
+        .toolbar {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--line-soft);
+            display: grid;
+            grid-template-columns: minmax(260px, 1fr) 150px 150px auto;
+            gap: 10px;
+        }
+        .field-control {
+            height: 36px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 11px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+        }
+        .field-control input,
+        .field-control select {
+            width: 100%;
+            min-width: 0;
+            border: 0;
+            outline: 0;
+            background: transparent;
+            color: var(--text);
+            font-weight: 650;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            height: 42px;
+            padding: 0 14px;
+            color: #64748b;
+            background: #f8fafc;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        td {
+            height: 64px;
+            padding: 10px 14px;
+            border-top: 1px solid var(--line-soft);
+            color: var(--text);
+            vertical-align: middle;
+        }
+        th:last-child,
+        td:last-child {
+            width: 78px;
+            white-space: nowrap;
+        }
+        tr.selected td { background: #f8fbff; }
+        .mailbox-name {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .mailbox-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--primary);
+            font-weight: 900;
+        }
+        .mailbox-name strong { display: block; margin-bottom: 3px; }
+        .mailbox-name small { color: var(--sub); font-weight: 650; }
+        .pill {
+            min-height: 24px;
+            border-radius: 999px;
+            padding: 3px 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .pill.blue { background: var(--primary-soft); color: var(--primary); }
+        .pill.green { background: var(--success-soft); color: #047857; }
+        .pill.red { background: var(--danger-soft); color: #dc2626; }
+        .pill.orange { background: var(--warning-soft); color: #b45309; }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            display: inline-block;
+            margin-right: 6px;
+            background: var(--success);
+        }
+        .status-dot.red { background: var(--danger); }
+        .status-dot.gray { background: #94a3b8; }
+        .muted { color: var(--sub); font-weight: 650; }
+        .strong-blue { color: var(--primary); font-weight: 850; }
+        .strong-red { color: #dc2626; font-weight: 850; }
+        .ops {
+            min-width: 58px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+        }
+        .link {
+            border: 0;
+            background: transparent;
+            color: var(--primary);
+            font-weight: 850;
+            padding: 0;
+            white-space: nowrap;
+        }
+        .more-menu {
+            position: absolute;
+            right: 0;
+            top: 28px;
+            width: 128px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 6px;
+            display: none;
+            background: #fff;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
+            z-index: 20;
+        }
+        .more-menu.open { display: block; }
+        .more-menu button {
+            width: 100%;
+            height: 32px;
+            border: 0;
+            border-radius: 6px;
+            padding: 0 9px;
+            text-align: left;
+            background: #fff;
+            color: var(--sub);
+            font-weight: 700;
+        }
+        .more-menu button:hover { background: #f8fafc; color: var(--text); }
+
+        .list-footer {
+            min-height: 50px;
+            padding: 0 16px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--sub);
+            font-weight: 650;
+        }
+        .pager { display: flex; align-items: center; gap: 8px; }
+        .page-btn {
+            width: 28px;
+            height: 28px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            background: #fff;
+            font-weight: 800;
+        }
+        .page-btn.active { border-color: var(--primary); background: var(--primary-soft); color: var(--primary); }
+
+        .form-panel { position: sticky; top: 0; }
+        .tabs {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px 0;
+            border-bottom: 1px solid var(--line);
+            overflow-x: auto;
+        }
+        .tab {
+            height: 34px;
+            border: 0;
+            border-bottom: 2px solid transparent;
+            padding: 0 8px;
+            background: transparent;
+            color: var(--sub);
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .tab.active {
+            border-bottom-color: var(--primary);
+            color: var(--primary);
+        }
+        .form-body { padding: 16px; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+        .form-field { min-width: 0; }
+        .form-field.full { grid-column: 1 / -1; }
+        .form-field label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: var(--text);
+            font-weight: 800;
+        }
+        .required { color: #dc2626; }
+        .form-field input,
+        .form-field select,
+        .form-field textarea {
+            width: 100%;
+            min-height: 38px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 11px;
+            outline: 0;
+            color: var(--text);
+            background: #fff;
+            font-weight: 650;
+        }
+        .form-field textarea {
+            min-height: 70px;
+            padding-top: 10px;
+            resize: vertical;
+            line-height: 1.55;
+        }
+        .form-field input:focus,
+        .form-field select:focus,
+        .form-field textarea:focus {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+        }
+        .hint {
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 650;
+            line-height: 1.55;
+        }
+        .switch-line {
+            min-height: 38px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: #fff;
+            font-weight: 750;
+        }
+        .switch {
+            width: 46px;
+            height: 24px;
+            border: 0;
+            border-radius: 999px;
+            padding: 3px;
+            display: inline-flex;
+            justify-content: flex-end;
+            background: var(--primary);
+        }
+        .switch.off { justify-content: flex-start; background: #cbd5e1; }
+        .switch span {
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            background: #fff;
+            box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
+        }
+        .form-actions {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        .test-card {
+            border: 1px solid #dbeafe;
+            border-radius: 8px;
+            padding: 14px;
+            background: #f8fbff;
+            margin-bottom: 12px;
+        }
+        .test-card strong { display: block; margin-bottom: 8px; }
+        .test-card p { margin: 0 0 12px; color: var(--sub); font-weight: 650; line-height: 1.6; }
+        .test-result {
+            min-height: 42px;
+            border-radius: 8px;
+            padding: 10px 12px;
+            background: #fff;
+            color: var(--sub);
+            font-weight: 650;
+        }
+        .test-result.ok { color: #047857; background: var(--success-soft); }
+        .test-result.fail { color: #dc2626; background: var(--danger-soft); }
+
+        .below {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .mini-table td { height: 46px; }
+        .progress {
+            width: 90px;
+            height: 8px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            overflow: hidden;
+        }
+        .progress span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: #38bdf8;
+        }
+        .state-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .state-card {
+            min-height: 96px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 14px;
+            background: #fff;
+        }
+        .state-card strong { display: block; margin-bottom: 8px; }
+        .state-card p { margin: 0; color: var(--sub); line-height: 1.55; font-weight: 650; }
+
+        .empty {
+            padding: 42px 24px;
+            display: none;
+            text-align: center;
+            color: var(--sub);
+        }
+        .empty.show { display: block; }
+        .empty strong { display: block; margin-bottom: 8px; color: var(--text); font-size: 16px; }
+        .loading-row {
+            display: none;
+            padding: 18px 16px;
+            border-bottom: 1px solid var(--line-soft);
+        }
+        .loading-row.show { display: block; }
+        .skeleton {
+            height: 14px;
+            border-radius: 999px;
+            margin: 10px 0;
+            background: linear-gradient(90deg, #eef2f7 0%, #f8fafc 45%, #eef2f7 100%);
+            background-size: 200% 100%;
+            animation: pulse 1s linear infinite;
+        }
+        @keyframes pulse {
+            from { background-position: 200% 0; }
+            to { background-position: -200% 0; }
+        }
+
+        .drawer-mask {
+            position: fixed;
+            inset: 0;
+            display: none;
+            background: rgba(15, 23, 42, 0.26);
+            z-index: 40;
+        }
+        .drawer-mask.open { display: block; }
+        .drawer {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 560px;
+            max-width: calc(100vw - 32px);
+            height: 100vh;
+            background: #fff;
+            box-shadow: -18px 0 40px rgba(15, 23, 42, 0.18);
+            transform: translateX(100%);
+            transition: transform 0.22s ease;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+        }
+        .drawer.open { transform: translateX(0); }
+        .drawer-head {
+            min-height: 64px;
+            padding: 0 18px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .drawer-head h3 { margin: 0; font-size: 18px; }
+        .drawer-body { min-height: 0; flex: 1; overflow: auto; padding: 16px; }
+        .drawer-foot {
+            padding: 14px 16px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .modal-mask {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(15, 23, 42, 0.28);
+            z-index: 70;
+        }
+        .modal-mask.open { display: flex; }
+        .modal {
+            width: 420px;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 24px 56px rgba(15, 23, 42, 0.22);
+            overflow: hidden;
+        }
+        .modal-head {
+            padding: 16px;
+            border-bottom: 1px solid var(--line);
+            font-weight: 850;
+            font-size: 16px;
+        }
+        .modal-body { padding: 16px; color: var(--sub); font-weight: 650; line-height: 1.65; }
+        .modal-foot {
+            padding: 14px 16px;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            background: #f8fafc;
+        }
+        .toast {
+            position: fixed;
+            right: 24px;
+            top: 78px;
+            min-width: 260px;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: none;
+            background: #f0fdf4;
+            color: #047857;
+            font-weight: 750;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.12);
+            z-index: 90;
+        }
+        .toast.show { display: block; }
+        .toast.error {
+            border-color: #fecaca;
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        @media (max-width: 1280px) {
+            .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .layout { grid-template-columns: 1fr; }
+            .form-panel { position: static; }
+            .state-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 920px) {
+            .shell { grid-template-columns: 1fr; }
+            .sidebar { display: none; }
+            .topbar { grid-template-columns: 1fr; height: auto; padding: 12px 16px; }
+            .search, .top-actions { display: none; }
+            .content { padding: 16px; }
+            .page-head { flex-direction: column; }
+            .metrics, .below, .state-grid { grid-template-columns: 1fr; }
+            .toolbar { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-mark">M</span>
+                <strong>邮件工单系统</strong>
+            </div>
+            <nav class="nav">
+                <div class="nav-group">
+                    <div class="nav-title">工作空间</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">H</span>工作台</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">工单中心</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">T</span>全部工单</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">U</span>我的工单</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">P</span>待处理</span><span class="badge">35</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">R</span>待客户回复</span><span class="badge warning">18</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">C</span>已关闭</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">邮件管理</div>
+                    <a class="nav-item active" href="#"><span class="nav-main"><span class="nav-icon">B</span>邮箱配置</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">I</span>收件记录</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">S</span>发件记录</span><span class="badge primary">3</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">SLA管理</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">L</span>SLA策略</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">D</span>工作日历</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">O</span>超时记录</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">系统管理</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">G</span>系统设置</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">N</span>通知模板</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">A</span>操作日志</span></a>
+                </div>
+            </nav>
+            <div class="collapse">收起菜单</div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div class="breadcrumb">
+                    <button class="menu-button" type="button">=</button>
+                    <span>邮件管理</span>
+                    <span>/</span>
+                    <strong>邮箱配置</strong>
+                </div>
+                <label class="search">
+                    <span>搜索</span>
+                    <input value="" placeholder="搜索工单、客户、邮箱账号或功能">
+                    <span class="kbd">⌘ K</span>
+                </label>
+                <div class="top-actions">
+                    <button class="icon-button" type="button" title="帮助">?</button>
+                    <button class="icon-button" type="button" title="通知">N<span class="notice-dot">10</span></button>
+                    <div class="user">
+                        <span class="avatar">李</span>
+                        <div><strong>李工</strong><small>客服处理人员</small></div>
+                    </div>
+                </div>
+            </header>
+
+            <section class="content">
+                <div class="page-head">
+                    <div>
+                        <h1>邮箱管理中心</h1>
+                        <p>配置企业客服邮箱的 IMAP 收信、SMTP 发信、自动回执和连接测试；第一期不开放 POP3。</p>
+                    </div>
+                    <div class="actions">
+                        <button class="btn" id="permissionButton" type="button">权限态</button>
+                        <button class="btn" id="refreshButton" type="button">刷新数据</button>
+                        <button class="btn primary" id="newButton" type="button">+ 新增邮箱</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric"><div><span>邮箱总数</span><strong>5</strong><small>已配置客服邮箱</small></div><span class="metric-icon">B</span></div>
+                    <div class="metric"><div><span>在线邮箱</span><strong>4</strong><small>IMAP/SMTP 正常</small></div><span class="metric-icon green">O</span></div>
+                    <div class="metric"><div><span>今日收件邮件</span><strong>128</strong><small>较昨日 +12%</small></div><span class="metric-icon">I</span></div>
+                    <div class="metric"><div><span>今日自动建单</span><strong>126</strong><small>建单成功率 98%</small></div><span class="metric-icon green">T</span></div>
+                    <div class="metric"><div><span>异常邮箱</span><strong>1</strong><small>连接测试失败</small></div><span class="metric-icon red">E</span></div>
+                    <div class="metric"><div><span>同步任务</span><strong>3</strong><small>正在运行</small></div><span class="metric-icon orange">R</span></div>
+                </div>
+
+                <div class="layout">
+                    <section class="panel">
+                        <div class="panel-head">
+                            <div><strong>邮箱账号管理</strong><br><small>只配置 IMAP 收信和 SMTP 发信；密码/授权码保存后不回显。</small></div>
+                            <span class="pill blue">共 5 个邮箱账号</span>
+                        </div>
+                        <div class="toolbar">
+                            <label class="field-control"><span>搜索</span><input id="keyword" placeholder="邮箱名称、地址、服务器"></label>
+                            <label class="field-control"><select id="statusFilter"><option value="ALL">全部状态</option><option value="OK">正常</option><option value="ERROR">异常</option><option value="DISABLED">停用</option></select></label>
+                            <label class="field-control"><select id="groupFilter"><option value="ALL">全部分组</option><option>客服组</option><option>销售组</option><option>管理组</option></select></label>
+                            <button class="btn subtle" id="clearSearch" type="button">清空</button>
+                        </div>
+                        <div class="loading-row" id="loadingRow">
+                            <div class="skeleton" style="width: 72%"></div>
+                            <div class="skeleton" style="width: 56%"></div>
+                            <div class="skeleton" style="width: 84%"></div>
+                        </div>
+                        <table id="mailboxTable">
+                            <thead>
+                                <tr>
+                                    <th>邮箱名称 / 地址</th>
+                                    <th>收发服务器</th>
+                                    <th>状态 / 规则</th>
+                                    <th>今日收件</th>
+                                    <th>最近同步</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="selected" data-keyword="客服支持邮箱 support@test.com imap.test.com 正常 客服组" data-status="OK" data-mailbox="support">
+                                    <td><div class="mailbox-name"><span class="mailbox-avatar">S</span><div><strong>客服支持邮箱</strong><small>support@test.com</small></div></div></td>
+                                    <td><span class="pill">IMAP</span> <span class="pill">SMTP</span><br><small class="muted">imap.test.com:993 / smtp.test.com:587</small></td>
+                                    <td><span class="status-dot"></span><strong>正常</strong><br><small class="muted">客服中心 / 客服组</small></td>
+                                    <td><span class="strong-blue">128</span></td>
+                                    <td><strong>10:32:20</strong><br><small class="muted">1 分钟前</small></td>
+                                    <td><div class="ops"><button class="link edit-row" type="button">编辑</button><button class="link more-row" type="button">更多</button><div class="more-menu"><button type="button" data-action="sync">立即拉取</button><button type="button" data-action="disable">停用邮箱</button><button type="button" data-action="delete">删除配置</button></div></div></td>
+                                </tr>
+                                <tr data-keyword="销售咨询邮箱 sales@test.com imap.test.com 正常 销售组" data-status="OK" data-mailbox="sales">
+                                    <td><div class="mailbox-name"><span class="mailbox-avatar" style="background:#f97316">S</span><div><strong>销售咨询邮箱</strong><small>sales@test.com</small></div></div></td>
+                                    <td><span class="pill">IMAP</span> <span class="pill">SMTP</span><br><small class="muted">imap.test.com:993 / smtp.test.com:587</small></td>
+                                    <td><span class="status-dot"></span><strong>正常</strong><br><small class="muted">销售中心 / 销售组</small></td>
+                                    <td>35</td>
+                                    <td><strong>10:31:58</strong><br><small class="muted">2 分钟前</small></td>
+                                    <td><div class="ops"><button class="link edit-row" type="button">编辑</button><button class="link more-row" type="button">更多</button><div class="more-menu"><button type="button" data-action="sync">立即拉取</button><button type="button" data-action="disable">停用邮箱</button><button type="button" data-action="delete">删除配置</button></div></div></td>
+                                </tr>
+                                <tr data-keyword="售后服务邮箱 service@test.com imap.test.com 正常 售后组" data-status="OK" data-mailbox="service">
+                                    <td><div class="mailbox-name"><span class="mailbox-avatar" style="background:#10b981">S</span><div><strong>售后服务邮箱</strong><small>service@test.com</small></div></div></td>
+                                    <td><span class="pill">IMAP</span> <span class="pill">SMTP</span><br><small class="muted">imap.test.com:993 / smtp.test.com:587</small></td>
+                                    <td><span class="status-dot"></span><strong>正常</strong><br><small class="muted">售后中心 / 售后组</small></td>
+                                    <td>28</td>
+                                    <td><strong>10:31:45</strong><br><small class="muted">3 分钟前</small></td>
+                                    <td><div class="ops"><button class="link edit-row" type="button">编辑</button><button class="link more-row" type="button">更多</button><div class="more-menu"><button type="button" data-action="sync">立即拉取</button><button type="button" data-action="disable">停用邮箱</button><button type="button" data-action="delete">删除配置</button></div></div></td>
+                                </tr>
+                                <tr data-keyword="系统通知邮箱 admin@test.com imap.test.com 正常 管理组" data-status="OK" data-mailbox="admin">
+                                    <td><div class="mailbox-name"><span class="mailbox-avatar" style="background:#8b5cf6">A</span><div><strong>系统通知邮箱</strong><small>admin@test.com</small></div></div></td>
+                                    <td><span class="pill">IMAP</span> <span class="pill">SMTP</span><br><small class="muted">imap.test.com:993 / smtp.test.com:587</small></td>
+                                    <td><span class="status-dot"></span><strong>正常</strong><br><small class="muted">系统通知 / 管理员组</small></td>
+                                    <td>18</td>
+                                    <td><strong>10:31:30</strong><br><small class="muted">3 分钟前</small></td>
+                                    <td><div class="ops"><button class="link edit-row" type="button">编辑</button><button class="link more-row" type="button">更多</button><div class="more-menu"><button type="button" data-action="sync">立即拉取</button><button type="button" data-action="disable">停用邮箱</button><button type="button" data-action="delete">删除配置</button></div></div></td>
+                                </tr>
+                                <tr data-keyword="合作伙伴邮箱 partner@test.com imap.partner.com 异常 客服组" data-status="ERROR" data-mailbox="partner">
+                                    <td><div class="mailbox-name"><span class="mailbox-avatar" style="background:#ef4444">P</span><div><strong>合作伙伴邮箱</strong><small>partner@test.com</small></div></div></td>
+                                    <td><span class="pill">IMAP</span> <span class="pill">SMTP</span><br><small class="muted">imap.partner.com:993 / smtp.partner.com:587</small></td>
+                                    <td><span class="status-dot red"></span><strong class="strong-red">异常</strong><br><small class="strong-red">连接失败 / 客服组</small></td>
+                                    <td>0</td>
+                                    <td><span class="strong-red">连接失败</span></td>
+                                    <td><div class="ops"><button class="link edit-row" type="button">编辑</button><button class="link more-row" type="button">更多</button><div class="more-menu"><button type="button" data-action="test">连接测试</button><button type="button" data-action="disable">停用邮箱</button><button type="button" data-action="delete">删除配置</button></div></div></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="empty" id="emptyState">
+                            <strong>未找到邮箱配置</strong>
+                            <p>可清空筛选条件，或点击“新增邮箱”创建企业客服邮箱。</p>
+                        </div>
+                        <div class="list-footer">
+                            <span id="countText">共 5 条</span>
+                            <div class="pager"><button class="page-btn" type="button">&lt;</button><button class="page-btn active" type="button">1</button><button class="page-btn" type="button">&gt;</button><select class="field-control" style="height:30px"><option>10 条/页</option></select></div>
+                        </div>
+                    </section>
+
+                    <aside class="panel form-panel">
+                        <div class="panel-head">
+                            <div><strong id="formTitle">编辑邮箱配置</strong><br><small>保存前建议先完成收信和发信连接测试。</small></div>
+                            <span class="pill green" id="saveBadge">已保存</span>
+                        </div>
+                        <div class="tabs">
+                            <button class="tab active" type="button" data-tab="basic">基础信息</button>
+                            <button class="tab" type="button" data-tab="imap">收信配置</button>
+                            <button class="tab" type="button" data-tab="smtp">发信配置</button>
+                            <button class="tab" type="button" data-tab="reply">自动回复</button>
+                            <button class="tab" type="button" data-tab="test">连接测试</button>
+                        </div>
+                        <div class="form-body">
+                            <div class="tab-panel" data-panel="basic">
+                                <div class="form-grid">
+                                    <div class="form-field full"><label><span><span class="required">*</span> 邮箱名称</span></label><input id="mailboxName" value="客服支持邮箱"></div>
+                                    <div class="form-field full"><label><span><span class="required">*</span> 邮箱地址</span></label><input id="mailboxEmail" value="support@test.com"></div>
+                                    <div class="form-field"><label>默认处理人</label><select><option>客服组轮询</option><option>李强</option><option>王敏</option></select></div>
+                                    <div class="form-field"><label>启用状态</label><div class="switch-line"><span id="enabledText">启用后参与拉取</span><button class="switch" id="enabledSwitch" type="button"><span></span></button></div></div>
+                                    <div class="form-field full"><label>说明</label><textarea>用于接收客户服务请求，自动建单后按客服组规则分配。</textarea></div>
+                                </div>
+                            </div>
+                            <div class="tab-panel" data-panel="imap" hidden>
+                                <div class="form-grid">
+                                    <div class="form-field full"><label>协议类型</label><div class="switch-line"><span>IMAP（第一期唯一收信协议）</span><span class="pill blue">POP3 后续</span></div></div>
+                                    <div class="form-field"><label><span><span class="required">*</span> IMAP 服务器</span></label><input value="imap.test.com"></div>
+                                    <div class="form-field"><label><span><span class="required">*</span> 端口</span></label><input value="993"></div>
+                                    <div class="form-field"><label><span><span class="required">*</span> IMAP 账号</span></label><input value="support@test.com"></div>
+                                    <div class="form-field"><label><span><span class="required">*</span> 密码 / 授权码</span></label><input type="password" value="mail-password"></div>
+                                    <div class="form-field"><label>收件文件夹</label><input value="INBOX"></div>
+                                    <div class="form-field"><label>拉取频率</label><select><option>每 2 分钟</option><option>每 1 分钟</option><option>每 3 分钟</option></select></div>
+                                    <div class="form-field full"><div class="switch-line"><span>启用 SSL 加密连接</span><button class="switch" type="button"><span></span></button></div><p class="hint">拉取成功后标记已读，并按 Message-ID 去重，避免重复建单。</p></div>
+                                </div>
+                            </div>
+                            <div class="tab-panel" data-panel="smtp" hidden>
+                                <div class="form-grid">
+                                    <div class="form-field"><label><span><span class="required">*</span> SMTP 服务器</span></label><input value="smtp.test.com"></div>
+                                    <div class="form-field"><label><span><span class="required">*</span> 端口</span></label><input value="587"></div>
+                                    <div class="form-field"><label><span><span class="required">*</span> SMTP 账号</span></label><input value="support@test.com"></div>
+                                    <div class="form-field"><label><span><span class="required">*</span> 密码 / 授权码</span></label><input type="password" value="mail-password"></div>
+                                    <div class="form-field full"><label>发件人显示名</label><input value="客服支持中心"></div>
+                                    <div class="form-field full"><div class="switch-line"><span>启用 TLS/SSL 加密连接</span><button class="switch" type="button"><span></span></button></div><p class="hint">用于自动回执、分配通知和处理人回复客户；发送失败只记录日志，不回滚已创建工单。</p></div>
+                                </div>
+                            </div>
+                            <div class="tab-panel" data-panel="reply" hidden>
+                                <div class="form-grid">
+                                    <div class="form-field full"><div class="switch-line"><span>启用自动回执</span><button class="switch" type="button"><span></span></button></div></div>
+                                    <div class="form-field full"><label>自动回执模板</label><select><option>自动回执模板 AUTO_REPLY</option><option>处理人回复模板 AGENT_REPLY</option></select><p class="hint">模板正文在“通知模板”中维护，此处只选择该邮箱使用的模板。</p></div>
+                                    <div class="form-field full"><label>默认分配规则</label><select><option>客服组轮询</option><option>按来源邮箱分配</option><option>暂不自动分配</option></select></div>
+                                </div>
+                            </div>
+                            <div class="tab-panel" data-panel="test" hidden>
+                                <div class="test-card">
+                                    <strong>收信连接测试</strong>
+                                    <p>使用当前 IMAP 配置登录邮箱并读取 INBOX 最新邮件标题，不创建工单。</p>
+                                    <button class="btn subtle test-button" type="button" data-kind="imap">测试收信</button>
+                                </div>
+                                <div class="test-card">
+                                    <strong>发信连接测试</strong>
+                                    <p>使用当前 SMTP 配置发送一封测试邮件到管理员邮箱，验证认证和 TLS。</p>
+                                    <button class="btn subtle test-button" type="button" data-kind="smtp">测试发信</button>
+                                </div>
+                                <div class="test-result" id="testResult">尚未执行连接测试。</div>
+                            </div>
+                            <div class="form-actions">
+                                <button class="btn" id="resetForm" type="button">重置</button>
+                                <button class="btn primary" id="saveForm" type="button">保存配置</button>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+
+                <div class="below">
+                    <section class="panel">
+                        <div class="panel-head"><strong>同步任务状态</strong><button class="link" type="button">全部任务</button></div>
+                        <table class="mini-table">
+                            <thead><tr><th>邮箱账号</th><th>状态</th><th>任务类型</th><th>开始时间</th><th>下次执行</th><th>进度</th></tr></thead>
+                            <tbody>
+                                <tr><td>客服支持邮箱</td><td><span class="pill green">运行中</span></td><td>拉取新邮件</td><td>10:32:00</td><td>10:34:00</td><td><div class="progress"><span style="width:75%"></span></div></td></tr>
+                                <tr><td>销售咨询邮箱</td><td><span class="pill green">运行中</span></td><td>拉取新邮件</td><td>10:31:30</td><td>10:33:30</td><td><div class="progress"><span style="width:60%"></span></div></td></tr>
+                                <tr><td>合作伙伴邮箱</td><td><span class="pill red">失败</span></td><td>连接测试</td><td>10:25:10</td><td>手动重试</td><td><span class="strong-red">认证失败</span></td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+                    <section class="panel">
+                        <div class="panel-head"><strong>邮件拉取日志</strong><button class="link" type="button">查看全部</button></div>
+                        <table class="mini-table">
+                            <thead><tr><th>时间</th><th>邮箱账号</th><th>动作</th><th>结果</th><th>数量</th><th>关联工单</th></tr></thead>
+                            <tbody>
+                                <tr><td>10:32:20</td><td>客服支持邮箱</td><td>拉取邮件</td><td><span class="pill green">成功</span></td><td>20 封</td><td>TCK-20260722-001 至 020</td></tr>
+                                <tr><td>10:31:58</td><td>销售咨询邮箱</td><td>拉取邮件</td><td><span class="pill green">成功</span></td><td>15 封</td><td>TCK-20260722-021 至 035</td></tr>
+                                <tr><td>10:25:10</td><td>合作伙伴邮箱</td><td>拉取邮件</td><td><span class="pill red">失败</span></td><td>0 封</td><td>连接超时</td></tr>
+                            </tbody>
+                        </table>
+                    </section>
+                </div>
+
+                <div class="state-grid">
+                    <div class="state-card"><strong>空态</strong><p>搜索无结果时显示未找到邮箱配置，并提供清空筛选和新增入口。</p></div>
+                    <div class="state-card"><strong>加载态</strong><p>刷新、连接测试和保存时按钮禁用，列表区域显示骨架屏。</p></div>
+                    <div class="state-card"><strong>错误态</strong><p>连接测试失败、邮箱重复、必填缺失时在页面顶部或字段下方提示原因。</p></div>
+                    <div class="state-card"><strong>权限态</strong><p>非管理员只读邮箱状态，隐藏新增、保存、停用和删除等维护按钮。</p></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div class="drawer-mask" id="drawerMask"></div>
+    <aside class="drawer" id="drawer">
+        <div class="drawer-head">
+            <h3>新增邮箱配置</h3>
+            <button class="btn" id="closeDrawer" type="button">关闭</button>
+        </div>
+        <div class="drawer-body">
+            <div class="form-grid">
+                <div class="form-field full"><label><span><span class="required">*</span> 邮箱名称</span></label><input placeholder="如：客服支持邮箱"></div>
+                <div class="form-field full"><label><span><span class="required">*</span> 邮箱地址</span></label><input placeholder="support@test.com"></div>
+                <div class="form-field"><label>默认处理人</label><select><option>客服组轮询</option><option>李强</option><option>王敏</option></select></div>
+                <div class="form-field"><label>收件文件夹</label><input value="INBOX"></div>
+                <div class="form-field"><label><span><span class="required">*</span> IMAP 服务器</span></label><input placeholder="imap.example.com"></div>
+                <div class="form-field"><label>IMAP 端口</label><input value="993"></div>
+                <div class="form-field"><label><span><span class="required">*</span> SMTP 服务器</span></label><input placeholder="smtp.example.com"></div>
+                <div class="form-field"><label>SMTP 端口</label><input value="587"></div>
+                <div class="form-field full"><label><span><span class="required">*</span> 密码 / 授权码</span></label><input type="password" placeholder="保存后加密，不回显明文"></div>
+                <div class="form-field full"><div class="switch-line"><span>启用自动回执</span><button class="switch" type="button"><span></span></button></div></div>
+            </div>
+        </div>
+        <div class="drawer-foot">
+            <button class="btn" id="cancelDrawer" type="button">取消</button>
+            <button class="btn subtle" id="drawerTest" type="button">测试连接</button>
+            <button class="btn primary" id="drawerSave" type="button">保存邮箱</button>
+        </div>
+    </aside>
+
+    <div class="modal-mask" id="modalMask">
+        <div class="modal">
+            <div class="modal-head" id="modalTitle">权限态</div>
+            <div class="modal-body" id="modalBody">非管理员只读邮箱配置和同步状态，不显示新增、保存、停用、删除等维护按钮。</div>
+            <div class="modal-foot"><button class="btn primary" id="modalOk" type="button">知道了</button></div>
+        </div>
+    </div>
+    <div class="toast" id="toast">操作完成</div>
+
+    <script>
+        const tabs = document.querySelectorAll('.tab');
+        const panels = document.querySelectorAll('.tab-panel');
+        const keyword = document.getElementById('keyword');
+        const statusFilter = document.getElementById('statusFilter');
+        const rows = [...document.querySelectorAll('#mailboxTable tbody tr')];
+        const emptyState = document.getElementById('emptyState');
+        const countText = document.getElementById('countText');
+        const toast = document.getElementById('toast');
+        const drawer = document.getElementById('drawer');
+        const drawerMask = document.getElementById('drawerMask');
+        const modalMask = document.getElementById('modalMask');
+        const loadingRow = document.getElementById('loadingRow');
+        const table = document.getElementById('mailboxTable');
+        const saveBadge = document.getElementById('saveBadge');
+        const testResult = document.getElementById('testResult');
+
+        function showToast(message, isError = false) {
+            toast.textContent = message;
+            toast.classList.toggle('error', isError);
+            toast.classList.add('show');
+            window.clearTimeout(window.toastTimer);
+            window.toastTimer = window.setTimeout(() => toast.classList.remove('show'), 1800);
+        }
+
+        function setLoading(isLoading) {
+            loadingRow.classList.toggle('show', isLoading);
+            table.style.opacity = isLoading ? '0.38' : '1';
+        }
+
+        function filterRows() {
+            const q = keyword.value.trim().toLowerCase();
+            const status = statusFilter.value;
+            let visible = 0;
+            rows.forEach(row => {
+                const hitKeyword = !q || row.dataset.keyword.toLowerCase().includes(q);
+                const hitStatus = status === 'ALL' || row.dataset.status === status;
+                const show = hitKeyword && hitStatus;
+                row.style.display = show ? '' : 'none';
+                if (show) visible += 1;
+            });
+            emptyState.classList.toggle('show', visible === 0);
+            table.style.display = visible === 0 ? 'none' : 'table';
+            countText.textContent = `共 ${visible} 条`;
+        }
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(item => item.classList.remove('active'));
+                panels.forEach(panel => panel.hidden = panel.dataset.panel !== tab.dataset.tab);
+                tab.classList.add('active');
+            });
+        });
+
+        keyword.addEventListener('input', filterRows);
+        statusFilter.addEventListener('change', filterRows);
+        document.getElementById('clearSearch').addEventListener('click', () => {
+            keyword.value = '';
+            statusFilter.value = 'ALL';
+            filterRows();
+        });
+
+        rows.forEach(row => {
+            row.addEventListener('click', event => {
+                if (event.target.closest('.ops')) return;
+                rows.forEach(item => item.classList.remove('selected'));
+                row.classList.add('selected');
+                showToast(`已选中 ${row.querySelector('.mailbox-name strong').textContent}`);
+            });
+        });
+
+        document.querySelectorAll('.edit-row').forEach(button => {
+            button.addEventListener('click', () => {
+                saveBadge.textContent = '编辑中';
+                saveBadge.className = 'pill orange';
+                showToast('已进入编辑状态，可修改右侧配置');
+            });
+        });
+
+        document.querySelectorAll('.more-row').forEach(button => {
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                document.querySelectorAll('.more-menu').forEach(menu => {
+                    if (menu !== button.nextElementSibling) menu.classList.remove('open');
+                });
+                button.nextElementSibling.classList.toggle('open');
+            });
+        });
+
+        document.querySelectorAll('.more-menu button').forEach(button => {
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                const action = button.dataset.action;
+                button.closest('.more-menu').classList.remove('open');
+                if (action === 'sync') showToast('已触发立即拉取任务');
+                if (action === 'test') {
+                    tabs.forEach(item => item.classList.toggle('active', item.dataset.tab === 'test'));
+                    panels.forEach(panel => panel.hidden = panel.dataset.panel !== 'test');
+                    showToast('已切换到连接测试');
+                }
+                if (action === 'disable') showToast('停用前会弹出二次确认');
+                if (action === 'delete') openModal('删除邮箱配置', '删除前需要确认该邮箱没有正在执行的拉取任务；历史邮件、工单和发送记录保留。');
+            });
+        });
+
+        document.addEventListener('click', event => {
+            if (!event.target.closest('.ops')) {
+                document.querySelectorAll('.more-menu').forEach(menu => menu.classList.remove('open'));
+            }
+        });
+
+        document.getElementById('refreshButton').addEventListener('click', () => {
+            const button = document.getElementById('refreshButton');
+            button.disabled = true;
+            button.textContent = '刷新中...';
+            setLoading(true);
+            window.setTimeout(() => {
+                setLoading(false);
+                button.disabled = false;
+                button.textContent = '刷新数据';
+                showToast('邮箱列表和同步状态已刷新');
+            }, 900);
+        });
+
+        document.getElementById('newButton').addEventListener('click', () => {
+            drawerMask.classList.add('open');
+            drawer.classList.add('open');
+        });
+        function closeDrawer() {
+            drawerMask.classList.remove('open');
+            drawer.classList.remove('open');
+        }
+        document.getElementById('closeDrawer').addEventListener('click', closeDrawer);
+        document.getElementById('cancelDrawer').addEventListener('click', closeDrawer);
+        drawerMask.addEventListener('click', closeDrawer);
+
+        document.getElementById('drawerTest').addEventListener('click', () => {
+            const button = document.getElementById('drawerTest');
+            button.disabled = true;
+            button.textContent = '测试中...';
+            window.setTimeout(() => {
+                button.disabled = false;
+                button.textContent = '测试连接';
+                showToast('收信和发信连接测试通过');
+            }, 900);
+        });
+        document.getElementById('drawerSave').addEventListener('click', () => {
+            closeDrawer();
+            showToast('新增邮箱已保存，密码已加密存储');
+        });
+
+        document.querySelectorAll('.test-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const kind = button.dataset.kind;
+                button.disabled = true;
+                button.textContent = kind === 'imap' ? '收信测试中...' : '发信测试中...';
+                testResult.className = 'test-result';
+                testResult.textContent = '正在连接邮箱服务器，请稍候。';
+                window.setTimeout(() => {
+                    button.disabled = false;
+                    button.textContent = kind === 'imap' ? '测试收信' : '测试发信';
+                    testResult.className = 'test-result ok';
+                    testResult.textContent = kind === 'imap'
+                        ? 'IMAP 连接成功，已读取 INBOX 最新邮件标题，不创建工单。'
+                        : 'SMTP 连接成功，测试邮件已发送到管理员邮箱。';
+                }, 1000);
+            });
+        });
+
+        document.getElementById('saveForm').addEventListener('click', () => {
+            const button = document.getElementById('saveForm');
+            button.disabled = true;
+            button.textContent = '保存中...';
+            window.setTimeout(() => {
+                button.disabled = false;
+                button.textContent = '保存配置';
+                saveBadge.textContent = '已保存';
+                saveBadge.className = 'pill green';
+                showToast('配置已保存，仅影响后续邮件拉取和发送');
+            }, 800);
+        });
+
+        document.getElementById('resetForm').addEventListener('click', () => {
+            saveBadge.textContent = '已还原';
+            saveBadge.className = 'pill blue';
+            showToast('已还原为上次保存的配置');
+        });
+
+        document.querySelectorAll('.switch').forEach(button => {
+            button.addEventListener('click', () => button.classList.toggle('off'));
+        });
+
+        function openModal(title, body) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalBody').textContent = body;
+            modalMask.classList.add('open');
+        }
+        document.getElementById('permissionButton').addEventListener('click', () => {
+            openModal('权限态', '非管理员只读邮箱配置和同步状态，不显示新增、保存、停用、删除等维护按钮；处理人仍可查看自己的收件和发件记录。');
+        });
+        document.getElementById('modalOk').addEventListener('click', () => modalMask.classList.remove('open'));
+        modalMask.addEventListener('click', event => {
+            if (event.target === modalMask) modalMask.classList.remove('open');
+        });
+    </script>
+</body>
+</html>
