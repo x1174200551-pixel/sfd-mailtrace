@@ -341,6 +341,30 @@ type MailFetchLogStats = {
   totalCreatedTickets: number
 }
 
+type MailSendLog = {
+  id: number
+  ticketId: number | null
+  mailboxId: number | null
+  sendType: string
+  toAddress: string
+  subject: string
+  contentBody: string | null
+  sendStatus: string
+  retryCount: number
+  maxRetry: number
+  errorMessage: string | null
+  sentAt: string | null
+  createdAt: string
+}
+
+type MailSendLogPageResponse = {
+  records: MailSendLog[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
@@ -366,7 +390,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: '邮箱配置', icon: Settings },
       { title: '收件记录', icon: Inbox },
-      { title: '发件记录', icon: Send, badge: '3', tone: 'primary' },
+      { title: '发件记录', icon: Send, tone: 'primary' },
     ],
   },
   {
@@ -755,6 +779,22 @@ function App() {
   const [fetchLogsError, setFetchLogsError] = useState('')
   const [fetchLogDetail, setFetchLogDetail] = useState<MailFetchLog | null>(null)
   const [fetchLogStats, setFetchLogStats] = useState<MailFetchLogStats | null>(null)
+
+  // ---- 发送日志 ----
+  const [sendLogPage, setSendLogPage] = useState(1)
+  const [sendLogPageSize, setSendLogPageSize] = useState(10)
+  const [sendLogMailboxFilter, setSendLogMailboxFilter] = useState('')
+  const [sendLogTypeFilter, setSendLogTypeFilter] = useState('ALL')
+  const [sendLogStatusFilter, setSendLogStatusFilter] = useState('ALL')
+  const [sendLogStartFrom, setSendLogStartFrom] = useState('')
+  const [sendLogStartTo, setSendLogStartTo] = useState('')
+  const [sendLogsData, setSendLogsData] = useState<MailSendLogPageResponse | null>(null)
+  const [sendLogsLoading, setSendLogsLoading] = useState(false)
+  const [sendLogsError, setSendLogsError] = useState('')
+  const [sendLogDetail, setSendLogDetail] = useState<MailSendLog | null>(null)
+  const [sendLogStats, setSendLogStats] = useState<{ totalCount: number; successCount: number; failCount: number } | null>(null)
+  const [sendPendingCount, setSendPendingCount] = useState(0)
+
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
@@ -1068,6 +1108,62 @@ function App() {
     } catch { /* stats 加载失败不影响主列表 */ }
   }, [token])
 
+  // ---- 发送日志 ----
+  const fetchSendLogs = useCallback(async () => {
+    if (!token || activeMenu !== '发件记录') return
+    const params = new URLSearchParams({
+      page: String(sendLogPage),
+      size: String(sendLogPageSize),
+    })
+    if (sendLogMailboxFilter) params.set('mailboxId', sendLogMailboxFilter)
+    if (sendLogTypeFilter !== 'ALL') params.set('sendType', sendLogTypeFilter)
+    if (sendLogStatusFilter !== 'ALL') params.set('sendStatus', sendLogStatusFilter)
+    if (sendLogStartFrom) params.set('startFrom', sendLogStartFrom)
+    if (sendLogStartTo) params.set('startTo', sendLogStartTo)
+
+    setSendLogsLoading(true)
+    setSendLogsError('')
+    try {
+      const data = await requestApi<MailSendLogPageResponse>(`/api/v1/mail-send/logs?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setSendLogsData(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setSendLogsError(error instanceof ApiError ? error.message : '加载发送日志失败')
+    } finally {
+      setSendLogsLoading(false)
+    }
+  }, [token, activeMenu, sendLogPage, sendLogPageSize, sendLogMailboxFilter, sendLogTypeFilter, sendLogStatusFilter, sendLogStartFrom, sendLogStartTo, handleAuthExpired])
+
+  const fetchSendLogStats = useCallback(async () => {
+    if (!token) return
+    try {
+      const data = await requestApi<{ totalCount: number; successCount: number; failCount: number }>('/api/v1/mail-send/logs/stats', { headers: authHeaders(token) })
+      setSendLogStats(data)
+    } catch { /* ignore */ }
+  }, [token])
+
+  const fetchSendPendingCount = useCallback(async () => {
+    if (!token) return
+    try {
+      const count = await requestApi<number>('/api/v1/mail-send/logs/pending-count', { headers: authHeaders(token) })
+      setSendPendingCount(count)
+    } catch { /* ignore */ }
+  }, [token])
+
+  useEffect(() => {
+    if (activeMenu === '发件记录') {
+      void fetchSendLogs()
+      void fetchSendLogStats()
+    }
+  }, [fetchSendLogs, activeMenu])
+
+  // 全局拉取待处理数量（菜单角标）
+  useEffect(() => {
+    if (token) void fetchSendPendingCount()
+  }, [token, fetchSendPendingCount])
+
   // 加载邮箱列表用于下拉筛选
   const fetchMailboxList = useCallback(async () => {
     if (!token) return
@@ -1080,7 +1176,7 @@ function App() {
   }, [token])
 
   useEffect(() => {
-    if (activeMenu === '收件记录') {
+    if (activeMenu === '收件记录' || activeMenu === '发件记录') {
       void fetchMailboxList()
     }
   }, [fetchMailboxList, activeMenu])
@@ -1663,9 +1759,9 @@ function App() {
                         <Icon size={18} strokeWidth={2.2} />
                         {!sidebarCollapsed && <span>{item.title}</span>}
                       </span>
-                      {!sidebarCollapsed && item.badge && (
+                      {!sidebarCollapsed && (item.badge || (item.title === '发件记录' && sendPendingCount > 0)) && (
                         <span className={item.tone ? `menu-badge ${item.tone}` : 'menu-badge'}>
-                          {item.badge}
+                          {item.title === '发件记录' ? sendPendingCount : item.badge}
                         </span>
                       )}
                     </button>
@@ -2860,6 +2956,169 @@ function App() {
                           margin: 0, color: '#cf1322', background: '#fff', borderRadius: 6,
                           padding: 10, border: '1px solid #ffccc7', lineHeight: 1.6,
                         }}>{fetchLogDetail.errorMessage}</pre>
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </Drawer>
+            </div>
+          ) : activeMenu === '发件记录' ? (
+            <div style={{ padding: 24, overflow: 'auto', height: '100%' }}>
+              {/* 页面标题 + 刷新 */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 18 }}>
+                <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em' }}>发送日志</h1>
+                <Button icon={<ReloadOutlined />} onClick={() => { void fetchSendLogs(); void fetchSendLogStats() }} loading={sendLogsLoading}>刷新数据</Button>
+              </div>
+
+              {/* 统计卡片 */}
+              {sendLogStats && (
+                <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+                  {[
+                    { label: '发送次数', value: sendLogStats.totalCount, sub: '含测试与自动发送', icon: 'S', cls: '#2563eb', bg: '#eff6ff' },
+                    { label: '成功任务', value: sendLogStats.successCount, sub: 'SMTP 发送正常', icon: 'E', cls: '#10b981', bg: '#ecfdf5' },
+                    { label: '失败任务', value: sendLogStats.failCount, sub: '可查看原因并重试', icon: 'D', cls: '#ef4444', bg: '#fef2f2' },
+                    { label: '发送中', value: sendLogsData ? sendLogsData.total - sendLogStats.successCount - sendLogStats.failCount : 0, sub: '待发送与重试中', icon: 'N', cls: '#f59e0b', bg: '#fffbeb' },
+                  ].map((card, i) => (
+                    <Col key={i} xs={24} sm={12} lg={6}>
+                      <Card size="small" styles={{ body: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '14px 16px' } }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: 13, color: '#4b5563', fontWeight: 650 }}>{card.label}</span>
+                          <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.04em', marginTop: 8 }}>{card.value}</div>
+                          <small style={{ display: 'block', marginTop: 6, color: '#9ca3af', fontSize: 12 }}>{card.sub}</small>
+                        </div>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16, background: card.bg, color: card.cls }}>{card.icon}</div>
+                      </Card>
+                    </Col>
+                  ))}
+                </Row>
+              )}
+
+              {/* 错误提示 */}
+              {sendLogsError && (
+                <Card size="small" style={{ marginBottom: 16, borderColor: '#ffccc7', background: '#fff2f0' }}>
+                  <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>日志查询失败</div>
+                    <Typography.Text type="secondary">{sendLogsError}</Typography.Text>
+                    <div style={{ marginTop: 8 }}><Button size="small" onClick={() => void fetchSendLogs()}>重新加载</Button></div>
+                  </div>
+                </Card>
+              )}
+
+              {/* 面板 */}
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 16, background: '#fff', boxShadow: '0 12px 30px rgba(15,23,42,0.06)', overflow: 'hidden' }}>
+                {/* 面板头 */}
+                <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <strong style={{ fontSize: 15 }}>SMTP 发送任务记录</strong>
+                  {sendLogsData && <span style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '4px 10px', background: '#eff6ff', color: '#2563eb', fontSize: 12, fontWeight: 800 }}>共 {sendLogsData.total} 条</span>}
+                </div>
+
+                {/* 筛选栏 */}
+                <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 3fr auto auto', gap: 12, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>邮箱</span>
+                    <Select value={sendLogMailboxFilter || undefined} onChange={v => { setSendLogMailboxFilter(v || ''); setSendLogPage(1) }} placeholder="全部邮箱" allowClear style={{ width: '100%' }} options={mailboxes.map(m => ({ value: String(m.id), label: m.mailboxName }))} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>类型</span>
+                    <Select value={sendLogTypeFilter === 'ALL' ? undefined : sendLogTypeFilter} onChange={v => { setSendLogTypeFilter(v ?? 'ALL'); setSendLogPage(1) }} placeholder="全部类型" allowClear style={{ width: '100%' }} options={[{ value: 'TEST', label: '测试' }, { value: 'AUTO_REPLY', label: '自动回执' }, { value: 'ASSIGN_NOTIFY', label: '分配通知' }, { value: 'AGENT_REPLY', label: '客服回复' }]} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>状态</span>
+                    <Select value={sendLogStatusFilter === 'ALL' ? undefined : sendLogStatusFilter} onChange={v => { setSendLogStatusFilter(v ?? 'ALL'); setSendLogPage(1) }} placeholder="全部状态" allowClear style={{ width: '100%' }} options={[{ value: 'SUCCESS', label: '成功' }, { value: 'FAILED', label: '失败' }, { value: 'PENDING', label: '待发送' }, { value: 'RETRYING', label: '重试中' }]} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>时间</span>
+                    <DatePicker.RangePicker
+                      showTime={{ format: 'HH:mm' }} format="YYYY-MM-DD HH:mm" style={{ width: '100%' }}
+                      value={sendLogStartFrom && sendLogStartTo ? [dayjs(sendLogStartFrom), dayjs(sendLogStartTo)] : null}
+                      onChange={(dates) => { setSendLogStartFrom(dates?.[0]?.format('YYYY-MM-DDTHH:mm:ss') || ''); setSendLogStartTo(dates?.[1]?.format('YYYY-MM-DDTHH:mm:ss') || ''); setSendLogPage(1) }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <Button onClick={() => { setSendLogMailboxFilter(''); setSendLogTypeFilter('ALL'); setSendLogStatusFilter('ALL'); setSendLogStartFrom(''); setSendLogStartTo(''); setSendLogPage(1) }}>清空筛选</Button>
+                    <Button type="primary" icon={<SearchOutlined />} onClick={() => { setSendLogPage(1); void fetchSendLogs() }}>查询</Button>
+                  </div>
+                </div>
+
+                {/* 表格 */}
+                <Table<MailSendLog>
+                  rowKey="id"
+                  dataSource={sendLogsData?.records}
+                  loading={sendLogsLoading}
+                  locale={{ emptyText: <Empty description="未找到发送日志，请检查邮件发送配置是否已启用。" /> }}
+                  pagination={{
+                    current: sendLogPage,
+                    pageSize: sendLogPageSize,
+                    total: sendLogsData?.total || 0,
+                    showSizeChanger: true,
+                    pageSizeOptions: ['10', '20'],
+                    showTotal: (total) => `共 ${total} 条`,
+                    onChange: (page, size) => { setSendLogPage(page); setSendLogPageSize(size) },
+                  }}
+                  onRow={(record) => ({ onClick: () => setSendLogDetail(record), style: { cursor: 'pointer' } })}
+                  columns={[
+                    { title: '#', width: 50, render: (_: unknown, __: unknown, index: number) => (sendLogPage - 1) * sendLogPageSize + index + 1 },
+                    { title: '发送时间', dataIndex: 'createdAt', render: (v: string) => v?.replace('T', ' ').slice(0, 16) || '-', width: 150 },
+                    { title: '收件人', dataIndex: 'toAddress', width: 180 },
+                    { title: '主题', dataIndex: 'subject', ellipsis: true, width: 250 },
+                    { title: '类型', dataIndex: 'sendType', width: 90, render: (v: string) => {
+                      const labels: Record<string, string> = { 'TEST': '测试', 'AUTO_REPLY': '自动回执', 'ASSIGN_NOTIFY': '分配通知', 'AGENT_REPLY': '客服回复' }
+                      return labels[v] || v
+                    }},
+                    { title: '状态', dataIndex: 'sendStatus', width: 80, render: (v: string) => {
+                      if (v === 'SUCCESS') return <Tag color="success">成功</Tag>
+                      if (v === 'FAILED') return <Tag color="error">失败</Tag>
+                      if (v === 'PENDING') return <Tag color="processing">待发</Tag>
+                      return <Tag color="warning">重试中</Tag>
+                    }},
+                    { title: '重试', dataIndex: 'retryCount', width: 60, render: (v: number, r) => `${v}/${r.maxRetry}` },
+                    { title: '错误信息', dataIndex: 'errorMessage', ellipsis: true, width: 200, render: (v: string) => v ? <Typography.Text type="danger" style={{ fontSize: 12 }}>{v}</Typography.Text> : '' },
+                    { title: '操作', width: 60, render: (_, r) => <Button type="link" size="small" onClick={e => { e.stopPropagation(); setSendLogDetail(r) }}>详情</Button> },
+                  ]}
+                  scroll={{ x: 1000 }}
+                  size="middle"
+                />
+              </div>
+
+              {/* 详情抽屉 */}
+              <Drawer title={<span style={{ fontSize: 16, fontWeight: 700 }}>发送任务详情</span>}
+                placement="right" width={520} onClose={() => setSendLogDetail(null)} open={!!sendLogDetail}
+                extra={<Button size="small" onClick={() => setSendLogDetail(null)} icon={<CloseOutlined />}>关闭</Button>}>
+                {sendLogDetail && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa', borderRadius: 10, padding: '14px 18px', border: '1px solid #f0f0f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 12, color: '#8c8c8c', fontWeight: 500 }}>任务编号</span>
+                        <span style={{ fontWeight: 700, fontSize: 15, color: '#262626' }}>{sendLogDetail.id}</span>
+                        <span style={{ width: 1, height: 20, background: '#e8e8e8' }} />
+                        {sendLogDetail.sendStatus === 'SUCCESS' ? <Tag color="success">成功</Tag> : sendLogDetail.sendStatus === 'FAILED' ? <Tag color="error">失败</Tag> : sendLogDetail.sendStatus === 'PENDING' ? <Tag color="processing">待发</Tag> : <Tag color="warning">重试中</Tag>}
+                      </div>
+                      <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+                        {sendLogDetail.sendType === 'TEST' ? '📧 测试发送' : sendLogDetail.sendType === 'AUTO_REPLY' ? '🤖 自动回执' : sendLogDetail.sendType === 'ASSIGN_NOTIFY' ? '📢 分配通知' : '💬 客服回复'}
+                      </span>
+                    </div>
+                    <Card size="small" title={<span style={{ fontSize: 13, fontWeight: 600 }}>📬 发送信息</span>} styles={{ body: { padding: '12px 16px' } }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        {[
+                          ['收件人', sendLogDetail.toAddress],
+                          ['邮件主题', sendLogDetail.subject],
+                          ['发送类型', ({ 'TEST': '测试', 'AUTO_REPLY': '自动回执', 'ASSIGN_NOTIFY': '分配通知', 'AGENT_REPLY': '客服回复' }[sendLogDetail.sendType] || sendLogDetail.sendType)],
+                          ['创建时间', sendLogDetail.createdAt?.replace('T', ' ').slice(0, 16) || '-'],
+                          ['发送时间', sendLogDetail.sentAt?.replace('T', ' ').slice(0, 16) || '-'],
+                          ['重试次数', `${sendLogDetail.retryCount}/${sendLogDetail.maxRetry}`],
+                        ].map(([label, value]) => (
+                          <div key={label}><div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 2 }}>{label}</div><div style={{ fontWeight: 600, fontSize: 13 }}>{value}</div></div>
+                        ))}
+                      </div>
+                    </Card>
+                    {sendLogDetail.contentBody && (
+                      <Card size="small" title={<span style={{ fontSize: 13, fontWeight: 600 }}>📄 邮件正文</span>} styles={{ body: { padding: '12px 16px', background: '#fafafa' } }}>
+                        <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 300, overflow: 'auto', margin: 0, color: '#262626', lineHeight: 1.6 }}>{sendLogDetail.contentBody}</pre>
+                      </Card>
+                    )}
+                    {sendLogDetail.errorMessage && (
+                      <Card size="small" styles={{ header: { background: '#fff2f0', borderBottom: '1px solid #ffccc7' }, body: { padding: '12px 16px', background: '#fff2f0' } }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}><span style={{ color: '#ff4d4f', fontWeight: 700, fontSize: 13 }}>⚠ 错误详情</span></div>
+                        <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto', margin: 0, color: '#cf1322', background: '#fff', borderRadius: 6, padding: 10, border: '1px solid #ffccc7', lineHeight: 1.6 }}>{sendLogDetail.errorMessage}</pre>
                       </Card>
                     )}
                   </div>

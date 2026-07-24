@@ -29,4 +29,14 @@ public class MailSendController {
         }
         return BasicResult.fail(50001, result.message());
     }
+
+    @Operation(summary = "重试发送失败邮件")
+    @PostMapping("/retry")
+    public BasicResult<MailSendService.SendResult> retrySend(@RequestParam Long id) {
+        MailSendService.SendResult result = mailSendService.retrySend(id);
+        if (result.success()) {
+            return BasicResult.ok(result);
+        }
+        return BasicResult.fail(50001, result.message());
+    }
 }

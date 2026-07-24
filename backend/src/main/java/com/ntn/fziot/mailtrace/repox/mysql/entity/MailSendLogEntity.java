@@ -26,6 +26,8 @@ public class MailSendLogEntity {
 
     private String subject;
 
+    private String contentBody;
+
     private String sendStatus;
 
     private Integer retryCount;

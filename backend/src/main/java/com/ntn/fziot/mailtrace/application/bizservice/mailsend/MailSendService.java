@@ -33,6 +33,34 @@ public class MailSendService {
     private final MailPasswordCipher mailPasswordCipher;
 
     /**
+     * 发送一封指定内容的邮件（供自动回执、分配通知等内部调用）。
+     *
+     * @param mailboxId 发件邮箱 ID
+     * @param toAddress 收件人
+     * @param subject   主题
+     * @param content   正文
+     * @param sendType  发送类型（AUTO_REPLY / ASSIGN_NOTIFY 等）
+     * @return 发送结果
+     */
+    public SendResult sendRawMail(Long mailboxId, String toAddress, String subject, String content, String sendType) {
+        MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
+        if (mailbox == null) {
+            return SendResult.fail("邮箱不存在：" + mailboxId);
+        }
+        String smtpPassword;
+        try {
+            smtpPassword = mailPasswordCipher.decrypt(mailbox.getSmtpPasswordEnc());
+        } catch (Exception e) {
+            return SendResult.fail("SMTP 密码解密失败");
+        }
+        return doSend(mailbox, smtpPassword, toAddress, getFromAddress(mailbox), subject, content, sendType);
+    }
+
+    public SendResult sendRawMail(Long mailboxId, String toAddress, String subject, String content) {
+        return sendRawMail(mailboxId, toAddress, subject, content, "AUTO_REPLY");
+    }
+
+    /**
      * 发送一封测试邮件。
      *
      * @param mailboxId 发件邮箱 ID
@@ -61,7 +89,8 @@ public class MailSendService {
         // 3、构建并发送邮件
         return doSend(mailbox, smtpPassword, toAddress,
                 getFromAddress(mailbox), "MailTrace 测试邮件",
-                "这是一封来自 MailTrace 邮件工单系统的测试邮件。\n\n如果您收到此邮件，说明 SMTP 配置正确，发信服务正常工作。");
+                "这是一封来自 MailTrace 邮件工单系统的测试邮件。\n\n如果您收到此邮件，说明 SMTP 配置正确，发信服务正常工作。",
+                "TEST");
     }
 
     /**
@@ -69,10 +98,10 @@ public class MailSendService {
      */
     private SendResult doSend(MailboxEntity mailbox, String smtpPassword,
                               String toAddress, String fromAddress,
-                              String subject, String content) {
+                              String subject, String content, String sendType) {
         long start = System.currentTimeMillis();
         Transport transport = null;
-        MailSendLogEntity logEntity = createLog(mailbox.getId(), toAddress, subject);
+        MailSendLogEntity logEntity = createLog(mailbox.getId(), toAddress, subject, content, sendType);
 
         try {
             // 建立 SMTP 连接
@@ -119,6 +148,69 @@ public class MailSendService {
     }
 
     /**
+     * 重试发送一封失败邮件。直接更新已有日志，不新建。
+     */
+    public SendResult retrySend(Long sendLogId) {
+        // 1、查发送日志
+        MailSendLogEntity logEntity = mailSendLogMapper.selectById(sendLogId);
+        if (logEntity == null) {
+            return SendResult.fail("发送日志不存在：" + sendLogId);
+        }
+        if (!"FAILED".equals(logEntity.getSendStatus())) {
+            return SendResult.fail("只有失败状态的记录可以重试，当前状态：" + logEntity.getSendStatus());
+        }
+        // 2、查邮箱配置
+        MailboxEntity mailbox = mailboxMapper.selectById(logEntity.getMailboxId());
+        if (mailbox == null) {
+            return SendResult.fail("发件邮箱不存在：" + logEntity.getMailboxId());
+        }
+        // 3、解密密码
+        String smtpPassword;
+        try {
+            smtpPassword = mailPasswordCipher.decrypt(mailbox.getSmtpPasswordEnc());
+        } catch (Exception e) {
+            return SendResult.fail("SMTP 密码解密失败");
+        }
+        // 4、执行发送
+        return doRetrySend(mailbox, smtpPassword, logEntity);
+    }
+
+    private SendResult doRetrySend(MailboxEntity mailbox, String smtpPassword, MailSendLogEntity logEntity) {
+        long start = System.currentTimeMillis();
+        Transport transport = null;
+        try {
+            transport = openTransport(mailbox, smtpPassword);
+            MimeMessage msg = new MimeMessage(Session.getInstance(new Properties()));
+            msg.setFrom(new InternetAddress(getFromAddress(mailbox), mailbox.getSmtpFromName(), "UTF-8"));
+            msg.setRecipient(Message.RecipientType.TO, new InternetAddress(logEntity.getToAddress()));
+            msg.setSubject(logEntity.getSubject(), "UTF-8");
+            msg.setText(logEntity.getContentBody() != null ? logEntity.getContentBody() : "", "UTF-8");
+            msg.saveChanges();
+            transport.sendMessage(msg, msg.getAllRecipients());
+            long elapsed = System.currentTimeMillis() - start;
+            log.info("邮件重试成功 sendLogId={} to={} subject={} 耗时={}ms",
+                    logEntity.getId(), logEntity.getToAddress(), logEntity.getSubject(), elapsed);
+            logEntity.setSendStatus("SUCCESS");
+            logEntity.setSentAt(LocalDateTime.now());
+            logEntity.setErrorMessage(null);
+            mailSendLogMapper.updateById(logEntity);
+            return SendResult.ok("重试发送成功，耗时 " + elapsed + "ms");
+        } catch (Exception e) {
+            long elapsed = System.currentTimeMillis() - start;
+            String errorMsg = truncateError(e);
+            log.warn("邮件重试失败 sendLogId={} to={} 耗时={}ms reason={}",
+                    logEntity.getId(), logEntity.getToAddress(), elapsed, errorMsg);
+            logEntity.setSendStatus("FAILED");
+            logEntity.setRetryCount(logEntity.getRetryCount() == null ? 0 : logEntity.getRetryCount() + 1);
+            logEntity.setErrorMessage(errorMsg);
+            mailSendLogMapper.updateById(logEntity);
+            return SendResult.fail("重试失败：" + errorMsg);
+        } finally {
+            closeTransport(transport);
+        }
+    }
+
+    /**
      * 建立 SMTP Transport 连接。
      */
     private Transport openTransport(MailboxEntity mailbox, String smtpPassword) throws MessagingException {
@@ -149,12 +241,13 @@ public class MailSendService {
         return "noreply@ntn.fziot";
     }
 
-    private MailSendLogEntity createLog(Long mailboxId, String toAddress, String subject) {
+    private MailSendLogEntity createLog(Long mailboxId, String toAddress, String subject, String contentBody, String sendType) {
         MailSendLogEntity log = new MailSendLogEntity();
         log.setMailboxId(mailboxId);
-        log.setSendType("TEST");
+        log.setSendType(sendType);
         log.setToAddress(toAddress);
         log.setSubject(subject);
+        log.setContentBody(contentBody);
         log.setSendStatus("PENDING");
         log.setRetryCount(0);
         log.setMaxRetry(5);
