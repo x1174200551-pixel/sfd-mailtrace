@@ -1,8 +1,11 @@
 package com.ntn.fziot.mailtrace.application.bizservice.mailfetch;
 
+import com.ntn.fziot.mailtrace.application.bizservice.ticket.MessageThreadService;
+import com.ntn.fziot.mailtrace.application.bizservice.ticket.TicketBizService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchClient;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchConfig;
+import com.ntn.fziot.mailtrace.infrastructure.mail.ParsedMail;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailFetchLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailFetchLogMapper;
@@ -16,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +39,12 @@ class MailFetchBizServiceTest {
     private MailPasswordCipher mailPasswordCipher;
     @Mock
     private ImapFetchClient imapFetchClient;
+    @Mock
+    private MessageIdDedupService messageIdDedupService;
+    @Mock
+    private MessageThreadService messageThreadService;
+    @Mock
+    private TicketBizService ticketBizService;
 
     @InjectMocks
     private MailFetchBizService mailFetchBizService;
@@ -80,7 +90,8 @@ class MailFetchBizServiceTest {
     void fetchMailbox_whenImapSuccess_shouldWriteSuccessLog() throws Exception {
         when(mailboxMapper.selectById(11L)).thenReturn(mailbox);
         when(mailPasswordCipher.decrypt("enc")).thenReturn("secret");
-        when(imapFetchClient.countUnseenMessages(any(ImapFetchConfig.class))).thenReturn(3);
+        when(imapFetchClient.fetchUnseenMessages(any(ImapFetchConfig.class))).thenReturn(List.of());
+        when(messageIdDedupService.filterNew(any())).thenReturn(List.of());
         when(mailFetchLogMapper.insert(any(MailFetchLogEntity.class))).thenAnswer(invocation -> {
             MailFetchLogEntity entity = invocation.getArgument(0);
             entity.setId(1001L);
@@ -94,7 +105,7 @@ class MailFetchBizServiceTest {
         verify(mailFetchLogMapper).insert(logCaptor.capture());
         MailFetchLogEntity saved = logCaptor.getValue();
         assertTrue(Boolean.TRUE.equals(saved.getSuccess()));
-        assertEquals(3, saved.getFetchedCount());
+        assertEquals(0, saved.getFetchedCount());
         assertEquals(MailFetchBizService.TRIGGER_SCHEDULED, saved.getTriggerType());
         assertEquals(0, saved.getCreatedTicketCount());
         verify(mailboxMapper).updateById(any(MailboxEntity.class));
@@ -104,7 +115,7 @@ class MailFetchBizServiceTest {
     void fetchMailbox_whenImapFails_shouldWriteFailureLog() throws Exception {
         when(mailboxMapper.selectById(11L)).thenReturn(mailbox);
         when(mailPasswordCipher.decrypt("enc")).thenReturn("secret");
-        when(imapFetchClient.countUnseenMessages(any(ImapFetchConfig.class)))
+        when(imapFetchClient.fetchUnseenMessages(any(ImapFetchConfig.class)))
                 .thenThrow(new IllegalStateException("Invalid credentials"));
         when(mailFetchLogMapper.insert(any(MailFetchLogEntity.class))).thenAnswer(invocation -> {
             MailFetchLogEntity entity = invocation.getArgument(0);

@@ -373,17 +373,24 @@ public final class IncomingMailParser {
     }
 
     /**
-     * 极简 HTML → 纯文本：去掉标签，保留换行。
+     * HTML → 纯文本：将块级标签转成换行，去掉其余标签，保留段落结构。
      */
     static String stripHtml(String html) {
         if (html == null || html.isBlank()) return "";
         return html
+                .replaceAll("(?i)<br\\s*/?>", "\n")
+                .replaceAll("(?i)</p>", "\n")
+                .replaceAll("(?i)</div>", "\n")
+                .replaceAll("(?i)</li>", "\n")
+                .replaceAll("(?i)</(h\\d|blockquote|tr|th)>", "\n")
                 .replaceAll("(?s)<[^>]*>", " ")
                 .replaceAll("&nbsp;", " ")
                 .replaceAll("&lt;", "<")
                 .replaceAll("&gt;", ">")
                 .replaceAll("&amp;", "&")
-                .replaceAll("\\s+", " ")
+                .replaceAll("[ \\t]+", " ")
+                .replaceAll("\\n[ \\t]+", "\n")
+                .replaceAll("\\n{3,}", "\n\n")
                 .trim();
     }
 

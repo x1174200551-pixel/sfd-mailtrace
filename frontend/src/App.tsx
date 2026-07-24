@@ -1,10 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import TiptapRichEditor from './TiptapRichEditor'
 import {
-  Card, Table, Select, Button, Drawer, Tag, Row, Col,
-  DatePicker, Empty, Typography,
+  Card, Table, Select, Button, Drawer, Tag, Row, Col, Modal,
+  DatePicker, Empty, Typography, Alert, Input, Pagination,
+  Tabs, Timeline, Descriptions, Space, Avatar, Segmented, message,
 } from 'antd'
-import { ReloadOutlined, CloseOutlined, SearchOutlined } from '@ant-design/icons'
+import {
+  ArrowLeftOutlined,
+  CloseCircleOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  EllipsisOutlined,
+  FileTextOutlined,
+  FlagOutlined,
+  PaperClipOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+  SendOutlined,
+  StarTwoTone,
+  SwapOutlined,
+} from '@ant-design/icons'
 import dayjs from 'dayjs'
 import {
   Bell,
@@ -20,6 +38,7 @@ import {
   Inbox,
   Layers,
   ListChecks,
+  Loader,
   LogOut,
   LockKeyhole,
   Mail,
@@ -41,6 +60,7 @@ import {
   Timer,
   TriangleAlert,
   UserCog,
+  UserPlus,
   UserRound,
   Users,
   X,
@@ -341,6 +361,100 @@ type MailFetchLogStats = {
   totalCreatedTickets: number
 }
 
+// ---- 工单类型 ----
+type TicketSummary = {
+  id: number
+  ticketNo: string
+  subject: string
+  status: string
+  priority: string
+  customerEmail: string
+  assigneeId: number | null
+  assigneeName: string | null
+  mailboxId: number
+  mailboxName: string | null
+  linkSuspect: boolean
+  hasReplied: boolean
+  slaResponseDeadline: string | null
+  slaBreached: boolean
+  createdAt: string
+}
+
+type TicketPageResponse = {
+  records: TicketSummary[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
+type TicketDetail = {
+  id: number
+  ticketNo: string
+  subject: string
+  status: string
+  priority: string
+  mailboxId: number
+  mailboxName: string | null
+  customerEmail: string
+  assigneeId: number | null
+  assigneeName: string | null
+  linkSuspect: boolean
+  slaBreached: boolean
+  slaResponseDeadline: string | null
+  slaResolveDeadline: string | null
+  firstReplyAt: string | null
+  closedAt: string | null
+  remark: string | null
+  createdAt: string
+  updatedAt: string
+  messages: any[]
+  events: { id: number; eventType: string; eventContent: string; operator: string; eventAt: string }[]
+}
+
+function relativeTime(t: string) {
+  if (!t) return '-'
+  const diff = Date.now() - new Date(t).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return '刚刚'
+  if (mins < 60) return `${mins} 分钟前`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours} 小时前`
+  return `${Math.floor(hours / 24)} 天前`
+}
+
+function formatFileSize(bytes: number) {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const k = 1024
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + units[i]
+}
+
+function statusLabel(s: string) { return ({ PENDING_ASSIGN: '待处理', PROCESSING: '处理中', WAITING_CUSTOMER: '待客户回复', CLOSED: '已关闭', CANCELLED: '已取消' })[s] || s }
+function priorityLabel(s: string) { return ({ NORMAL: '普通', HIGH: '高', URGENT: '紧急' })[s] || s }
+
+/** 将 HTML 转文本并保留换行 */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+/** 获取消息正文文本 */
+function msgBodyText(msg: any): string {
+  if (msg.contentText) return msg.contentText
+  if (msg.contentHtml) return htmlToText(msg.contentHtml)
+  if (msg.contentBody) return msg.contentBody
+  return '(无内容)'
+}
+
 type MailSendLog = {
   id: number
   ticketId: number | null
@@ -573,7 +687,8 @@ function readStoredToken() {
 
 async function requestApi<T>(url: string, options: RequestInit = {}) {
   const headers = new Headers(options.headers)
-  if (!headers.has('Content-Type')) {
+  const isFormData = options.body instanceof FormData
+  if (!headers.has('Content-Type') && !isFormData) {
     headers.set('Content-Type', 'application/json')
   }
   if (!headers.has('Authorization') && !url.includes('/auth/login')) {
@@ -742,6 +857,41 @@ function App() {
   const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false)
   const [templatePreview, setTemplatePreview] = useState<TemplatePreviewResponse | null>(null)
   const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false)
+  // ---- 工单列表 ----
+  const [ticketStatusTab, setTicketStatusTab] = useState('ALL')
+  const [ticketKeyword, setTicketKeyword] = useState('')
+  const [ticketPage, setTicketPage] = useState(1)
+  const [ticketPageSize] = useState(20)
+  const [ticketsData, setTicketsData] = useState<TicketPageResponse | null>(null)
+  const [ticketsLoading, setTicketsLoading] = useState(false)
+  const [ticketsError, setTicketsError] = useState('')
+  const [ticketDetail, setTicketDetail] = useState<TicketDetail | null>(null)
+  const [ticketDetailTab, setTicketDetailTab] = useState('mail')
+  const [showTicketDetailPage, setShowTicketDetailPage] = useState(false)
+  const [msgFilter, setMsgFilter] = useState('ALL')
+  const [msgSortAsc, setMsgSortAsc] = useState(true)
+
+  // ---- 附件 ----
+  const [ticketAttachments, setTicketAttachments] = useState<any[]>([])
+
+  // ---- 工单操作 ----
+  const [replyContent, setReplyContent] = useState('')
+  const [replyHtml, setReplyHtml] = useState('')
+  const [replySending, setReplySending] = useState(false)
+  const [uploadedFiles, setUploadedFiles] = useState<{ objectKey: string; fileName: string; fileSize: number }[]>([])
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [assignUsers, setAssignUsers] = useState<ManagedUser[]>([])
+  const [assignUserId, setAssignUserId] = useState<number | null>(null)
+  const [assignSending, setAssignSending] = useState(false)
+  const [closeModalOpen, setCloseModalOpen] = useState(false)
+  const [closeSending, setCloseSending] = useState(false)
+  const [remarkDraft, setRemarkDraft] = useState('')
+  const [priorityModalOpen, setPriorityModalOpen] = useState(false)
+  const [priorityValue, setPriorityValue] = useState('NORMAL')
+  const [prioritySending, setPrioritySending] = useState(false)
+  const [ticketStats, setTicketStats] = useState<any>(null)
   const [ticketRule, setTicketRule] = useState<TicketNumberRule | null>(null)
   const [ticketRuleForm, setTicketRuleForm] = useState<TicketRuleFormState>(emptyTicketRuleForm)
   const [ticketRuleDirty, setTicketRuleDirty] = useState(false)
@@ -1163,6 +1313,237 @@ function App() {
   useEffect(() => {
     if (token) void fetchSendPendingCount()
   }, [token, fetchSendPendingCount])
+
+  // ---- 工单列表 ----
+  const fetchTickets = useCallback(async () => {
+    if (!token || activeMenu !== '全部工单') return
+    const params = new URLSearchParams({ page: String(ticketPage), size: String(ticketPageSize) })
+    if (ticketStatusTab !== 'ALL') params.set('status', ticketStatusTab)
+    if (ticketKeyword.trim()) params.set('keyword', ticketKeyword.trim())
+
+    setTicketsLoading(true)
+    setTicketsError('')
+    try {
+      const data = await requestApi<TicketPageResponse>(`/api/v1/tickets?${params.toString()}`, { headers: authHeaders(token) })
+      setTicketsData(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setTicketsError(error instanceof ApiError ? error.message : '加载工单失败')
+    } finally {
+      setTicketsLoading(false)
+    }
+  }, [token, activeMenu, ticketPage, ticketPageSize, ticketStatusTab, ticketKeyword, handleAuthExpired])
+
+  const fetchTicketDetail = useCallback(async (id: number) => {
+    if (!token) return
+    try {
+      const data = await requestApi<TicketDetail>(`/api/v1/tickets/${id}`, { headers: authHeaders(token) })
+      setTicketDetail(data)
+      setRemarkDraft(data.remark || '')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+    }
+  }, [token, handleAuthExpired])
+
+  const handleBackToList = useCallback(() => {
+    setShowTicketDetailPage(false)
+    setTicketDetail(null)
+    setTicketDetailTab('mail')
+    setMsgFilter('ALL')
+    setMsgSortAsc(false)
+    setTicketAttachments([])
+  }, [])
+
+  const handleOpenDetail = useCallback(async (id: number) => {
+    setShowTicketDetailPage(true)
+    setTicketDetailTab('mail')
+    if (!token) return
+    try {
+      const data = await requestApi<TicketDetail>(`/api/v1/tickets/${id}`, { headers: authHeaders(token) })
+      setTicketDetail(data)
+      setRemarkDraft(data.remark || '')
+      // 加载附件列表
+      try {
+        const atts = await requestApi<any[]>(`/api/v1/tickets/${id}/attachments`, { headers: authHeaders(token) })
+        setTicketAttachments(atts || [])
+      } catch { setTicketAttachments([]) }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+    }
+  }, [token, handleAuthExpired])
+
+  /** 重新加载工单详情（操作后刷新） */
+  const reloadTicketDetail = useCallback(async () => {
+    if (!token || !ticketDetail) return
+    try {
+      const data = await requestApi<TicketDetail>(`/api/v1/tickets/${ticketDetail.id}`, { headers: authHeaders(token) })
+      setTicketDetail(data)
+      setRemarkDraft(data.remark || '')
+      // 刷新附件列表
+      try {
+        const atts = await requestApi<any[]>(`/api/v1/tickets/${ticketDetail.id}/attachments`, { headers: authHeaders(token) })
+        setTicketAttachments(atts || [])
+      } catch { /* ignore */ }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+    }
+  }, [token, ticketDetail, handleAuthExpired])
+
+  /** 获取可用处理人列表 */
+  const fetchAgentUsers = useCallback(async () => {
+    if (!token) return
+    try {
+      const data = await requestApi<UserPageResponse>('/api/v1/users?page=1&size=200&enabled=true', { headers: authHeaders(token) })
+      setAssignUsers(data.records)
+    } catch { setAssignUsers([]) }
+  }, [token])
+
+  /** 回复客户 */
+  const handleReply = useCallback(async () => {
+    const content = replyContent.trim()
+    const html = replyHtml.trim()
+    if (!token || !ticketDetail || (!content && !html)) return
+    setReplySending(true)
+    try {
+      const attInfos = uploadedFiles.map(f => ({ objectKey: f.objectKey, fileName: f.fileName, fileSize: f.fileSize }))
+      await requestApi(`/api/v1/tickets/${ticketDetail.id}/reply`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: content || html, htmlContent: html || content, internal: false, attachments: attInfos }),
+      })
+      setReplyContent('')
+      setReplyHtml('')
+      setUploadedFiles([])
+      await reloadTicketDetail()
+      void fetchTickets()
+      message.success('回复已发送')
+    } catch (error: any) {
+      message.error(error?.message || '回复发送失败')
+      if (handleAuthExpired(error)) return
+    } finally {
+      setReplySending(false)
+    }
+  }, [token, ticketDetail, replyContent, replyHtml, uploadedFiles, reloadTicketDetail, fetchTickets, handleAuthExpired])
+
+  /** 转派 */
+  const handleAssign = useCallback(async () => {
+    if (!token || !ticketDetail || !assignUserId) return
+    setAssignSending(true)
+    try {
+      await requestApi(`/api/v1/tickets/${ticketDetail.id}/assign`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assigneeId: assignUserId }),
+      })
+      setAssignModalOpen(false)
+      setAssignUserId(null)
+      await reloadTicketDetail()
+      void fetchTickets()
+      message.success('工单已转派')
+    } catch (error: any) {
+      message.error(error?.message || '转派失败')
+      if (handleAuthExpired(error)) return
+    } finally {
+      setAssignSending(false)
+    }
+  }, [token, ticketDetail, assignUserId, reloadTicketDetail, fetchTickets, handleAuthExpired])
+
+  /** 关闭工单 */
+  const handleClose = useCallback(async () => {
+    if (!token || !ticketDetail) return
+    setCloseSending(true)
+    try {
+      await requestApi(`/api/v1/tickets/${ticketDetail.id}/close`, {
+        method: 'POST',
+        headers: authHeaders(token),
+      })
+      setCloseModalOpen(false)
+      await reloadTicketDetail()
+      void fetchTickets()
+      message.success('工单已关闭')
+    } catch (error: any) {
+      message.error(error?.message || '关闭失败')
+      if (handleAuthExpired(error)) return
+    } finally {
+      setCloseSending(false)
+    }
+  }, [token, ticketDetail, reloadTicketDetail, fetchTickets, handleAuthExpired])
+
+  /** 上传附件（通用上传，不关联工单） */
+  const handleUploadFile = useCallback(async (file: File) => {
+    if (!token) return
+    setUploadingFile(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const result = await requestApi<{ objectKey: string; fileName: string; fileSize: number }>('/api/v1/files/upload', {
+        method: 'POST',
+        headers: { ...authHeaders(token) },
+        body: formData,
+      })
+      setUploadedFiles(prev => [...prev, { objectKey: result.objectKey, fileName: result.fileName, fileSize: result.fileSize }])
+      message.success(`"${file.name}" 上传成功`)
+    } catch (error: any) {
+      const msg = error?.message || '上传失败'
+      message.error(msg)
+      if (handleAuthExpired(error)) return
+    } finally {
+      setUploadingFile(false)
+    }
+  }, [token, handleAuthExpired])
+
+  /** 移除已上传的附件 */
+  const handleRemoveFile = useCallback((objectKey: string) => {
+    setUploadedFiles(prev => prev.filter(f => f.objectKey !== objectKey))
+  }, [])
+
+  /** 删除附件 */
+  const handleDeleteAttachment = useCallback(async (attachmentId: number) => {
+    if (!token || !ticketDetail) return
+    try {
+      await requestApi(`/api/v1/tickets/${ticketDetail.id}/attachments/${attachmentId}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      })
+      setTicketAttachments(prev => prev.filter(a => a.id !== attachmentId))
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+    }
+  }, [token, ticketDetail, handleAuthExpired])
+
+  /** 修改优先级 */
+  const handlePriority = useCallback(async () => {
+    if (!token || !ticketDetail) return
+    setPrioritySending(true)
+    try {
+      await requestApi(`/api/v1/tickets/${ticketDetail.id}/priority`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ priority: priorityValue }),
+      })
+      setPriorityModalOpen(false)
+      await reloadTicketDetail()
+      void fetchTickets()
+      message.success('优先级已修改')
+    } catch (error: any) {
+      message.error(error?.message || '修改优先级失败')
+      if (handleAuthExpired(error)) return
+    } finally {
+      setPrioritySending(false)
+    }
+  }, [token, ticketDetail, priorityValue, reloadTicketDetail, fetchTickets, handleAuthExpired])
+
+  const fetchTicketStats = useCallback(async () => {
+    if (!token) return
+    try {
+      const data = await requestApi<any>('/api/v1/tickets/stats', { headers: authHeaders(token) })
+      setTicketStats(data)
+    } catch { /* stats failure is non-critical */ }
+  }, [token])
+
+  useEffect(() => {
+    if (activeMenu === '全部工单') { void fetchTickets(); void fetchTicketStats() }
+  }, [fetchTickets, fetchTicketStats, activeMenu])
 
   // 加载邮箱列表用于下拉筛选
   const fetchMailboxList = useCallback(async () => {
@@ -1884,7 +2265,565 @@ function App() {
             </div>
           </header>
 
-          {activeMenu === '用户管理' ? (
+          {activeMenu === '全部工单' ? (
+            showTicketDetailPage && ticketDetail ? (
+              /* ===== 全屏工单详情页 (PG-15) ===== */
+              <div className="ticket-detail-page">
+                {/* 返回标题栏 */}
+                <div className="detail-topbar">
+                  <Button type="text" icon={<ArrowLeftOutlined />} onClick={handleBackToList} className="detail-back-btn">
+                    返回列表
+                  </Button>
+                  <h2>工单详情</h2>
+                </div>
+
+                <div className="detail-body">
+                  {/* === 左侧主内容 === */}
+                  <div className="detail-main">
+                    {/* 工单头部 */}
+                    <div className="detail-header-card">
+                      <div className="detail-header-top">
+                        <div className="detail-header-left">
+                          <span className={`priority-pill ${ticketDetail.priority === 'URGENT' ? 'p1' : ticketDetail.priority === 'HIGH' ? 'p2' : 'p3'}`}>
+                            {ticketDetail.priority === 'URGENT' ? 'P1' : ticketDetail.priority === 'HIGH' ? 'P2' : 'P3'}
+                          </span>
+                          <span style={{ fontSize: 14, fontWeight: 500, color: ticketDetail.priority === 'URGENT' ? '#dc2626' : ticketDetail.priority === 'HIGH' ? '#d97706' : '#6b7280', marginRight: 8 }}>
+                            {priorityLabel(ticketDetail.priority)}
+                          </span>
+                          <StarTwoTone twoToneColor="#f59e0b" style={{ fontSize: 16 }} />
+                          <span className="detail-ticket-no">{ticketDetail.ticketNo}</span>
+                        </div>
+                        <div className="detail-header-actions">
+                          <Button size="small" icon={<SwapOutlined />} onClick={() => { setAssignModalOpen(true); void fetchAgentUsers() }}>转派</Button>
+                          <Button size="small" icon={<FlagOutlined />}
+                            onClick={() => { setPriorityValue(ticketDetail.priority); setPriorityModalOpen(true) }}>修改优先级</Button>
+                          <Button size="small" icon={<CloseCircleOutlined />} onClick={() => setCloseModalOpen(true)}>关闭工单</Button>
+                          <Button size="small" icon={<EllipsisOutlined />}>更多</Button>
+                        </div>
+                      </div>
+                      <h1 className="detail-subject">{ticketDetail.subject}</h1>
+                      <div className="detail-meta">
+                        <span>来源：<b>{ticketDetail.mailboxName || '客户邮件'}</b></span>
+                        <span>创建时间：<b>{dayjs(ticketDetail.createdAt).format('YYYY-MM-DD HH:mm')}</b></span>
+                        <span>更新时间：<b>{dayjs(ticketDetail.updatedAt).format('YYYY-MM-DD HH:mm')}</b></span>
+                        <Tag color={ticketDetail.slaBreached ? 'red' : ticketDetail.status === 'CLOSED' ? 'default' : 'blue'}>
+                          {statusLabel(ticketDetail.status)}
+                        </Tag>
+                        {ticketDetail.linkSuspect && <Tag color="warning" style={{ marginLeft: 4 }}>疑似断链</Tag>}
+                      </div>
+                    </div>
+
+                    {/* Tabs + 内容区 */}
+                    <div className="detail-content-card">
+                      <Tabs
+                        activeKey={ticketDetailTab}
+                        onChange={setTicketDetailTab}
+                        items={[
+                          {
+                            key: 'mail',
+                            label: '邮件会话',
+                            children: (
+                              <div className="detail-mail-conversation">
+                                {/* 消息筛选栏 */}
+                                {ticketDetail.messages && ticketDetail.messages.length > 0 && (
+                                  <div className="msg-filter-bar">
+                                    <div className="msg-filter-left">
+                                      <Segmented
+                                        size="small"
+                                        value={msgFilter}
+                                        onChange={(val) => setMsgFilter(val as string)}
+                                        options={(() => {
+                                          const msgs = ticketDetail.messages
+                                          const total = msgs.filter((m: any) => (m.direction || m.messageDirection) !== 'INTERNAL').length
+                                          const inbound = msgs.filter((m: any) => (m.direction || m.messageDirection) === 'INBOUND').length
+                                          const outbound = msgs.filter((m: any) => (m.direction || m.messageDirection) === 'OUTBOUND').length
+                                          return [
+                                            { label: `全部邮件 (${total})`, value: 'ALL' },
+                                            { label: `客户 (${inbound})`, value: 'INBOUND' },
+                                            { label: `客服 (${outbound})`, value: 'OUTBOUND' },
+                                          ]
+                                        })()}
+                                      />
+                                    </div>
+                                    <div className="msg-filter-right" onClick={() => setMsgSortAsc(!msgSortAsc)}>
+                                      <span>排序：</span>
+                                      <span style={{ fontWeight: 500, color: '#1f2937', cursor: 'pointer' }}>
+                                        {msgSortAsc ? '时间升序' : '时间降序'}
+                                        <span style={{ marginLeft: 4, fontSize: 11, color: '#9ca3af' }}>
+                                          {msgSortAsc ? '↑' : '↓'}
+                                        </span>
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* 邮件消息列表 */}
+                                {(!ticketDetail.messages || ticketDetail.messages.length === 0) ? (
+                                  <Empty description="暂无邮件消息" style={{ padding: '40px 0' }} />
+                                ) : (
+                                  [...ticketDetail.messages]
+                                    .filter((msg: any) => {
+                                      const dir = msg.direction || msg.messageDirection
+                                      return msgFilter === 'ALL' ? dir !== 'INTERNAL' : dir === msgFilter
+                                    })
+                                    .sort((a: any, b: any) => {
+                                      const ta = a.sentAt || a.createdAt
+                                      const tb = b.sentAt || b.createdAt
+                                      if (!ta || !tb) return 0
+                                      return msgSortAsc
+                                        ? new Date(ta).getTime() - new Date(tb).getTime()
+                                        : new Date(tb).getTime() - new Date(ta).getTime()
+                                    })
+                                    .map((msg: any) => {
+                                      const dir = msg.direction || msg.messageDirection
+                                      const isAgent = dir === 'OUTBOUND'
+                                      const isAuto = false // auto-reply messages not yet persisted as ticket messages
+                                      const displayName = msg.displayName || (msg.fromAddress ? msg.fromAddress.split('@')[0] : '')
+                                      const firstChar = displayName ? displayName[0].toUpperCase() : isAuto ? 'S' : 'C'
+                                      return (
+                                        <div key={msg.id} className={`msg-card ${isAuto ? 'msg-system' : isAgent ? 'msg-agent' : 'msg-customer'}`}>
+                                          <div className="msg-avatar">
+                                            <div className={`msg-avatar-circle ${isAuto ? 'avatar-system' : isAgent ? 'avatar-agent' : 'avatar-customer'}`}>
+                                              {firstChar}
+                                            </div>
+                                          </div>
+                                          <div className="msg-content">
+                                            <div className="msg-header">
+                                              <div className="msg-header-left">
+                                                <span className="msg-from">{msg.fromAddress || '系统'}</span>
+                                                <span className={`msg-badge ${isAuto ? 'badge-system' : isAgent ? 'badge-agent' : 'badge-customer'}`}>
+                                                  {isAuto ? '系统' : isAgent ? '客服' : '客户'}
+                                                </span>
+                                              </div>
+                                              <span className="msg-time">{msg.sentAt ? dayjs(msg.sentAt).format('YYYY-MM-DD HH:mm') : ''}</span>
+                                            </div>
+                                            {msg.toAddress && (
+                                              <div className="msg-to">收件人：{msg.toAddress}</div>
+                                            )}
+                                        <div className="msg-body">
+                                          {msgBodyText(msg)}
+                                        </div>
+                                        {msg.id && (() => {
+                                          const msgAtts = ticketAttachments.filter(a => a.messageId === msg.id)
+                                          if (msgAtts.length === 0) return null
+                                          return (
+                                            <div className="msg-attachments">
+                                              {msgAtts.map((att: any) => (
+                                                <div key={att.id} className="msg-attachment-item">
+                                                  <span className="msg-attachment-icon">📎</span>
+                                                  <a href={att.downloadUrl} target="_blank" rel="noopener noreferrer"
+                                                    className="msg-attachment-link">{att.fileName}</a>
+                                                  <span className="msg-attachment-size">({formatFileSize(att.fileSize)})</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )
+                                        })()}
+                                          </div>
+                                        </div>
+                                      )
+                                    })
+                                )}
+
+                                {/* 回复编辑器 */}
+                                <div className="detail-editor">
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2937', marginBottom: 8 }}>回复客户</div>
+                                  <TiptapRichEditor
+                                    placeholder="请输入回复内容（将发送邮件给客户）..."
+                                    onUpdate={(html, text) => { setReplyHtml(html); setReplyContent(text) }}
+                                  />
+                                  {uploadedFiles.length > 0 && (
+                                    <div style={{ margin: '6px 0', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                      {uploadedFiles.map(f => (
+                                        <Tag key={f.objectKey} closable onClose={() => handleRemoveFile(f.objectKey)}
+                                          style={{ fontSize: 12, margin: 0 }}>
+                                          📎 {f.fileName} ({formatFileSize(f.fileSize)})
+                                        </Tag>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="detail-editor-actions">
+                                    <div>
+                                        <input type="file" ref={fileInputRef} style={{ display: 'none' }}
+                                          onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleUploadFile(f); e.target.value = '' } }} />
+                                      <Button type="text" icon={<PaperClipOutlined />}
+                                        loading={uploadingFile}
+                                        onClick={() => fileInputRef.current?.click()}>添加附件</Button>
+                                      <Button type="text" icon={<FileTextOutlined />} disabled>插入模板</Button>
+                                    </div>
+                                    <Space>
+                                      <Button disabled>保存草稿</Button>
+                                      <Button type="primary" icon={<SendOutlined />} onClick={() => void handleReply()}
+                                        loading={replySending} disabled={!replyContent.trim() && !replyHtml.trim()}>
+                                        发送邮件
+                                      </Button>
+                                    </Space>
+                                  </div>
+                                </div>
+                              </div>
+                            ),
+                          },
+                          {
+                            key: 'log',
+                            label: '工单日志',
+                            children: ticketDetail.events.length > 0 ? (
+                              <Timeline
+                                items={ticketDetail.events.map(ev => ({
+                                  color: 'blue',
+                                  children: (
+                                    <div>
+                                      <div style={{ fontWeight: 500, color: '#1f2937' }}>{ev.eventContent}</div>
+                                      <div style={{ fontSize: 12, color: '#9ca3af' }}>{ev.operator} · {dayjs(ev.eventAt).format('YYYY-MM-DD HH:mm')}</div>
+                                    </div>
+                                  ),
+                                }))}
+                              />
+                            ) : (
+                              <Empty description="暂无工单日志" style={{ padding: '40px 0' }} />
+                            ),
+                          },
+                          {
+                            key: 'customer',
+                            label: '客户信息',
+                            children: (
+                              <Descriptions column={1} size="small" style={{ padding: '16px 0' }}>
+                                <Descriptions.Item label="客户邮箱">{ticketDetail.customerEmail}</Descriptions.Item>
+                                <Descriptions.Item label="来源邮箱">{ticketDetail.mailboxName || `#${ticketDetail.mailboxId}`}</Descriptions.Item>
+                              </Descriptions>
+                            ),
+                          },
+                          {
+                            key: 'sla',
+                            label: 'SLA',
+                            children: (
+                              <Descriptions column={1} size="small" style={{ padding: '16px 0' }}>
+                                <Descriptions.Item label="SLA状态">
+                                  <Tag color={ticketDetail.slaBreached ? 'red' : 'green'}>
+                                    {ticketDetail.slaBreached ? '已超时' : '正常'}
+                                  </Tag>
+                                </Descriptions.Item>
+                                <Descriptions.Item label="首次响应截止">
+                                  {ticketDetail.slaResponseDeadline ? dayjs(ticketDetail.slaResponseDeadline).format('YYYY-MM-DD HH:mm') : '-'}
+                                </Descriptions.Item>
+                                <Descriptions.Item label="解决截止">
+                                  {ticketDetail.slaResolveDeadline ? dayjs(ticketDetail.slaResolveDeadline).format('YYYY-MM-DD HH:mm') : '-'}
+                                </Descriptions.Item>
+                              </Descriptions>
+                            ),
+                          },
+                          {
+                            key: 'attachment',
+                            label: `附件 (${ticketAttachments.length})`,
+                            children: (
+                              <div className="detail-attachments">
+                                {ticketAttachments.length === 0 ? (
+                                  <Empty description="暂无附件" style={{ padding: '40px 0' }} />
+                                ) : (
+                                  <div className="attachment-grid">
+                                    {ticketAttachments.map((att: any) => (
+                                      <div key={att.id} className="attachment-card">
+                                        <div className="attachment-icon">
+                                          {att.contentType?.startsWith('image/') ? '🖼' : '📄'}
+                                        </div>
+                                        <div className="attachment-info">
+                                          <div className="attachment-name" title={att.fileName}>{att.fileName}</div>
+                                          <div className="attachment-meta">
+                                            {formatFileSize(att.fileSize)}
+                                            {att.contentType && <span> · {att.contentType}</span>}
+                                          </div>
+                                        </div>
+                                        <div className="attachment-actions">
+                                          <Button type="link" size="small" icon={<DownloadOutlined />}
+                                            href={att.downloadUrl} target="_blank" />
+                                          <Button type="link" size="small" danger icon={<DeleteOutlined />}
+                                            onClick={() => { if (window.confirm('确认删除此附件？')) void handleDeleteAttachment(att.id) }} />
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ),
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  {/* === 右侧信息面板 === */}
+                  <aside className="detail-sidebar">
+                    {/* 工单信息 */}
+                    <Card size="small" title="工单信息">
+                      <Descriptions column={1} size="small">
+                        <Descriptions.Item label="负责人">
+                          <Space>
+                            {ticketDetail.assigneeName ? <Avatar size="small" style={{ backgroundColor: '#10b981' }}>{ticketDetail.assigneeName[0]}</Avatar> : null}
+                            {ticketDetail.assigneeName || '未分配'}
+                          </Space>
+                        </Descriptions.Item>
+                        <Descriptions.Item label="客户">{ticketDetail.customerEmail}</Descriptions.Item>
+                        <Descriptions.Item label="优先级">{priorityLabel(ticketDetail.priority)}</Descriptions.Item>
+                        <Descriptions.Item label="状态">{statusLabel(ticketDetail.status)}</Descriptions.Item>
+                        <Descriptions.Item label="来源">{ticketDetail.mailboxName || '客户邮件'}</Descriptions.Item>
+                        <Descriptions.Item label="备注">
+                          <Input.TextArea rows={2} size="small" value={remarkDraft}
+                            onChange={e => setRemarkDraft(e.target.value)}
+                            placeholder="点击添加备注..." style={{ fontSize: 12 }}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim()
+                              if (val !== (ticketDetail.remark || '')) {
+                                requestApi(`/api/v1/tickets/${ticketDetail.id}/remark`, {
+                                  method: 'PATCH',
+                                  headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ remark: val }),
+                                }).then(() => { message.success('备注已保存'); void reloadTicketDetail() })
+                                  .catch((e: any) => message.error(e?.message || '备注保存失败'))
+                              }
+                            }}
+                          />
+                        </Descriptions.Item>
+                      </Descriptions>
+                    </Card>
+
+                    {/* SLA 信息 */}
+                    <Card size="small" title="SLA 信息" extra={
+                      <Tag color={ticketDetail.slaBreached ? 'red' : 'green'}>
+                        {ticketDetail.slaBreached ? '已超时' : '正常'}
+                      </Tag>
+                    }>
+                      <Descriptions column={1} size="small">
+                        <Descriptions.Item label="首次响应截止">
+                          {ticketDetail.slaResponseDeadline ? dayjs(ticketDetail.slaResponseDeadline).format('YYYY-MM-DD HH:mm') : '-'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="解决截止">
+                          {ticketDetail.slaResolveDeadline ? dayjs(ticketDetail.slaResolveDeadline).format('YYYY-MM-DD HH:mm') : '-'}
+                        </Descriptions.Item>
+                      </Descriptions>
+                    </Card>
+
+                    {/* 工单生命周期 */}
+                    <Card size="small" title="工单生命周期">
+                      {ticketDetail.events.length > 0 ? (
+                        <Timeline
+                          items={ticketDetail.events.map(ev => ({
+                            color: 'blue',
+                            children: (
+                              <div>
+                                <div style={{ fontWeight: 500, color: '#1f2937', fontSize: 13 }}>{ev.eventContent}</div>
+                                <div style={{ fontSize: 11, color: '#9ca3af' }}>{dayjs(ev.eventAt).format('YYYY-MM-DD HH:mm')}</div>
+                              </div>
+                            ),
+                          }))}
+                        />
+                      ) : (
+                        <Empty description="暂无记录" />
+                      )}
+                    </Card>
+                  </aside>
+                </div>
+              </div>
+            ) : (
+              /* ===== 工单列表页 (PG-14) ===== */
+              <div className="tickets-page">
+                {/* 标题 */}
+                <div className="tickets-header">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <h2>全部工单</h2>
+                      <div className="tickets-header-sub">共 {ticketStats?.totalCount ?? ticketsData?.total ?? 0} 个工单，包含所有状态的工单信息</div>
+                    </div>
+                    <div className="tickets-header-actions">
+                      <Button icon={<ReloadOutlined />} onClick={() => { void fetchTickets(); void fetchTicketStats() }} loading={ticketsLoading}>刷新</Button>
+                      <Button>导出</Button>
+                      <Button type="primary">新建工单</Button>
+                    </div>
+                  </div>
+                  {/* 统计标签栏 — 纯数据展示，不做交互 */}
+                  <div className="tickets-stat-tabs">
+                    {[
+                      { label: '全部工单', val: ticketStats?.totalCount ?? ticketsData?.total ?? 0, Icon: Layers, iconCls: 'total' },
+                      { label: '待分配', val: ticketStats?.pendingAssignCount ?? '-', Icon: UserPlus, iconCls: 'pending' },
+                      { label: '处理中', val: ticketStats?.processingCount ?? '-', Icon: Loader, iconCls: 'processing' },
+                      { label: '待客户回复', val: ticketStats?.waitingCustomerCount ?? '-', Icon: MessageCircle, iconCls: 'waiting' },
+                      { label: '已超时', val: ticketStats?.slaOverdueCount ?? '-', Icon: TriangleAlert, iconCls: 'sla-overdue' },
+                      { label: '今日已关闭', val: ticketStats?.closedTodayCount ?? '-', Icon: CircleCheck, iconCls: 'closed' },
+                    ].map(tab => {
+                      const { Icon, iconCls } = tab
+                      return (
+                        <div key={tab.label} className="tickets-stat-tab">
+                          <div className="stat-tab-info">
+                            <div className="label">{tab.label}</div>
+                            <div className="value">{tab.val}</div>
+                          </div>
+                          <div className={`stat-tab-icon ${iconCls}`}>
+                            <Icon size={16} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* 列表内容 */}
+                <div className="tickets-body">
+                  {/* === 左侧筛选 === */}
+                  <div className="tickets-filter">
+                    <Input.Search placeholder="搜索工单号、主题、客户..." allowClear size="small"
+                      value={ticketKeyword} onChange={e => { setTicketKeyword(e.target.value); setTicketPage(1) }}
+                      onSearch={() => { setTicketPage(1); void fetchTickets() }} style={{ marginBottom: 16 }} />
+
+                    <div style={{ marginBottom: 20 }}>
+                      <div className="tickets-filter-title">我的视图</div>
+                      {[
+                        { icon: '★', label: '我的待处理', count: ticketStats?.processingCount ?? 0, color: '#f59e0b' },
+                        { icon: '◎', label: '我关注的', count: '-', color: '#9ca3af' },
+                        { icon: '◷', label: '最近更新', count: '-', color: '#9ca3af' },
+                      ].map(item => (
+                        <div key={item.label} className="tickets-filter-item">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ color: item.color, fontSize: 12 }}>{item.icon}</span>
+                            <span style={{ fontWeight: item.label === '我的待处理' ? 500 : 400 }}>{item.label}</span>
+                          </div>
+                          <span className="count">{item.count}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginBottom: 20 }}>
+                      <div className="tickets-filter-title">工单状态</div>
+                      {[{ k: 'ALL', v: '全部' }, { k: 'PENDING_ASSIGN', v: '待分配' }, { k: 'PROCESSING', v: '处理中' }, { k: 'WAITING_CUSTOMER', v: '待客户回复' }, { k: 'CLOSED', v: '已关闭' }].map(item => (
+                        <div key={item.k} className={`tickets-filter-item ${ticketStatusTab === item.k ? 'active' : ''}`}
+                          onClick={() => { setTicketStatusTab(item.k); setTicketPage(1) }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{
+                              width: 14, height: 14, borderRadius: 3,
+                              border: ticketStatusTab === item.k ? '2px solid #2563eb' : '2px solid #d1d5db',
+                              background: ticketStatusTab === item.k ? '#2563eb' : 'transparent',
+                              display: 'inline-block'
+                            }} />
+                            <span>{item.v}</span>
+                          </div>
+                          <span className="count">{item.k === 'ALL' ? ticketsData?.total ?? '-' : ticketsData?.records?.filter(r => r.status === item.k).length ?? '-'}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginBottom: 20 }}>
+                      <div className="tickets-filter-title">优先级</div>
+                      {[
+                        { k: 'URGENT', v: '紧急', cls: 'p1', n: 'P1' },
+                        { k: 'HIGH', v: '高', cls: 'p2', n: 'P2' },
+                        { k: 'NORMAL', v: '普通', cls: 'p3', n: 'P3' },
+                      ].map(p => (
+                        <div key={p.k} className="tickets-filter-item">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ width: 14, height: 14, borderRadius: 3, border: '2px solid #d1d5db', display: 'inline-block' }} />
+                            <span className={`priority-pill ${p.cls}`}>{p.n}</span>
+                            <span>{p.v}</span>
+                          </div>
+                          <span className="count">{ticketsData?.records?.filter(r => r.priority === p.k).length ?? '-'}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginBottom: 20 }}>
+                      <div className="tickets-filter-title">SLA状态</div>
+                      {[
+                        { v: '即将超时', color: '#f59e0b', count: '-' },
+                        { v: '已超时', color: '#ef4444', count: ticketStats?.slaOverdueCount ?? '-' },
+                        { v: '正常', color: '#10b981', count: '-' },
+                      ].map(item => (
+                        <div key={item.v} className="tickets-filter-item">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, display: 'inline-block' }} />
+                            <span>{item.v}</span>
+                          </div>
+                          <span className="count">{item.count}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ marginBottom: 20 }}>
+                      <div className="tickets-filter-title">负责人</div>
+                      <div style={{ position: 'relative', marginBottom: 8 }}>
+                        <Input.Search placeholder="搜索负责人" size="small" />
+                      </div>
+                    </div>
+
+                    {ticketsError && <Alert message={ticketsError} type="error" showIcon style={{ marginBottom: 12 }} />}
+                    <Button block size="small" onClick={() => { setTicketKeyword(''); setTicketStatusTab('ALL'); setTicketPage(1) }}>清空筛选</Button>
+                  </div>
+
+                  {/* === 中间工单列表 === */}
+                  <div className="tickets-list-panel">
+                    <div className="tickets-list-head">
+                      <div className="sort-label">
+                        <span>排序：</span>
+                        <Select size="small" variant="borderless" defaultValue="newest" style={{ width: 110 }}
+                          options={[{ value: 'newest', label: '最新更新' }, { value: 'priority', label: '优先级' }, { value: 'created', label: '创建时间' }]} />
+                      </div>
+                      <div>{ticketsData && <span style={{ fontSize: 12, color: '#9ca3af' }}>共 {ticketsData.total} 条</span>}</div>
+                    </div>
+                    <div className="tickets-list-body">
+                      {ticketsLoading && !ticketsData ? (
+                        <div style={{ padding: 60, textAlign: 'center' }}><Typography.Text type="secondary">加载中...</Typography.Text></div>
+                      ) : !ticketsData || ticketsData.records.length === 0 ? (
+                        <div style={{ padding: 60, textAlign: 'center' }}><Empty description="暂无工单" /></div>
+                      ) : (
+                        ticketsData.records.map(ticket => {
+                          const pClass = ticket.priority === 'URGENT' ? 'p1' : ticket.priority === 'HIGH' ? 'p2' : 'p3'
+                          const stClass = ticket.status === 'WAITING_CUSTOMER' ? 'waiting' : ticket.status === 'CLOSED' ? 'closed' : ticket.slaBreached ? 'overdue' : 'processing'
+                          return (
+                            <div key={ticket.id} className="ticket-row"
+                              onClick={() => { void handleOpenDetail(ticket.id) }}>
+                              <div style={{ flexShrink: 0, marginRight: 12, paddingTop: 2 }}>
+                                <span className={`priority-pill ${pClass}`}>{ticket.priority === 'URGENT' ? 'P1' : ticket.priority === 'HIGH' ? 'P2' : 'P3'}</span>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                                  <span className="ticket-no">{ticket.ticketNo}</span>
+                                  <span className="ticket-subject">{ticket.subject}</span>
+                                  {ticket.linkSuspect && <Tag color="warning" style={{ fontSize: 11, lineHeight: '18px', height: 20 }}>疑似断链</Tag>}
+                                </div>
+                                <div className="ticket-customer" style={{ marginBottom: 4 }}>{ticket.customerEmail}</div>
+                                <div><span className="ticket-source-tag">{ticket.mailboxName || '客户邮件'}</span></div>
+                              </div>
+                              <div style={{ flexShrink: 0, marginLeft: 12, textAlign: 'right' }}>
+                                <div className="ticket-time">{relativeTime(ticket.createdAt)}</div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <div className={ticket.slaBreached ? 'ticket-sla-overdue' : 'ticket-sla-ok'} style={{ marginBottom: 4 }}>
+                                    {ticket.slaBreached ? 'SLA已超时' : 'SLA正常'}
+                                  </div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
+                                    {ticket.assigneeName && <div className="assignee-avatar">{ticket.assigneeName[0]}</div>}
+                                    <span className={`ticket-status-tag ${stClass}`}>{statusLabel(ticket.status)}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                    {ticketsData && ticketsData.records.length > 0 && (
+                      <div className="tickets-list-foot">
+                        <Pagination
+                          current={ticketPage}
+                          pageSize={ticketPageSize}
+                          total={ticketsData.total}
+                          showSizeChanger
+                          pageSizeOptions={[10, 20, 50]}
+                          showTotal={(total) => `共 ${total} 条`}
+                          onChange={(page) => { setTicketPage(page) }}
+                          size="small"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          ) : activeMenu === '用户管理' ? (
             <section className="app-content user-page" aria-label="用户管理">
               <div className="content-title">
                 <div>
@@ -3828,6 +4767,51 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* 转派弹窗 */}
+        <Modal title="转派工单" open={assignModalOpen} onCancel={() => { setAssignModalOpen(false); setAssignUserId(null) }}
+          onOk={() => void handleAssign()} confirmLoading={assignSending} okText="确认转派" cancelText="取消">
+          <div style={{ padding: '12px 0' }}>
+            <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>选择处理人：</div>
+            <Select
+              style={{ width: '100%' }}
+              placeholder="请选择处理人"
+              value={assignUserId}
+              onChange={setAssignUserId}
+              options={assignUsers
+                .filter(u => u.enabled)
+                .map(u => ({ label: `${u.displayName} (${u.account})`, value: u.id }))}
+            />
+          </div>
+        </Modal>
+
+        {/* 修改优先级弹窗 */}
+        <Modal title="修改优先级" open={priorityModalOpen} onCancel={() => setPriorityModalOpen(false)}
+          onOk={() => void handlePriority()} confirmLoading={prioritySending} okText="确认修改" cancelText="取消">
+          <div style={{ padding: '12px 0' }}>
+            <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>选择优先级：</div>
+            <Select
+              style={{ width: '100%' }}
+              value={priorityValue}
+              onChange={setPriorityValue}
+              options={[
+                { label: 'P1 - 紧急', value: 'URGENT' },
+                { label: 'P2 - 高', value: 'HIGH' },
+                { label: 'P3 - 普通', value: 'NORMAL' },
+                { label: 'P4 - 低', value: 'LOW' },
+              ]}
+            />
+          </div>
+        </Modal>
+
+        {/* 关闭确认弹窗 */}
+        <Modal title="关闭工单" open={closeModalOpen} onCancel={() => setCloseModalOpen(false)}
+          onOk={() => void handleClose()} confirmLoading={closeSending}
+          okText="确认关闭" cancelText="取消" okButtonProps={{ danger: true }}>
+          <p style={{ color: '#6b7280', fontSize: 14, padding: '12px 0' }}>
+            确认关闭工单 <strong>{ticketDetail?.ticketNo}</strong>？关闭后客户新的来信将重新开启工单。
+          </p>
+        </Modal>
       </div>
     )
   }

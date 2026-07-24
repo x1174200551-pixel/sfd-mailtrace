@@ -11,6 +11,11 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",
+    "@tiptap/extension-link": "^3.28.0",
+    "@tiptap/extension-placeholder": "^3.28.0",
+    "@tiptap/extension-underline": "^3.28.0",
+    "@tiptap/react": "^3.28.0",
+    "@tiptap/starter-kit": "^3.28.0",
     "antd": "^6.5.1",
     "dayjs": "^1.11.21",
     "lucide-react": "^1.25.0",

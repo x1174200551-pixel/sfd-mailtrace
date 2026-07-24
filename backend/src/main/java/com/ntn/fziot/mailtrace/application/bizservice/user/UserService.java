@@ -67,6 +67,18 @@ public class UserService {
     }
 
     /**
+     * 查询可分配的处理人列表（ADMIN/AGENT 均可调用）。
+     */
+    public List<UserVO> listAssignableUsers(CurrentUserPrincipal principal) {
+        assertAgentOrAdmin(principal);
+        return userMapper.selectList(
+                new LambdaQueryWrapper<UserEntity>()
+                        .eq(UserEntity::getEnabled, true)
+                        .orderByAsc(UserEntity::getDisplayName)
+        ).stream().map(this::toVO).toList();
+    }
+
+    /**
      * 新建系统用户。
      */
     @Transactional
@@ -220,6 +232,12 @@ public class UserService {
     private void assertAdmin(CurrentUserPrincipal principal) {
         if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
             throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作用户管理");
+        }
+    }
+
+    private void assertAgentOrAdmin(CurrentUserPrincipal principal) {
+        if (principal == null || (!ROLE_ADMIN.equals(principal.roleCode()) && !ROLE_AGENT.equals(principal.roleCode()))) {
+            throw new BusinessException(CODE_FORBIDDEN, "无操作权限");
         }
     }
 

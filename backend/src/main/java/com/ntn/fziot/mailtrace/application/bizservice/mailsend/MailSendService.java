@@ -107,12 +107,20 @@ public class MailSendService {
             // 建立 SMTP 连接
             transport = openTransport(mailbox, smtpPassword);
 
-            // 构建 MimeMessage
-            MimeMessage msg = new MimeMessage(Session.getInstance(new Properties()));
+            // 构建 MimeMessage（使用标准 Session 确保 UTF-8 编码）
+            Properties mailProps = new Properties();
+            mailProps.put("mail.mime.charset", "UTF-8");
+            MimeMessage msg = new MimeMessage(Session.getInstance(mailProps));
             msg.setFrom(new InternetAddress(fromAddress, mailbox.getSmtpFromName(), "UTF-8"));
             msg.setRecipient(Message.RecipientType.TO, new InternetAddress(toAddress));
             msg.setSubject(subject, "UTF-8");
-            msg.setText(content, "UTF-8");
+            // 设置正文 — 优先 HTML，降级纯文本
+            boolean isHtml = content != null && (content.startsWith("<") || content.contains("</") || content.contains("<br"));
+            if (isHtml) {
+                msg.setContent(content, "text/html; charset=UTF-8");
+            } else {
+                msg.setText(content, "UTF-8");
+            }
             msg.saveChanges();
 
             // 发送
@@ -180,7 +188,9 @@ public class MailSendService {
         Transport transport = null;
         try {
             transport = openTransport(mailbox, smtpPassword);
-            MimeMessage msg = new MimeMessage(Session.getInstance(new Properties()));
+            Properties mailProps = new Properties();
+            mailProps.put("mail.mime.charset", "UTF-8");
+            MimeMessage msg = new MimeMessage(Session.getInstance(mailProps));
             msg.setFrom(new InternetAddress(getFromAddress(mailbox), mailbox.getSmtpFromName(), "UTF-8"));
             msg.setRecipient(Message.RecipientType.TO, new InternetAddress(logEntity.getToAddress()));
             msg.setSubject(logEntity.getSubject(), "UTF-8");

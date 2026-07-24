@@ -20,6 +20,7 @@ public record TicketSummaryVO(
         @Schema(description = "是否已首次响应") Boolean hasReplied,
         @Schema(description = "首次响应SLA截止时间") LocalDateTime slaResponseDeadline,
         @Schema(description = "是否已SLA超时") Boolean slaBreached,
+        @Schema(description = "备注") String remark,
         @Schema(description = "创建时间") LocalDateTime createdAt
 ) {
 }

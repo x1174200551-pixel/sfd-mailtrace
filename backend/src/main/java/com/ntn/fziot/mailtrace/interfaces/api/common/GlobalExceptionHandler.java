@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -52,6 +53,13 @@ public class GlobalExceptionHandler {
                 .body(BasicResult.fail(CODE_BAD_REQUEST,
                         "参数格式错误：" + exception.getName() + " 需要 " +
                                 (exception.getRequiredType() != null ? exception.getRequiredType().getSimpleName() : "正确格式")));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<BasicResult<Void>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException exception) {
+        return ResponseEntity
+                .status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(BasicResult.fail(40002, "文件大小超过限制（最大50MB）"));
     }
 
     @ExceptionHandler(Exception.class)

@@ -5,6 +5,8 @@ import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPageResponse;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPriorityRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketRemarkRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketStatusRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketVO;
@@ -57,6 +59,12 @@ public class TicketController {
         return BasicResult.ok(ticketBizService.getTicket(principal, id));
     }
 
+    @Operation(summary = "工单统计概览")
+    @GetMapping("/stats")
+    public BasicResult<TicketBizService.TicketStats> stats() {
+        return BasicResult.ok(ticketBizService.stats());
+    }
+
     @Operation(summary = "分配处理人")
     @PostMapping("/{id}/assign")
     public BasicResult<TicketVO> assignTicket(
@@ -90,5 +98,23 @@ public class TicketController {
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id) {
         return BasicResult.ok(ticketBizService.closeTicket(principal, id));
+    }
+
+    @Operation(summary = "变更工单优先级")
+    @PatchMapping("/{id}/priority")
+    public BasicResult<TicketVO> updatePriority(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id,
+            @Valid @RequestBody TicketPriorityRequest request) {
+        return BasicResult.ok(ticketBizService.updatePriority(principal, id, request));
+    }
+
+    @Operation(summary = "更新工单备注")
+    @PatchMapping("/{id}/remark")
+    public BasicResult<TicketVO> updateRemark(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id,
+            @Valid @RequestBody TicketRemarkRequest request) {
+        return BasicResult.ok(ticketBizService.updateRemark(principal, id, request));
     }
 }

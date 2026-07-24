@@ -41,5 +41,24 @@ services:
     ports:
       - "80:80"
 
+  minio:
+    image: minio/minio:latest
+    container_name: mailtrace-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - mailtrace_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   mailtrace_mysql_data:
+  mailtrace_minio_data:

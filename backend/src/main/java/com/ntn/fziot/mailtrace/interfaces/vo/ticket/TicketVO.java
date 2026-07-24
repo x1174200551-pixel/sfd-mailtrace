@@ -26,6 +26,7 @@ public record TicketVO(
         @Schema(description = "是否已SLA超时") Boolean slaBreached,
         @Schema(description = "客户最近来信时间") LocalDateTime lastCustomerMailAt,
         @Schema(description = "处理人最近回复时间") LocalDateTime lastAgentReplyAt,
+        @Schema(description = "备注") String remark,
         @Schema(description = "创建时间") LocalDateTime createdAt,
         @Schema(description = "更新时间") LocalDateTime updatedAt,
         @Schema(description = "邮件消息列表") List<TicketMessageVO> messages,

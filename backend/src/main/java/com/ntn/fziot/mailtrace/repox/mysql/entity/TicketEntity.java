@@ -60,6 +60,9 @@ public class TicketEntity {
 
     private LocalDateTime lastAgentReplyAt;
 
+    // ---------- 备注 ----------
+    private String remark;
+
     // ---------- 审计字段 ----------
     private String createdBy;
 

@@ -1,9 +1,12 @@
 package com.ntn.fziot.mailtrace.application.bizservice.mailfetch;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ntn.fziot.mailtrace.application.bizservice.ticket.MessageThreadService;
+import com.ntn.fziot.mailtrace.application.bizservice.ticket.TicketBizService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchClient;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchConfig;
+import com.ntn.fziot.mailtrace.infrastructure.mail.ParsedMail;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailFetchLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailFetchLogMapper;
@@ -37,6 +40,9 @@ public class MailFetchBizService {
     private final MailFetchLogMapper mailFetchLogMapper;
     private final MailPasswordCipher mailPasswordCipher;
     private final ImapFetchClient imapFetchClient;
+    private final MessageIdDedupService messageIdDedupService;
+    private final MessageThreadService messageThreadService;
+    private final TicketBizService ticketBizService;
 
     /**
      * 查询当前到期、需要执行拉取的启用邮箱 ID。
@@ -86,7 +92,7 @@ public class MailFetchBizService {
 
         long start = System.currentTimeMillis();
         try {
-            // 2、解密 IMAP 授权码并连接统计未读邮件数
+            // 2、解密 IMAP 授权码并拉取未读邮件
             String password = mailPasswordCipher.decrypt(mailbox.getImapPasswordEnc());
             ImapFetchConfig config = new ImapFetchConfig(
                     mailbox.getImapHost(),
@@ -96,17 +102,57 @@ public class MailFetchBizService {
                     password,
                     mailbox.getImapFolder() == null || mailbox.getImapFolder().isBlank() ? "INBOX" : mailbox.getImapFolder()
             );
-            int fetchedCount = imapFetchClient.countUnseenMessages(config);
+            List<ParsedMail> fetchedMails = imapFetchClient.fetchUnseenMessages(config);
 
-            // 3、写成功日志，并回写邮箱最近拉取时间与连接状态
+            // 3、Message-ID 去重
+            List<ParsedMail> newMails = messageIdDedupService.filterNew(fetchedMails);
+
+            // 4、逐封建单
+            int createdTicketCount = 0;
+            int linkedCount = 0;
+            for (ParsedMail mail : newMails) {
+                try {
+                    // 4a、线程关联：尝试匹配已有工单
+                    Long existingTicketId = messageThreadService.resolveTicketId(mail);
+
+                    if (existingTicketId != null) {
+                        // 关联到已有工单：客户追信回流
+                        ticketBizService.handleCustomerFollowUp(
+                                existingTicketId, mail.subject(), mail.fromAddress(),
+                                mail.contentText(), mail.contentHtml(),
+                                mail.messageId(), mail.sentAt()
+                        );
+                        log.info("客户追信回流 ticketId={} messageId={} subject={}",
+                                existingTicketId, mail.messageId(), mail.subject());
+                        linkedCount++;
+                    } else {
+                        // 新建工单
+                        String customerName = mail.fromPersonal() != null ? mail.fromPersonal() : mail.fromAddress();
+                        ticketBizService.createTicket(
+                                mailboxId, mail.subject(), mail.fromAddress(), customerName,
+                                mail.contentText(), mail.contentHtml(),
+                                mail.messageId(), mail.inReplyTo(), mail.references(),
+                                mail.sentAt()
+                        );
+                        createdTicketCount++;
+                    }
+                } catch (Exception e) {
+                    log.error("建单失败 messageId={} subject={}", mail.messageId(), mail.subject(), e);
+                }
+            }
+
+            // 5、写成功日志
             LocalDateTime finishedAt = LocalDateTime.now();
             long elapsed = System.currentTimeMillis() - start;
-            log.info("IMAP 拉取成功 mailboxId={} email={} host={} 未读数={} trigger={} 耗时={}ms",
+            log.info("IMAP 拉取成功 mailboxId={} email={} host={} 拉取={} 新邮件={} 新建工单={} 关联={} trigger={} 耗时={}ms",
                     mailbox.getId(), mailbox.getEmailAddress(), mailbox.getImapHost(),
-                    fetchedCount, normalizedTrigger, elapsed);
+                    fetchedMails.size(), newMails.size(), createdTicketCount, linkedCount,
+                    normalizedTrigger, elapsed);
             logEntity.setFinishedAt(finishedAt);
             logEntity.setSuccess(true);
-            logEntity.setFetchedCount(fetchedCount);
+            logEntity.setFetchedCount(newMails.size());
+            logEntity.setCreatedTicketCount(createdTicketCount);
+            logEntity.setLinkedCount(linkedCount);
             logEntity.setErrorMessage(null);
             mailFetchLogMapper.insert(logEntity);
 
@@ -117,7 +163,7 @@ public class MailFetchBizService {
             mailboxMapper.updateById(mailbox);
             return logEntity.getId();
         } catch (Exception exception) {
-            // 4、连接或拉取失败时记录错误，并标记邮箱连接异常
+            // 6、拉取失败时记录错误
             LocalDateTime finishedAt = LocalDateTime.now();
             long elapsed = System.currentTimeMillis() - start;
             String errorMessage = truncateError(exception);

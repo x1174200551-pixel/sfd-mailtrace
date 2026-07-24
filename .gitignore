@@ -47,3 +47,4 @@ docker-compose.*.override.yml
 /.workbuddy/
 /backend/target/
 .DS_Store
+/target/
