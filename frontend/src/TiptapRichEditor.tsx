@@ -24,9 +24,21 @@ interface TiptapRichEditorProps {
   initialContent?: string
 }
 
-function MenuBar({ editor }: { editor: any }) {
-  if (!editor) return null
+type ToolbarButton = {
+  type?: 'button'
+  icon: React.ReactNode
+  title: string
+  action: () => void
+  active: boolean
+}
 
+type ToolbarDivider = {
+  type: 'divider'
+}
+
+type ToolbarItem = ToolbarButton | ToolbarDivider
+
+function MenuBar({ editor }: { editor: any }) {
   const addLink = useCallback(() => {
     const url = window.prompt('请输入链接地址：')
     if (url) {
@@ -34,18 +46,20 @@ function MenuBar({ editor }: { editor: any }) {
     }
   }, [editor])
 
-  const buttons: ({ icon: React.ReactNode; title: string; action: () => void; active: boolean } | { type: 'divider' })[] = [
+  if (!editor) return null
+
+  const buttons: ToolbarItem[] = [
     { icon: <BoldOutlined />, title: '加粗', action: () => editor.chain().focus().toggleBold().run(), active: editor.isActive('bold') },
     { icon: <ItalicOutlined />, title: '斜体', action: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic') },
     { icon: <UnderlineOutlined />, title: '下划线', action: () => editor.chain().focus().toggleUnderline().run(), active: editor.isActive('underline') },
     { icon: <StrikethroughOutlined />, title: '删除线', action: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive('strike') },
-    { type: 'divider' as const },
+    { type: 'divider' },
     { icon: <FontSizeOutlined />, title: '标题', action: () => editor.chain().focus().toggleHeading({ level: 3 }).run(), active: editor.isActive('heading', { level: 3 }) },
     { icon: <UnorderedListOutlined />, title: '无序列表', action: () => editor.chain().focus().toggleBulletList().run(), active: editor.isActive('bulletList') },
     { icon: <OrderedListOutlined />, title: '有序列表', action: () => editor.chain().focus().toggleOrderedList().run(), active: editor.isActive('orderedList') },
-    { type: 'divider' as const },
+    { type: 'divider' },
     { icon: <LinkOutlined />, title: '插入链接', action: addLink, active: editor.isActive('link') },
-    { type: 'divider' as const },
+    { type: 'divider' },
     { icon: <UndoOutlined />, title: '撤销', action: () => editor.chain().focus().undo().run(), active: false },
     { icon: <RedoOutlined />, title: '重做', action: () => editor.chain().focus().redo().run(), active: false },
   ]
@@ -53,7 +67,7 @@ function MenuBar({ editor }: { editor: any }) {
   return (
     <div className="rich-editor-toolbar">
       {buttons.map((btn, i) => {
-        if ('type' in btn && btn.type === 'divider') {
+        if (btn.type === 'divider') {
           return <div key={i} className="rich-editor-divider" />
         }
         return (

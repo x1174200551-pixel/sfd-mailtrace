@@ -3,6 +3,8 @@ package com.ntn.fziot.mailtrace.application.bizservice.ticket;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleMatchResult;
+import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleService;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
@@ -99,6 +101,7 @@ public class TicketBizService {
     private final AutoReplyService autoReplyService;
     private final MailSendService mailSendService;
     private final TicketAttachmentMapper ticketAttachmentMapper;
+    private final AssignmentRuleService assignmentRuleService;
 
     // ==================== 创建工单（系统内部调用） ====================
 
@@ -161,8 +164,8 @@ public class TicketBizService {
         // 4、记录生命周期事件：CREATED
         recordEvent(ticket.getId(), EVENT_CREATED, "工单已创建，来源邮箱ID：" + mailboxId, OPERATOR_SYSTEM, LocalDateTime.now());
 
-        // 5、尝试自动分配（取邮箱默认处理人）
-        autoAssignByMailbox(ticket, mailboxId);
+        // 5、尝试自动分配（分配规则优先，邮箱默认处理人兜底）
+        autoAssignByRules(ticket, mailboxId, subject, customerEmail);
 
         // 6、发送自动回执（失败不影响工单）
         autoReplyService.sendAutoReply(ticket.getId(), mailboxId);
@@ -243,7 +246,7 @@ public class TicketBizService {
             // 关闭后追信 → 重新开启
             updateTicketStatus(ticket.getId(), STATUS_PROCESSING);
             recordEvent(ticket.getId(), EVENT_REOPENED,
-                    "客户追信，工单重新开启（原状态：" + oldStatus + "）", OPERATOR_SYSTEM, now);
+                    "客户追信，工单重新开启（原状态：" + statusLabel(oldStatus) + "）", OPERATOR_SYSTEM, now);
             log.info("客户追信：工单重新开启 ticketId={} ticketNo={} oldStatus={}",
                     ticket.getId(), ticket.getTicketNo(), oldStatus);
         } else if (STATUS_WAITING_CUSTOMER.equals(oldStatus)) {
@@ -326,7 +329,9 @@ public class TicketBizService {
             updateTicketStatus(ticket.getId(), STATUS_PROCESSING);
         }
 
-        String content = "转派处理人：" + assignee.getDisplayName();
+        String reason = normalize(request.reason());
+        String content = "转派处理人：" + assignee.getDisplayName()
+                + (reason.isEmpty() ? "" : "；原因：" + truncateContent(reason));
         recordEvent(ticket.getId(), EVENT_ASSIGNED, content, principal.account(), LocalDateTime.now());
 
         // 更新内存中的 ticket 状态用于返回
@@ -337,8 +342,9 @@ public class TicketBizService {
         recordLog(principal, "ASSIGN", ticket.getId(), content);
 
         // 发送分配通知给处理人
+        boolean notifyAssignee = request.notifyAssignee() == null || Boolean.TRUE.equals(request.notifyAssignee());
         MailboxEntity mailbox = mailboxMapper.selectById(ticket.getMailboxId());
-        if (mailbox != null) {
+        if (notifyAssignee && mailbox != null) {
             sendAssignNotify(ticket, mailbox, assignee);
         }
 
@@ -480,16 +486,23 @@ public class TicketBizService {
         String oldStatus = ticket.getStatus();
         updateTicketStatus(ticket.getId(), newStatus);
 
+        String reason = normalize(request.reason());
+        String statusChangeContent = "状态变更：" + statusLabel(oldStatus) + " → " + statusLabel(newStatus);
         if (STATUS_CLOSED.equals(newStatus)) {
             updateTicket(ticket.getId(), Map.of("closed_at", LocalDateTime.now()));
-            recordEvent(ticket.getId(), EVENT_CLOSED, "工单已关闭", principal.account(), LocalDateTime.now());
+            recordEvent(ticket.getId(), EVENT_CLOSED,
+                    statusChangeContent + "；工单已关闭" + (reason.isEmpty() ? "" : "；说明：" + truncateContent(reason)),
+                    principal.account(), LocalDateTime.now());
         } else if (STATUS_CANCELLED.equals(newStatus)) {
-            recordEvent(ticket.getId(), EVENT_CANCELLED, "工单已取消", principal.account(), LocalDateTime.now());
+            recordEvent(ticket.getId(), EVENT_CANCELLED,
+                    statusChangeContent + "；工单已取消" + (reason.isEmpty() ? "" : "；说明：" + truncateContent(reason)),
+                    principal.account(), LocalDateTime.now());
+        } else {
+            recordEvent(ticket.getId(), EVENT_STATUS_CHANGED, statusChangeContent,
+                    principal.account(), LocalDateTime.now());
         }
-        recordEvent(ticket.getId(), EVENT_STATUS_CHANGED, "状态变更：" + oldStatus + " → " + newStatus,
-                principal.account(), LocalDateTime.now());
 
-        recordLog(principal, "STATUS_CHANGE", ticket.getId(), "工单状态变更：" + oldStatus + " → " + newStatus);
+        recordLog(principal, "STATUS_CHANGE", ticket.getId(), "工单" + statusChangeContent);
         return toDetailVO(ticketMapper.selectById(id));
     }
 
@@ -499,6 +512,7 @@ public class TicketBizService {
     public TicketVO updatePriority(CurrentUserPrincipal principal, Long id, TicketPriorityRequest request) {
         assertAgentOrAdmin(principal);
         TicketEntity ticket = requireTicket(id);
+        assertActive(ticket);
 
         String newPriority = normalize(request.priority()).toUpperCase();
         if (!Set.of("LOW", "NORMAL", "HIGH", "URGENT").contains(newPriority)) {
@@ -511,19 +525,14 @@ public class TicketBizService {
                 .set(TicketEntity::getPriority, newPriority)
                 .set(TicketEntity::getUpdatedBy, principal.account()));
 
-        String priorityLabel = switch (oldPriority) {
-            case "URGENT" -> "紧急";
-            case "HIGH" -> "高";
-            default -> "普通";
-        };
-        String newLabel = switch (newPriority) {
-            case "URGENT" -> "紧急";
-            case "HIGH" -> "高";
-            default -> "普通";
-        };
-        recordEvent(ticket.getId(), EVENT_PRIORITY_CHANGED, "优先级变更：" + priorityLabel + " → " + newLabel,
+        String priorityLabel = priorityLabel(oldPriority);
+        String newLabel = priorityLabel(newPriority);
+        String reason = normalize(request.reason());
+        String content = "优先级变更：" + priorityLabel + " → " + newLabel
+                + (reason.isEmpty() ? "" : "；说明：" + truncateContent(reason));
+        recordEvent(ticket.getId(), EVENT_PRIORITY_CHANGED, content,
                 principal.account(), LocalDateTime.now());
-        recordLog(principal, "PRIORITY_CHANGE", ticket.getId(), "工单优先级变更：" + priorityLabel + " → " + newLabel);
+        recordLog(principal, "PRIORITY_CHANGE", ticket.getId(), "工单" + content);
 
         return toDetailVO(ticketMapper.selectById(id));
     }
@@ -544,31 +553,69 @@ public class TicketBizService {
     // ==================== 关闭工单 ====================
 
     @Transactional
-    public TicketVO closeTicket(CurrentUserPrincipal principal, Long id) {
-        return updateStatus(principal, id, new TicketStatusRequest("CLOSED"));
+    public TicketVO closeTicket(CurrentUserPrincipal principal, Long id, TicketStatusRequest request) {
+        String reason = request == null ? null : request.reason();
+        return updateStatus(principal, id, new TicketStatusRequest("CLOSED", reason));
     }
 
     // ==================== 内部方法 ====================
 
-    private void autoAssignByMailbox(TicketEntity ticket, Long mailboxId) {
+    private void autoAssignByRules(TicketEntity ticket, Long mailboxId, String subject, String customerEmail) {
+        // 1、加载来源邮箱，用于 MAILBOX 规则匹配、通知发信和旧逻辑兜底。
         MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
+        AssignmentRuleMatchResult matchResult = assignmentRuleService.matchForTicket(
+                mailboxId, mailbox == null ? null : mailbox.getEmailAddress(), subject, customerEmail);
+
+        // 2、优先应用启用的分配规则：按 priority_order 命中的第一条有效规则生效。
+        if (matchResult != null) {
+            ticket.setAssigneeId(matchResult.assigneeId());
+            ticket.setStatus(STATUS_PROCESSING);
+            ticketMapper.updateById(ticket);
+
+            String content = "自动分配处理人：" + matchResult.assigneeName()
+                    + "；命中规则：" + matchResult.ruleName()
+                    + "（" + matchResult.matchType() + "）";
+            recordEvent(ticket.getId(), EVENT_ASSIGNED, content, OPERATOR_SYSTEM, LocalDateTime.now());
+            log.info("自动分配处理人 ticketId={} assignee={} ruleId={} ruleName={}",
+                    ticket.getId(), matchResult.assigneeName(), matchResult.ruleId(), matchResult.ruleName());
+
+            // 3、规则允许通知且邮箱可用时，发送分配通知。
+            if (Boolean.TRUE.equals(matchResult.notifyEnabled()) && mailbox != null) {
+                sendAssignNotify(ticket, mailbox, matchResult.assigneeId(),
+                        matchResult.assigneeName(), matchResult.assigneeEmail());
+            }
+            return;
+        }
+
+        // 4、没有规则命中时，保留原邮箱默认处理人逻辑，避免无配置场景回退。
+        autoAssignByMailboxDefault(ticket, mailbox, mailboxId);
+    }
+
+    private void autoAssignByMailboxDefault(TicketEntity ticket, MailboxEntity mailbox, Long mailboxId) {
+        // 1、邮箱不存在或未配置默认处理人时，工单保持待分配。
         if (mailbox == null || mailbox.getDefaultAssigneeId() == null) {
             log.info("邮箱无默认处理人，工单保持待分配 ticketId={} mailboxId={}", ticket.getId(), mailboxId);
             return;
         }
+
+        // 2、默认处理人必须存在且启用，否则继续保持待分配。
         UserEntity assignee = userMapper.selectById(mailbox.getDefaultAssigneeId());
         if (assignee == null || !Boolean.TRUE.equals(assignee.getEnabled())) {
             log.info("默认处理人无效或已停用，工单保持待分配 ticketId={} assigneeId={}", ticket.getId(), mailbox.getDefaultAssigneeId());
             return;
         }
+
+        // 3、回写处理人和处理中状态，并记录自动分配事件。
         ticket.setAssigneeId(mailbox.getDefaultAssigneeId());
         ticket.setStatus(STATUS_PROCESSING);
         ticketMapper.updateById(ticket);
 
-        recordEvent(ticket.getId(), EVENT_ASSIGNED, "自动分配处理人：" + assignee.getDisplayName(), OPERATOR_SYSTEM, LocalDateTime.now());
+        recordEvent(ticket.getId(), EVENT_ASSIGNED,
+                "自动分配处理人：" + assignee.getDisplayName() + "；来源：邮箱默认处理人",
+                OPERATOR_SYSTEM, LocalDateTime.now());
         log.info("自动分配处理人 ticketId={} assignee={}", ticket.getId(), assignee.getDisplayName());
 
-        // 发送分配通知
+        // 4、发送分配通知。
         sendAssignNotify(ticket, mailbox, assignee);
     }
 
@@ -576,8 +623,13 @@ public class TicketBizService {
      * 发送分配通知邮件给处理人。
      */
     private void sendAssignNotify(TicketEntity ticket, MailboxEntity mailbox, UserEntity assignee) {
-        if (assignee.getEmail() == null || assignee.getEmail().isBlank()) {
-            log.info("分配通知跳过：处理人无邮箱 ticketId={} assigneeId={}", ticket.getId(), assignee.getId());
+        sendAssignNotify(ticket, mailbox, assignee.getId(), assignee.getDisplayName(), assignee.getEmail());
+    }
+
+    private void sendAssignNotify(TicketEntity ticket, MailboxEntity mailbox,
+                                  Long assigneeId, String assigneeName, String assigneeEmail) {
+        if (assigneeEmail == null || assigneeEmail.isBlank()) {
+            log.info("分配通知跳过：处理人无邮箱 ticketId={} assigneeId={}", ticket.getId(), assigneeId);
             return;
         }
         String subject = "新工单分配：" + ticket.getTicketNo() + " " + ticket.getSubject();
@@ -586,7 +638,7 @@ public class TicketBizService {
             case "URGENT" -> "紧急";
             default -> "普通";
         };
-        String content = "您好，" + assignee.getDisplayName() + "，\n\n"
+        String content = "您好，" + assigneeName + "，\n\n"
                 + "系统已将以下工单分配给您，请及时处理：\n\n"
                 + "工单号：" + ticket.getTicketNo() + "\n"
                 + "主题：" + ticket.getSubject() + "\n"
@@ -595,9 +647,9 @@ public class TicketBizService {
                 + "请登录系统查看详情。";
 
         MailSendService.SendResult result = mailSendService.sendRawMail(
-                mailbox.getId(), assignee.getEmail(), subject, content, "ASSIGN_NOTIFY");
+                mailbox.getId(), assigneeEmail, subject, content, "ASSIGN_NOTIFY");
         if (result.success()) {
-            log.info("分配通知已发送 ticketId={} to={}", ticket.getId(), assignee.getEmail());
+            log.info("分配通知已发送 ticketId={} to={}", ticket.getId(), assigneeEmail);
         } else {
             log.warn("分配通知发送失败 ticketId={} reason={}", ticket.getId(), result.message());
         }
@@ -792,6 +844,29 @@ public class TicketBizService {
     private String truncateContent(String content) {
         if (content == null) return "";
         return content.length() > 200 ? content.substring(0, 200) + "..." : content;
+    }
+
+    private String statusLabel(String status) {
+        if (status == null) return "";
+        return switch (status) {
+            case STATUS_PENDING_ASSIGN -> "待分配";
+            case STATUS_PROCESSING -> "处理中";
+            case STATUS_WAITING_CUSTOMER -> "待客户回复";
+            case STATUS_CLOSED -> "已关闭";
+            case STATUS_CANCELLED -> "已取消";
+            default -> status;
+        };
+    }
+
+    private String priorityLabel(String priority) {
+        if (priority == null) return "";
+        return switch (priority) {
+            case "URGENT" -> "P1 紧急";
+            case "HIGH" -> "P2 高";
+            case "NORMAL" -> "P3 普通";
+            case "LOW" -> "P4 低";
+            default -> priority;
+        };
     }
 
     private long normalizePage(Integer page) {

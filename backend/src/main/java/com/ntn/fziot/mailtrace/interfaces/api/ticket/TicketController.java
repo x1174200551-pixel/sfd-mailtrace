@@ -96,8 +96,9 @@ public class TicketController {
     @PostMapping("/{id}/close")
     public BasicResult<TicketVO> closeTicket(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
-            @PathVariable Long id) {
-        return BasicResult.ok(ticketBizService.closeTicket(principal, id));
+            @PathVariable Long id,
+            @RequestBody(required = false) TicketStatusRequest request) {
+        return BasicResult.ok(ticketBizService.closeTicket(principal, id, request));
     }
 
     @Operation(summary = "变更工单优先级")

@@ -1,0 +1,328 @@
+package com.ntn.fziot.mailtrace.application.bizservice.ticket;
+
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleMatchResult;
+import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleService;
+import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
+import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPriorityRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketStatusRequest;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEventEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketMessageEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketAttachmentMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketEventMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMessageMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class TicketBizServiceTest {
+
+    @Mock
+    private TicketMapper ticketMapper;
+    @Mock
+    private TicketEventMapper ticketEventMapper;
+    @Mock
+    private TicketMessageMapper ticketMessageMapper;
+    @Mock
+    private MailboxMapper mailboxMapper;
+    @Mock
+    private UserMapper userMapper;
+    @Mock
+    private OperationLogMapper operationLogMapper;
+    @Mock
+    private TicketNumberRuleService ticketNumberRuleService;
+    @Mock
+    private AutoReplyService autoReplyService;
+    @Mock
+    private MailSendService mailSendService;
+    @Mock
+    private TicketAttachmentMapper ticketAttachmentMapper;
+    @Mock
+    private AssignmentRuleService assignmentRuleService;
+
+    @InjectMocks
+    private TicketBizService ticketBizService;
+
+    private final CurrentUserPrincipal admin = new CurrentUserPrincipal(
+            1L, "admin", "系统管理员", "admin@example.com", "ADMIN");
+
+    @BeforeAll
+    static void initMybatisPlusTableInfo() {
+        MybatisConfiguration configuration = new MybatisConfiguration();
+        initTableInfo(configuration, "TicketBizServiceTest.TicketEntity", TicketEntity.class);
+        initTableInfo(configuration, "TicketBizServiceTest.TicketMessageEntity", TicketMessageEntity.class);
+        initTableInfo(configuration, "TicketBizServiceTest.TicketEventEntity", TicketEventEntity.class);
+    }
+
+    @BeforeEach
+    void setUp() {
+        lenient().when(ticketMessageMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(ticketEventMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(mailboxMapper.selectById(11L)).thenReturn(mailbox());
+        lenient().when(userMapper.selectById(2L)).thenReturn(agent(2L, "张三", "agent@example.com"));
+        lenient().when(assignmentRuleService.matchForTicket(any(), any(), any(), any())).thenReturn(null);
+    }
+
+    @Test
+    void replyTicket_externalReply_shouldSetFirstReplyAndAgentReplyEvents() {
+        TicketEntity ticket = ticket(100L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(100L)).thenReturn(ticket);
+        when(mailSendService.sendRawMail(eq(11L), eq("customer@example.com"), any(), any(), eq("AGENT_REPLY")))
+                .thenReturn(new MailSendService.SendResult(true, "OK"));
+
+        ticketBizService.replyTicket(admin, 100L,
+                new TicketReplyRequest("处理完成", "<p>处理完成</p>", false, List.of()));
+
+        ArgumentCaptor<TicketEntity> updateCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).updateById(updateCaptor.capture());
+        assertTrue(updateCaptor.getAllValues().stream().anyMatch(update -> update.getFirstReplyAt() != null));
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper, org.mockito.Mockito.atLeast(2)).insert(eventCaptor.capture());
+        List<String> eventTypes = eventCaptor.getAllValues().stream().map(TicketEventEntity::getEventType).toList();
+        assertTrue(eventTypes.contains(TicketBizService.EVENT_FIRST_REPLY));
+        assertTrue(eventTypes.contains(TicketBizService.EVENT_AGENT_REPLY));
+    }
+
+    @Test
+    void replyTicket_internalNote_shouldNotSendMailOrSetFirstReply() {
+        TicketEntity ticket = ticket(101L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(101L)).thenReturn(ticket);
+
+        ticketBizService.replyTicket(admin, 101L,
+                new TicketReplyRequest("内部观察", "<p>内部观察</p>", true, List.of()));
+
+        verify(mailSendService, never()).sendRawMail(anyLong(), any(), any(), any(), any());
+        verify(ticketMapper, never()).updateById(any(TicketEntity.class));
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_INTERNAL_NOTE, eventCaptor.getValue().getEventType());
+    }
+
+    @Test
+    void assignTicket_shouldWriteReasonAndAllowSkippingNotify() {
+        TicketEntity ticket = ticket(102L, TicketBizService.STATUS_PENDING_ASSIGN);
+        when(ticketMapper.selectById(102L)).thenReturn(ticket);
+
+        ticketBizService.assignTicket(admin, 102L, new TicketAssignRequest(2L, "专业组处理", false));
+
+        verify(mailSendService, never()).sendRawMail(anyLong(), any(), any(), any(), any());
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_ASSIGNED, eventCaptor.getValue().getEventType());
+        assertTrue(eventCaptor.getValue().getEventContent().contains("原因：专业组处理"));
+    }
+
+    @Test
+    void updatePriority_shouldWriteChinesePriorityAndReason() {
+        TicketEntity ticket = ticket(103L, TicketBizService.STATUS_PROCESSING);
+        ticket.setPriority("NORMAL");
+        when(ticketMapper.selectById(103L)).thenReturn(ticket);
+
+        ticketBizService.updatePriority(admin, 103L, new TicketPriorityRequest("URGENT", "客户升级"));
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_PRIORITY_CHANGED, eventCaptor.getValue().getEventType());
+        assertTrue(eventCaptor.getValue().getEventContent().contains("P3 普通 → P1 紧急"));
+        assertTrue(eventCaptor.getValue().getEventContent().contains("说明：客户升级"));
+    }
+
+    @Test
+    void closeTicket_shouldWriteSingleClosedEventWithChineseStatus() {
+        TicketEntity ticket = ticket(104L, TicketBizService.STATUS_WAITING_CUSTOMER);
+        when(ticketMapper.selectById(104L)).thenReturn(ticket);
+
+        ticketBizService.closeTicket(admin, 104L, new TicketStatusRequest("CLOSED", "客户确认完成"));
+
+        ArgumentCaptor<TicketEntity> updateCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).updateById(updateCaptor.capture());
+        assertTrue(updateCaptor.getAllValues().stream().anyMatch(update -> update.getClosedAt() != null));
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_CLOSED, eventCaptor.getValue().getEventType());
+        assertTrue(eventCaptor.getValue().getEventContent().contains("待客户回复 → 已关闭"));
+        assertTrue(eventCaptor.getValue().getEventContent().contains("说明：客户确认完成"));
+    }
+
+    @Test
+    void handleCustomerFollowUp_whenClosed_shouldReopenToProcessing() {
+        TicketEntity ticket = ticket(105L, TicketBizService.STATUS_CLOSED);
+        when(ticketMapper.selectById(105L)).thenReturn(ticket);
+
+        ticketBizService.handleCustomerFollowUp(
+                105L, "Re: test", "customer@example.com", "追信", "<p>追信</p>",
+                "<msg-1@example.com>", LocalDateTime.now());
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_REOPENED, eventCaptor.getValue().getEventType());
+        assertTrue(eventCaptor.getValue().getEventContent().contains("原状态：已关闭"));
+    }
+
+    @Test
+    void handleCustomerFollowUp_whenWaitingCustomer_shouldReturnToProcessing() {
+        TicketEntity ticket = ticket(107L, TicketBizService.STATUS_WAITING_CUSTOMER);
+        when(ticketMapper.selectById(107L)).thenReturn(ticket);
+
+        ticketBizService.handleCustomerFollowUp(
+                107L, "Re: waiting", "customer@example.com", "已补充", "<p>已补充</p>",
+                "<msg-2@example.com>", LocalDateTime.now());
+
+        verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).update(eq(null), any());
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_CUSTOMER_FOLLOWUP, eventCaptor.getValue().getEventType());
+        assertTrue(eventCaptor.getValue().getEventContent().contains("自动转为处理中"));
+    }
+
+    @Test
+    void createTicket_whenAssignmentRuleMatches_shouldAssignByRuleAndRespectNotifySwitch() {
+        when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-200");
+        when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
+            TicketEntity ticket = invocation.getArgument(0);
+            ticket.setId(200L);
+            return 1;
+        });
+        when(assignmentRuleService.matchForTicket(eq(11L), eq("support@example.com"),
+                eq("VIP 订单咨询"), eq("vip@example.com")))
+                .thenReturn(new AssignmentRuleMatchResult(
+                        301L, "VIP 规则", "SUBJECT_KEYWORD", "VIP",
+                        5L, "李四", "lisi@example.com", false));
+
+        Long ticketId = ticketBizService.createTicket(
+                11L, "VIP 订单咨询", "vip@example.com", "VIP 客户",
+                "正文", "<p>正文</p>", "<msg-200@example.com>",
+                null, null, LocalDateTime.now());
+
+        assertEquals(200L, ticketId);
+        ArgumentCaptor<TicketEntity> ticketCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).updateById(ticketCaptor.capture());
+        assertTrue(ticketCaptor.getAllValues().stream()
+                .anyMatch(update -> Long.valueOf(5L).equals(update.getAssigneeId())
+                        && TicketBizService.STATUS_PROCESSING.equals(update.getStatus())));
+        verify(mailSendService, never()).sendRawMail(anyLong(), any(), any(), any(), any());
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper, org.mockito.Mockito.atLeast(2)).insert(eventCaptor.capture());
+        assertTrue(eventCaptor.getAllValues().stream()
+                .anyMatch(event -> TicketBizService.EVENT_ASSIGNED.equals(event.getEventType())
+                        && event.getEventContent().contains("命中规则：VIP 规则")));
+    }
+
+    @Test
+    void createTicket_whenNoRuleMatches_shouldFallbackMailboxDefaultAssignee() {
+        MailboxEntity mailbox = mailbox();
+        mailbox.setDefaultAssigneeId(2L);
+        when(mailboxMapper.selectById(11L)).thenReturn(mailbox);
+        when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-201");
+        when(mailSendService.sendRawMail(eq(11L), eq("agent@example.com"), any(), any(), eq("ASSIGN_NOTIFY")))
+                .thenReturn(new MailSendService.SendResult(true, "OK"));
+        when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
+            TicketEntity ticket = invocation.getArgument(0);
+            ticket.setId(201L);
+            return 1;
+        });
+
+        Long ticketId = ticketBizService.createTicket(
+                11L, "普通咨询", "customer@example.com", "普通客户",
+                "正文", "<p>正文</p>", "<msg-201@example.com>",
+                null, null, LocalDateTime.now());
+
+        assertEquals(201L, ticketId);
+        verify(assignmentRuleService).matchForTicket(11L, "support@example.com", "普通咨询", "customer@example.com");
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper, org.mockito.Mockito.atLeast(2)).insert(eventCaptor.capture());
+        assertTrue(eventCaptor.getAllValues().stream()
+                .anyMatch(event -> TicketBizService.EVENT_ASSIGNED.equals(event.getEventType())
+                        && event.getEventContent().contains("来源：邮箱默认处理人")));
+    }
+
+    @Test
+    void updateStatus_whenIllegalWaitingCustomer_shouldReject() {
+        TicketEntity ticket = ticket(106L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(106L)).thenReturn(ticket);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> ticketBizService.updateStatus(admin, 106L, new TicketStatusRequest("WAITING_CUSTOMER", "manual")));
+
+        assertTrue(ex.getMessage().contains("不能手动变更"));
+    }
+
+    private TicketEntity ticket(Long id, String status) {
+        TicketEntity ticket = new TicketEntity();
+        ticket.setId(id);
+        ticket.setTicketNo("TCK-20260727-" + id);
+        ticket.setSubject("测试工单");
+        ticket.setStatus(status);
+        ticket.setPriority("NORMAL");
+        ticket.setMailboxId(11L);
+        ticket.setCustomerEmail("customer@example.com");
+        ticket.setLinkSuspect(false);
+        ticket.setSlaBreached(false);
+        ticket.setCreatedAt(LocalDateTime.now());
+        ticket.setUpdatedAt(LocalDateTime.now());
+        return ticket;
+    }
+
+    private UserEntity agent(Long id, String displayName, String email) {
+        UserEntity user = new UserEntity();
+        user.setId(id);
+        user.setAccount("agent" + id);
+        user.setDisplayName(displayName);
+        user.setEmail(email);
+        user.setRoleCode("AGENT");
+        user.setEnabled(true);
+        return user;
+    }
+
+    private MailboxEntity mailbox() {
+        MailboxEntity mailbox = new MailboxEntity();
+        mailbox.setId(11L);
+        mailbox.setMailboxName("客服邮箱");
+        mailbox.setEmailAddress("support@example.com");
+        return mailbox;
+    }
+
+    private static void initTableInfo(MybatisConfiguration configuration, String namespace, Class<?> entityClass) {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(configuration, namespace);
+        TableInfoHelper.initTableInfo(assistant, entityClass);
+    }
+}

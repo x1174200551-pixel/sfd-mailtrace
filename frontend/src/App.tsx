@@ -4,7 +4,7 @@ import TiptapRichEditor from './TiptapRichEditor'
 import {
   Card, Table, Select, Button, Drawer, Tag, Row, Col, Modal,
   DatePicker, Empty, Typography, Alert, Input, Pagination,
-  Tabs, Timeline, Descriptions, Space, Avatar, Segmented, message,
+  Tabs, Timeline, Descriptions, Space, Avatar, Segmented, Switch, Checkbox, message,
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -12,7 +12,6 @@ import {
   CloseOutlined,
   DeleteOutlined,
   DownloadOutlined,
-  EditOutlined,
   EllipsisOutlined,
   FileTextOutlined,
   FlagOutlined,
@@ -388,6 +387,14 @@ type TicketPageResponse = {
   pages: number
 }
 
+type TicketEvent = {
+  id: number
+  eventType: string
+  eventContent: string
+  operator: string
+  eventAt: string
+}
+
 type TicketDetail = {
   id: number
   ticketNo: string
@@ -409,7 +416,25 @@ type TicketDetail = {
   createdAt: string
   updatedAt: string
   messages: any[]
-  events: { id: number; eventType: string; eventContent: string; operator: string; eventAt: string }[]
+  events: TicketEvent[]
+}
+
+type TicketAttachment = {
+  id: number
+  messageId: number | null
+  fileName: string
+  fileSize: number
+  contentType: string | null
+  downloadUrl: string | null
+  uploadedBy: string | null
+  createdAt: string
+}
+
+type UploadedFile = {
+  objectKey: string
+  fileName: string
+  fileSize: number
+  contentType: string
 }
 
 function relativeTime(t: string) {
@@ -431,8 +456,46 @@ function formatFileSize(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + units[i]
 }
 
-function statusLabel(s: string) { return ({ PENDING_ASSIGN: '待处理', PROCESSING: '处理中', WAITING_CUSTOMER: '待客户回复', CLOSED: '已关闭', CANCELLED: '已取消' })[s] || s }
-function priorityLabel(s: string) { return ({ NORMAL: '普通', HIGH: '高', URGENT: '紧急' })[s] || s }
+const statusLabels: Record<string, string> = {
+  PENDING_ASSIGN: '待处理',
+  PROCESSING: '处理中',
+  WAITING_CUSTOMER: '待客户回复',
+  CLOSED: '已关闭',
+  CANCELLED: '已取消',
+}
+
+function statusLabel(s: string) { return statusLabels[s] || s }
+function priorityLabel(s: string) { return ({ LOW: '低', NORMAL: '普通', HIGH: '高', URGENT: '紧急' })[s] || s }
+
+function priorityOptionLabel(s: string) {
+  return ({ URGENT: 'P1 - 紧急', HIGH: 'P2 - 高', NORMAL: 'P3 - 普通', LOW: 'P4 - 低' } as Record<string, string>)[s] || s
+}
+
+function priorityBadgeText(s: string) {
+  return ({ URGENT: 'P1', HIGH: 'P2', NORMAL: 'P3', LOW: 'P4' } as Record<string, string>)[s] || 'P3'
+}
+
+function priorityBadgeClass(s: string) {
+  return ({ URGENT: 'p1', HIGH: 'p2', NORMAL: 'p3', LOW: 'p4' } as Record<string, string>)[s] || 'p3'
+}
+
+function formatTicketEventContent(content: string) {
+  return Object.entries(statusLabels).reduce(
+    (text, [status, label]) => text.replaceAll(status, label),
+    content,
+  )
+}
+
+function getVisibleTicketEvents(events: TicketEvent[]) {
+  const hasClosedEvent = events.some(ev => ev.eventType === 'CLOSED')
+  return events
+    .filter(ev => !(hasClosedEvent && ev.eventType === 'STATUS_CHANGED' && formatTicketEventContent(ev.eventContent).includes('→ 已关闭')))
+    .map(ev => ({ ...ev, eventContent: formatTicketEventContent(ev.eventContent) }))
+}
+
+function isTerminalTicket(status: string) {
+  return status === 'CLOSED' || status === 'CANCELLED'
+}
 
 /** 将 HTML 转文本并保留换行 */
 function htmlToText(html: string): string {
@@ -872,25 +935,34 @@ function App() {
   const [msgSortAsc, setMsgSortAsc] = useState(true)
 
   // ---- 附件 ----
-  const [ticketAttachments, setTicketAttachments] = useState<any[]>([])
+  const [ticketAttachments, setTicketAttachments] = useState<TicketAttachment[]>([])
 
   // ---- 工单操作 ----
   const [replyContent, setReplyContent] = useState('')
   const [replyHtml, setReplyHtml] = useState('')
   const [replySending, setReplySending] = useState(false)
-  const [uploadedFiles, setUploadedFiles] = useState<{ objectKey: string; fileName: string; fileSize: number }[]>([])
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [uploadingFile, setUploadingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [assignUsers, setAssignUsers] = useState<ManagedUser[]>([])
   const [assignUserId, setAssignUserId] = useState<number | null>(null)
+  const [assignReason, setAssignReason] = useState('')
+  const [assignNotifyAssignee, setAssignNotifyAssignee] = useState(true)
   const [assignSending, setAssignSending] = useState(false)
   const [closeModalOpen, setCloseModalOpen] = useState(false)
+  const [closeReason, setCloseReason] = useState('')
+  const [closeConfirmed, setCloseConfirmed] = useState(false)
   const [closeSending, setCloseSending] = useState(false)
   const [remarkDraft, setRemarkDraft] = useState('')
   const [priorityModalOpen, setPriorityModalOpen] = useState(false)
   const [priorityValue, setPriorityValue] = useState('NORMAL')
+  const [priorityReason, setPriorityReason] = useState('')
   const [prioritySending, setPrioritySending] = useState(false)
+  const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [statusValue, setStatusValue] = useState('PROCESSING')
+  const [statusReason, setStatusReason] = useState('')
+  const [statusSending, setStatusSending] = useState(false)
   const [ticketStats, setTicketStats] = useState<any>(null)
   const [ticketRule, setTicketRule] = useState<TicketNumberRule | null>(null)
   const [ticketRuleForm, setTicketRuleForm] = useState<TicketRuleFormState>(emptyTicketRuleForm)
@@ -1334,17 +1406,6 @@ function App() {
     }
   }, [token, activeMenu, ticketPage, ticketPageSize, ticketStatusTab, ticketKeyword, handleAuthExpired])
 
-  const fetchTicketDetail = useCallback(async (id: number) => {
-    if (!token) return
-    try {
-      const data = await requestApi<TicketDetail>(`/api/v1/tickets/${id}`, { headers: authHeaders(token) })
-      setTicketDetail(data)
-      setRemarkDraft(data.remark || '')
-    } catch (error) {
-      if (handleAuthExpired(error)) return
-    }
-  }, [token, handleAuthExpired])
-
   const handleBackToList = useCallback(() => {
     setShowTicketDetailPage(false)
     setTicketDetail(null)
@@ -1364,7 +1425,7 @@ function App() {
       setRemarkDraft(data.remark || '')
       // 加载附件列表
       try {
-        const atts = await requestApi<any[]>(`/api/v1/tickets/${id}/attachments`, { headers: authHeaders(token) })
+        const atts = await requestApi<TicketAttachment[]>(`/api/v1/tickets/${id}/attachments`, { headers: authHeaders(token) })
         setTicketAttachments(atts || [])
       } catch { setTicketAttachments([]) }
     } catch (error) {
@@ -1381,7 +1442,7 @@ function App() {
       setRemarkDraft(data.remark || '')
       // 刷新附件列表
       try {
-        const atts = await requestApi<any[]>(`/api/v1/tickets/${ticketDetail.id}/attachments`, { headers: authHeaders(token) })
+        const atts = await requestApi<TicketAttachment[]>(`/api/v1/tickets/${ticketDetail.id}/attachments`, { headers: authHeaders(token) })
         setTicketAttachments(atts || [])
       } catch { /* ignore */ }
     } catch (error) {
@@ -1405,7 +1466,7 @@ function App() {
     if (!token || !ticketDetail || (!content && !html)) return
     setReplySending(true)
     try {
-      const attInfos = uploadedFiles.map(f => ({ objectKey: f.objectKey, fileName: f.fileName, fileSize: f.fileSize }))
+      const attInfos = uploadedFiles.map(f => ({ objectKey: f.objectKey, fileName: f.fileName, fileSize: f.fileSize, contentType: f.contentType }))
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/reply`, {
         method: 'POST',
         headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
@@ -1433,10 +1494,16 @@ function App() {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/assign`, {
         method: 'POST',
         headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assigneeId: assignUserId }),
+        body: JSON.stringify({
+          assigneeId: assignUserId,
+          reason: assignReason.trim() || null,
+          notifyAssignee: assignNotifyAssignee,
+        }),
       })
       setAssignModalOpen(false)
       setAssignUserId(null)
+      setAssignReason('')
+      setAssignNotifyAssignee(true)
       await reloadTicketDetail()
       void fetchTickets()
       message.success('工单已转派')
@@ -1446,7 +1513,7 @@ function App() {
     } finally {
       setAssignSending(false)
     }
-  }, [token, ticketDetail, assignUserId, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, assignUserId, assignReason, assignNotifyAssignee, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   /** 关闭工单 */
   const handleClose = useCallback(async () => {
@@ -1455,9 +1522,12 @@ function App() {
     try {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/close`, {
         method: 'POST',
-        headers: authHeaders(token),
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: closeReason.trim() || null }),
       })
       setCloseModalOpen(false)
+      setCloseReason('')
+      setCloseConfirmed(false)
       await reloadTicketDetail()
       void fetchTickets()
       message.success('工单已关闭')
@@ -1467,7 +1537,7 @@ function App() {
     } finally {
       setCloseSending(false)
     }
-  }, [token, ticketDetail, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, closeReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   /** 上传附件（通用上传，不关联工单） */
   const handleUploadFile = useCallback(async (file: File) => {
@@ -1476,12 +1546,12 @@ function App() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const result = await requestApi<{ objectKey: string; fileName: string; fileSize: number }>('/api/v1/files/upload', {
+      const result = await requestApi<UploadedFile>('/api/v1/files/upload', {
         method: 'POST',
         headers: { ...authHeaders(token) },
         body: formData,
       })
-      setUploadedFiles(prev => [...prev, { objectKey: result.objectKey, fileName: result.fileName, fileSize: result.fileSize }])
+      setUploadedFiles(prev => [...prev, result])
       message.success(`"${file.name}" 上传成功`)
     } catch (error: any) {
       const msg = error?.message || '上传失败'
@@ -1506,7 +1576,9 @@ function App() {
         headers: authHeaders(token),
       })
       setTicketAttachments(prev => prev.filter(a => a.id !== attachmentId))
-    } catch (error) {
+      message.success('附件已删除')
+    } catch (error: any) {
+      message.error(error?.message || '附件删除失败')
       if (handleAuthExpired(error)) return
     }
   }, [token, ticketDetail, handleAuthExpired])
@@ -1519,9 +1591,10 @@ function App() {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/priority`, {
         method: 'PATCH',
         headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priority: priorityValue }),
+        body: JSON.stringify({ priority: priorityValue, reason: priorityReason.trim() || null }),
       })
       setPriorityModalOpen(false)
+      setPriorityReason('')
       await reloadTicketDetail()
       void fetchTickets()
       message.success('优先级已修改')
@@ -1531,7 +1604,30 @@ function App() {
     } finally {
       setPrioritySending(false)
     }
-  }, [token, ticketDetail, priorityValue, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, priorityValue, priorityReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
+
+  /** 修改状态 */
+  const handleStatusChange = useCallback(async () => {
+    if (!token || !ticketDetail) return
+    setStatusSending(true)
+    try {
+      await requestApi(`/api/v1/tickets/${ticketDetail.id}/status`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: statusValue, reason: statusReason.trim() || null }),
+      })
+      setStatusModalOpen(false)
+      setStatusReason('')
+      await reloadTicketDetail()
+      void fetchTickets()
+      message.success('状态已修改')
+    } catch (error: any) {
+      message.error(error?.message || '修改状态失败')
+      if (handleAuthExpired(error)) return
+    } finally {
+      setStatusSending(false)
+    }
+  }, [token, ticketDetail, statusValue, statusReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   const fetchTicketStats = useCallback(async () => {
     if (!token) return
@@ -2284,8 +2380,8 @@ function App() {
                     <div className="detail-header-card">
                       <div className="detail-header-top">
                         <div className="detail-header-left">
-                          <span className={`priority-pill ${ticketDetail.priority === 'URGENT' ? 'p1' : ticketDetail.priority === 'HIGH' ? 'p2' : 'p3'}`}>
-                            {ticketDetail.priority === 'URGENT' ? 'P1' : ticketDetail.priority === 'HIGH' ? 'P2' : 'P3'}
+                          <span className={`priority-pill ${priorityBadgeClass(ticketDetail.priority)}`}>
+                            {priorityBadgeText(ticketDetail.priority)}
                           </span>
                           <span style={{ fontSize: 14, fontWeight: 500, color: ticketDetail.priority === 'URGENT' ? '#dc2626' : ticketDetail.priority === 'HIGH' ? '#d97706' : '#6b7280', marginRight: 8 }}>
                             {priorityLabel(ticketDetail.priority)}
@@ -2294,10 +2390,49 @@ function App() {
                           <span className="detail-ticket-no">{ticketDetail.ticketNo}</span>
                         </div>
                         <div className="detail-header-actions">
-                          <Button size="small" icon={<SwapOutlined />} onClick={() => { setAssignModalOpen(true); void fetchAgentUsers() }}>转派</Button>
+                          <Button
+                            size="small"
+                            icon={<SwapOutlined />}
+                            onClick={() => {
+                              setAssignUserId(ticketDetail.assigneeId)
+                              setAssignReason('')
+                              setAssignNotifyAssignee(true)
+                              setAssignModalOpen(true)
+                              void fetchAgentUsers()
+                            }}
+                          >
+                            转派
+                          </Button>
                           <Button size="small" icon={<FlagOutlined />}
-                            onClick={() => { setPriorityValue(ticketDetail.priority); setPriorityModalOpen(true) }}>修改优先级</Button>
-                          <Button size="small" icon={<CloseCircleOutlined />} onClick={() => setCloseModalOpen(true)}>关闭工单</Button>
+                            disabled={isTerminalTicket(ticketDetail.status)}
+                            onClick={() => {
+                              setPriorityValue(ticketDetail.priority)
+                              setPriorityReason('')
+                              setPriorityModalOpen(true)
+                            }}>修改优先级</Button>
+                          <Button
+                            size="small"
+                            disabled={isTerminalTicket(ticketDetail.status)}
+                            onClick={() => {
+                              setStatusValue(ticketDetail.status === 'PROCESSING' ? 'CANCELLED' : 'PROCESSING')
+                              setStatusReason('')
+                              setStatusModalOpen(true)
+                            }}
+                          >
+                            修改状态
+                          </Button>
+                          <Button
+                            size="small"
+                            icon={<CloseCircleOutlined />}
+                            disabled={isTerminalTicket(ticketDetail.status)}
+                            onClick={() => {
+                              setCloseReason('')
+                              setCloseConfirmed(false)
+                              setCloseModalOpen(true)
+                            }}
+                          >
+                            关闭工单
+                          </Button>
                           <Button size="small" icon={<EllipsisOutlined />}>更多</Button>
                         </div>
                       </div>
@@ -2408,10 +2543,10 @@ function App() {
                                           if (msgAtts.length === 0) return null
                                           return (
                                             <div className="msg-attachments">
-                                              {msgAtts.map((att: any) => (
+                                              {msgAtts.map((att) => (
                                                 <div key={att.id} className="msg-attachment-item">
                                                   <span className="msg-attachment-icon">📎</span>
-                                                  <a href={att.downloadUrl} target="_blank" rel="noopener noreferrer"
+                                                  <a href={att.downloadUrl || undefined} target="_blank" rel="noopener noreferrer"
                                                     className="msg-attachment-link">{att.fileName}</a>
                                                   <span className="msg-attachment-size">({formatFileSize(att.fileSize)})</span>
                                                 </div>
@@ -2466,9 +2601,9 @@ function App() {
                           {
                             key: 'log',
                             label: '工单日志',
-                            children: ticketDetail.events.length > 0 ? (
+                            children: getVisibleTicketEvents(ticketDetail.events).length > 0 ? (
                               <Timeline
-                                items={ticketDetail.events.map(ev => ({
+                                items={getVisibleTicketEvents(ticketDetail.events).map(ev => ({
                                   color: 'blue',
                                   children: (
                                     <div>
@@ -2520,7 +2655,7 @@ function App() {
                                   <Empty description="暂无附件" style={{ padding: '40px 0' }} />
                                 ) : (
                                   <div className="attachment-grid">
-                                    {ticketAttachments.map((att: any) => (
+                                    {ticketAttachments.map((att) => (
                                       <div key={att.id} className="attachment-card">
                                         <div className="attachment-icon">
                                           {att.contentType?.startsWith('image/') ? '🖼' : '📄'}
@@ -2534,7 +2669,7 @@ function App() {
                                         </div>
                                         <div className="attachment-actions">
                                           <Button type="link" size="small" icon={<DownloadOutlined />}
-                                            href={att.downloadUrl} target="_blank" />
+                                            href={att.downloadUrl || undefined} target="_blank" />
                                           <Button type="link" size="small" danger icon={<DeleteOutlined />}
                                             onClick={() => { if (window.confirm('确认删除此附件？')) void handleDeleteAttachment(att.id) }} />
                                         </div>
@@ -2603,9 +2738,9 @@ function App() {
 
                     {/* 工单生命周期 */}
                     <Card size="small" title="工单生命周期">
-                      {ticketDetail.events.length > 0 ? (
+                      {getVisibleTicketEvents(ticketDetail.events).length > 0 ? (
                         <Timeline
-                          items={ticketDetail.events.map(ev => ({
+                          items={getVisibleTicketEvents(ticketDetail.events).map(ev => ({
                             color: 'blue',
                             children: (
                               <div>
@@ -2771,13 +2906,13 @@ function App() {
                         <div style={{ padding: 60, textAlign: 'center' }}><Empty description="暂无工单" /></div>
                       ) : (
                         ticketsData.records.map(ticket => {
-                          const pClass = ticket.priority === 'URGENT' ? 'p1' : ticket.priority === 'HIGH' ? 'p2' : 'p3'
+                          const pClass = priorityBadgeClass(ticket.priority)
                           const stClass = ticket.status === 'WAITING_CUSTOMER' ? 'waiting' : ticket.status === 'CLOSED' ? 'closed' : ticket.slaBreached ? 'overdue' : 'processing'
                           return (
                             <div key={ticket.id} className="ticket-row"
                               onClick={() => { void handleOpenDetail(ticket.id) }}>
                               <div style={{ flexShrink: 0, marginRight: 12, paddingTop: 2 }}>
-                                <span className={`priority-pill ${pClass}`}>{ticket.priority === 'URGENT' ? 'P1' : ticket.priority === 'HIGH' ? 'P2' : 'P3'}</span>
+                                <span className={`priority-pill ${pClass}`}>{priorityBadgeText(ticket.priority)}</span>
                               </div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
@@ -4769,48 +4904,199 @@ function App() {
         )}
 
         {/* 转派弹窗 */}
-        <Modal title="转派工单" open={assignModalOpen} onCancel={() => { setAssignModalOpen(false); setAssignUserId(null) }}
-          onOk={() => void handleAssign()} confirmLoading={assignSending} okText="确认转派" cancelText="取消">
-          <div style={{ padding: '12px 0' }}>
-            <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>选择处理人：</div>
+        <Modal
+          title="转派工单"
+          open={assignModalOpen}
+          onCancel={() => {
+            setAssignModalOpen(false)
+            setAssignUserId(null)
+            setAssignReason('')
+            setAssignNotifyAssignee(true)
+          }}
+          onOk={() => void handleAssign()}
+          confirmLoading={assignSending}
+          okText="确认转派"
+          cancelText="取消"
+          okButtonProps={{ disabled: !assignUserId }}
+        >
+          <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
+            <Alert
+              type="info"
+              showIcon
+              message={ticketDetail ? `${ticketDetail.ticketNo} / ${ticketDetail.subject}` : '当前工单'}
+              description={`当前处理人：${ticketDetail?.assigneeName || '未分配'}`}
+            />
+            <div>
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>选择处理人</div>
             <Select
               style={{ width: '100%' }}
               placeholder="请选择处理人"
               value={assignUserId}
               onChange={setAssignUserId}
+              showSearch
+              optionFilterProp="label"
               options={assignUsers
                 .filter(u => u.enabled)
-                .map(u => ({ label: `${u.displayName} (${u.account})`, value: u.id }))}
+                .map(u => ({
+                  label: `${u.displayName} (${u.account}${u.email ? ` / ${u.email}` : ''})`,
+                  value: u.id,
+                }))}
             />
+            </div>
+            <div>
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>转派原因</div>
+              <Input.TextArea
+                value={assignReason}
+                onChange={(event) => setAssignReason(event.target.value)}
+                maxLength={200}
+                rows={3}
+                showCount
+                placeholder="填写转派原因，保存后会写入工单日志"
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2937' }}>通知新处理人</div>
+                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>开启后会发送分配通知邮件；关闭时仅更新工单。</div>
+              </div>
+              <Switch checked={assignNotifyAssignee} onChange={setAssignNotifyAssignee} />
+            </div>
           </div>
         </Modal>
 
         {/* 修改优先级弹窗 */}
-        <Modal title="修改优先级" open={priorityModalOpen} onCancel={() => setPriorityModalOpen(false)}
-          onOk={() => void handlePriority()} confirmLoading={prioritySending} okText="确认修改" cancelText="取消">
-          <div style={{ padding: '12px 0' }}>
-            <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>选择优先级：</div>
-            <Select
-              style={{ width: '100%' }}
-              value={priorityValue}
-              onChange={setPriorityValue}
-              options={[
-                { label: 'P1 - 紧急', value: 'URGENT' },
-                { label: 'P2 - 高', value: 'HIGH' },
-                { label: 'P3 - 普通', value: 'NORMAL' },
-                { label: 'P4 - 低', value: 'LOW' },
-              ]}
+        <Modal
+          title="修改优先级"
+          open={priorityModalOpen}
+          onCancel={() => {
+            setPriorityModalOpen(false)
+            setPriorityReason('')
+          }}
+          onOk={() => void handlePriority()}
+          confirmLoading={prioritySending}
+          okText="确认修改"
+          cancelText="取消"
+          okButtonProps={{ disabled: !ticketDetail || priorityValue === ticketDetail.priority }}
+        >
+          <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
+            <Alert
+              type="info"
+              showIcon
+              message={ticketDetail ? `${ticketDetail.ticketNo} / ${ticketDetail.subject}` : '当前工单'}
+              description={`当前优先级：${ticketDetail ? priorityOptionLabel(ticketDetail.priority) : '-'}`}
             />
+            <div>
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>目标优先级</div>
+              <Select
+                style={{ width: '100%' }}
+                value={priorityValue}
+                onChange={setPriorityValue}
+                options={[
+                  { label: 'P1 - 紧急', value: 'URGENT' },
+                  { label: 'P2 - 高', value: 'HIGH' },
+                  { label: 'P3 - 普通', value: 'NORMAL' },
+                  { label: 'P4 - 低', value: 'LOW' },
+                ]}
+              />
+            </div>
+            <div>
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>变更说明</div>
+              <Input.TextArea
+                value={priorityReason}
+                onChange={(event) => setPriorityReason(event.target.value)}
+                maxLength={200}
+                rows={3}
+                showCount
+                placeholder="填写优先级调整原因，保存后会写入工单日志"
+              />
+            </div>
+          </div>
+        </Modal>
+
+        {/* 修改状态弹窗 */}
+        <Modal
+          title="修改状态"
+          open={statusModalOpen}
+          onCancel={() => {
+            setStatusModalOpen(false)
+            setStatusReason('')
+          }}
+          onOk={() => void handleStatusChange()}
+          confirmLoading={statusSending}
+          okText="确认修改"
+          cancelText="取消"
+          okButtonProps={{ disabled: !ticketDetail || statusValue === ticketDetail.status }}
+        >
+          <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
+            <Alert
+              type="warning"
+              showIcon
+              message={ticketDetail ? `${ticketDetail.ticketNo} / ${ticketDetail.subject}` : '当前工单'}
+              description="状态变更会写入生命周期。关闭工单请使用专用关闭确认弹窗；待客户回复由对外回复自动流转。"
+            />
+            <div>
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>目标状态</div>
+              <Select
+                style={{ width: '100%' }}
+                value={statusValue}
+                onChange={setStatusValue}
+                options={[
+                  { label: '处理中', value: 'PROCESSING' },
+                  { label: '已取消', value: 'CANCELLED' },
+                ]}
+              />
+            </div>
+            <div>
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>变更说明</div>
+              <Input.TextArea
+                value={statusReason}
+                onChange={(event) => setStatusReason(event.target.value)}
+                maxLength={200}
+                rows={3}
+                showCount
+                placeholder="填写状态调整原因，保存后会写入工单日志"
+              />
+            </div>
           </div>
         </Modal>
 
         {/* 关闭确认弹窗 */}
-        <Modal title="关闭工单" open={closeModalOpen} onCancel={() => setCloseModalOpen(false)}
-          onOk={() => void handleClose()} confirmLoading={closeSending}
-          okText="确认关闭" cancelText="取消" okButtonProps={{ danger: true }}>
-          <p style={{ color: '#6b7280', fontSize: 14, padding: '12px 0' }}>
-            确认关闭工单 <strong>{ticketDetail?.ticketNo}</strong>？关闭后客户新的来信将重新开启工单。
-          </p>
+        <Modal
+          title="关闭工单"
+          open={closeModalOpen}
+          onCancel={() => {
+            setCloseModalOpen(false)
+            setCloseReason('')
+            setCloseConfirmed(false)
+          }}
+          onOk={() => void handleClose()}
+          confirmLoading={closeSending}
+          okText="确认关闭"
+          cancelText="取消"
+          okButtonProps={{ danger: true, disabled: !closeConfirmed }}
+        >
+          <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
+            <Alert
+              type="warning"
+              showIcon
+              message={ticketDetail ? `${ticketDetail.ticketNo} / ${ticketDetail.subject}` : '当前工单'}
+              description="关闭后工单状态会变为已关闭，并写入关闭时间和生命周期事件。客户后续追信将默认关联原单并转回处理中。"
+            />
+            <div>
+              <div style={{ marginBottom: 8, fontSize: 13, color: '#6b7280' }}>关闭说明</div>
+              <Input.TextArea
+                value={closeReason}
+                onChange={(event) => setCloseReason(event.target.value)}
+                maxLength={200}
+                rows={3}
+                showCount
+                placeholder="填写关闭原因或处理结论，保存后会写入工单日志"
+              />
+            </div>
+            <Checkbox checked={closeConfirmed} onChange={(event) => setCloseConfirmed(event.target.checked)}>
+              我确认该工单已处理完成，可以关闭
+            </Checkbox>
+          </div>
         </Modal>
       </div>
     )
