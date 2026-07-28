@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邮件工单系统 - 客户列表详情原型</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-soft: #eff6ff;
+            --success: #10b981;
+            --success-soft: #ecfdf5;
+            --warning: #f59e0b;
+            --warning-soft: #fffbeb;
+            --danger: #ef4444;
+            --danger-soft: #fef2f2;
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --line: #e5e7eb;
+            --line-soft: #f1f5f9;
+            --text: #111827;
+            --sub: #4b5563;
+            --muted: #9ca3af;
+            --shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            color: var(--text);
+            background: var(--bg);
+            font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+        }
+        button, input, select { font: inherit; }
+        button { cursor: pointer; }
+        .shell {
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            overflow: hidden;
+        }
+        .sidebar {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--line);
+            background: #fff;
+        }
+        .logo {
+            height: 64px;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo-mark {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--primary);
+            font-weight: 800;
+        }
+        .logo strong { font-size: 16px; font-weight: 800; }
+        .nav { flex: 1; overflow-y: auto; padding: 12px; }
+        .nav-group { margin-bottom: 16px; }
+        .nav-title {
+            padding: 8px 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .nav-item {
+            min-height: 40px;
+            border-radius: 8px;
+            padding: 0 12px;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--sub);
+            text-decoration: none;
+            font-weight: 650;
+        }
+        .nav-item.active { color: var(--primary); background: var(--primary-soft); }
+        .nav-main { min-width: 0; display: flex; align-items: center; gap: 10px; }
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 900;
+        }
+        .active .nav-icon { background: #dbeafe; color: var(--primary); }
+        .badge {
+            min-width: 20px;
+            border-radius: 999px;
+            padding: 2px 7px;
+            color: #fff;
+            background: var(--danger);
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 1.3;
+            text-align: center;
+        }
+        .badge.warning { background: var(--warning); }
+        .collapse {
+            height: 48px;
+            border-top: 1px solid var(--line);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--sub);
+            font-weight: 650;
+        }
+        .main { min-width: 0; height: 100vh; display: flex; flex-direction: column; }
+        .topbar {
+            height: 64px;
+            flex: 0 0 64px;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--line);
+            display: grid;
+            grid-template-columns: minmax(180px, 280px) minmax(300px, 560px) auto;
+            align-items: center;
+            gap: 24px;
+            background: #fff;
+        }
+        .breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--sub); }
+        .breadcrumb strong { color: var(--text); }
+        .menu-button {
+            width: 32px;
+            height: 32px;
+            border: 0;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: var(--sub);
+            font-weight: 900;
+        }
+        .search {
+            height: 36px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 11px;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            background: #fff;
+            color: var(--muted);
+        }
+        .search input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--text); }
+        .kbd {
+            border-radius: 6px;
+            padding: 2px 6px;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .top-actions { justify-self: end; display: flex; align-items: center; gap: 14px; }
+        .icon-button {
+            width: 36px;
+            height: 36px;
+            border: 0;
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            font-weight: 900;
+            position: relative;
+        }
+        .notice-dot {
+            position: absolute;
+            right: 5px;
+            top: 3px;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            padding: 0 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 900;
+        }
+        .user { display: flex; align-items: center; gap: 10px; }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #059669;
+            color: #fff;
+            font-weight: 900;
+        }
+        .user strong { display: block; font-size: 13px; }
+        .user small { color: var(--sub); font-weight: 650; }
+        .content {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        .page-head {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+        }
+        h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: 0; }
+        p { margin: 0; color: var(--sub); }
+        .head-actions { display: flex; gap: 10px; }
+        .btn {
+            height: 38px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--text);
+            background: #fff;
+            font-weight: 800;
+        }
+        .btn.primary { border-color: var(--primary); color: #fff; background: var(--primary); }
+        .btn.primary:hover { background: var(--primary-dark); }
+        .btn:disabled {
+            cursor: not-allowed;
+            color: var(--muted);
+            border-color: var(--line);
+            background: #f8fafc;
+            opacity: 1;
+        }
+        .btn.small { height: 30px; padding: 0 10px; font-size: 12px; }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .metric {
+            min-height: 104px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 16px;
+            background: var(--surface);
+            box-shadow: var(--shadow);
+        }
+        .metric-label { display: flex; justify-content: space-between; color: var(--sub); font-weight: 750; }
+        .metric-value { margin-top: 12px; display: flex; align-items: baseline; gap: 8px; }
+        .metric-value strong { font-size: 28px; letter-spacing: 0; }
+        .metric-value span { color: var(--sub); font-weight: 750; }
+        .metric small { display: block; margin-top: 8px; color: var(--muted); line-height: 1.45; }
+        .notice {
+            margin-bottom: 18px;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: var(--primary-soft);
+            color: #1e3a8a;
+            font-weight: 650;
+        }
+        .notice span:first-child {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #dbeafe;
+            color: var(--primary);
+            font-weight: 900;
+            flex: 0 0 auto;
+        }
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(390px, 0.9fr) minmax(560px, 1.25fr);
+            gap: 16px;
+            align-items: start;
+        }
+        .panel {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: var(--shadow);
+        }
+        .panel-head {
+            min-height: 54px;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .panel-head h2 { margin: 0; font-size: 16px; }
+        .panel-body { padding: 16px; }
+        .filters {
+            display: grid;
+            grid-template-columns: 1fr 128px;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .input, .select {
+            width: 100%;
+            height: 38px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 11px;
+            color: var(--text);
+            background: #fff;
+            outline: 0;
+        }
+        .chip {
+            border-radius: 999px;
+            padding: 3px 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .chip.primary { color: var(--primary); background: var(--primary-soft); }
+        .chip.success { color: #047857; background: var(--success-soft); }
+        .chip.warning { color: #b45309; background: var(--warning-soft); }
+        .chip.danger { color: #b91c1c; background: var(--danger-soft); }
+        .customer-list { border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+        .customer-row {
+            min-height: 104px;
+            border-bottom: 1px solid var(--line-soft);
+            padding: 13px;
+            display: grid;
+            grid-template-columns: 42px minmax(0, 1fr) auto;
+            gap: 12px;
+            background: #fff;
+        }
+        .customer-row:last-child { border-bottom: 0; }
+        .customer-row.active {
+            border-left: 3px solid var(--primary);
+            padding-left: 10px;
+            background: #f8fbff;
+        }
+        .customer-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: #0f766e;
+            font-weight: 900;
+        }
+        .customer-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .customer-title strong {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 15px;
+        }
+        .customer-email {
+            margin-top: 5px;
+            overflow: hidden;
+            color: var(--sub);
+            font-size: 12px;
+            font-weight: 750;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .customer-meta {
+            margin-top: 9px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .count {
+            display: grid;
+            align-content: center;
+            justify-items: end;
+            gap: 4px;
+            color: var(--sub);
+            font-size: 12px;
+            font-weight: 750;
+        }
+        .count strong { color: var(--text); font-size: 22px; }
+        .detail-head {
+            display: grid;
+            grid-template-columns: 56px minmax(0, 1fr) auto;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .detail-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: #2563eb;
+            font-size: 20px;
+            font-weight: 900;
+        }
+        .detail-title h3 { margin: 0 0 5px; font-size: 20px; letter-spacing: 0; }
+        .detail-title p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tabs {
+            display: flex;
+            gap: 4px;
+            border-bottom: 1px solid var(--line);
+            margin: 0 -16px 16px;
+            padding: 0 16px;
+        }
+        .tab-item {
+            border-bottom: 2px solid transparent;
+            padding: 10px 12px;
+            color: var(--sub);
+            font-weight: 850;
+        }
+        .tab-item.active { color: var(--primary); border-color: var(--primary); }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .info-card {
+            border: 1px solid var(--line-soft);
+            border-radius: 8px;
+            padding: 12px;
+            background: #fff;
+        }
+        .info-card span { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; font-weight: 800; }
+        .info-card strong { color: #334155; }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .table th,
+        .table td {
+            border-bottom: 1px solid var(--line-soft);
+            padding: 11px 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .table th { color: #64748b; font-weight: 800; background: #f8fafc; }
+        .table td { color: #334155; font-weight: 700; }
+        .ticket-link { color: var(--primary); font-weight: 900; text-decoration: none; }
+        .remark {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 12px;
+            background: #f8fafc;
+            color: #334155;
+            line-height: 1.7;
+            font-weight: 650;
+        }
+        .timeline {
+            margin-top: 16px;
+            display: grid;
+            gap: 10px;
+        }
+        .timeline-item {
+            position: relative;
+            border: 1px solid var(--line-soft);
+            border-radius: 8px;
+            padding: 11px 12px 11px 34px;
+            background: #fff;
+        }
+        .timeline-item::before {
+            content: "";
+            position: absolute;
+            left: 14px;
+            top: 17px;
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: var(--primary);
+        }
+        .timeline-item strong { display: block; margin-bottom: 4px; }
+        .timeline-item small { color: var(--muted); font-weight: 750; }
+        .status-tabs {
+            margin-top: 16px;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 12px;
+            background: #fff;
+        }
+        .status-tabs header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .status-tabs h3 { margin: 0; font-size: 14px; }
+        .tab-row { display: flex; flex-wrap: wrap; gap: 8px; }
+        .tab {
+            border-radius: 999px;
+            padding: 6px 10px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .tab.active { color: var(--primary); background: var(--primary-soft); }
+        .state-grid {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .state-card {
+            min-height: 86px;
+            border: 1px solid var(--line-soft);
+            border-radius: 8px;
+            padding: 10px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 12px;
+            line-height: 1.5;
+            font-weight: 700;
+        }
+        .state-card strong { display: block; margin-bottom: 5px; color: #334155; }
+        @media (max-width: 1180px) {
+            .shell { grid-template-columns: 84px minmax(0, 1fr); }
+            .logo strong, .nav-title, .nav-label, .badge, .collapse span, .user div { display: none; }
+            .nav-item { justify-content: center; padding: 0; }
+            .workspace { grid-template-columns: 1fr; }
+            .metrics, .state-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 760px) {
+            .topbar { grid-template-columns: auto 1fr auto; gap: 10px; padding: 0 14px; }
+            .search { display: none; }
+            .content { padding: 16px; }
+            .page-head, .detail-head { grid-template-columns: 1fr; flex-direction: column; align-items: stretch; }
+            .head-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+            .metrics, .filters, .info-grid, .state-grid { grid-template-columns: 1fr; }
+            .customer-row { grid-template-columns: 42px minmax(0, 1fr); }
+            .count { justify-items: start; grid-column: 2; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-mark">M</div>
+                <strong>MailTrace</strong>
+            </div>
+            <nav class="nav">
+                <div class="nav-group">
+                    <div class="nav-title">工作台</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">D</span><span class="nav-label">业务概览</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">T</span><span class="nav-label">全部工单</span></span><span class="badge warning">12</span></a>
+                    <a class="nav-item active" href="#"><span class="nav-main"><span class="nav-icon">K</span><span class="nav-label">客户管理</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">M</span><span class="nav-label">邮箱管理</span></span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">处理配置</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">R</span><span class="nav-label">分配规则</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">S</span><span class="nav-label">SLA策略</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">C</span><span class="nav-label">工作日历</span></span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">系统管理</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">U</span><span class="nav-label">用户管理</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">N</span><span class="nav-label">通知模板</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">P</span><span class="nav-label">编号规则</span></span></a>
+                </div>
+            </nav>
+            <div class="collapse"><strong>&lt;</strong><span>收起菜单</span></div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div class="breadcrumb">
+                    <button class="menu-button" title="折叠菜单">=</button>
+                    <span>工作台</span>
+                    <strong>客户管理</strong>
+                </div>
+                <label class="search">
+                    <span>搜索</span>
+                    <input value="Postmaster@163.com" aria-label="全局搜索">
+                    <span class="kbd">⌘K</span>
+                </label>
+                <div class="top-actions">
+                    <button class="icon-button" title="帮助">?</button>
+                    <button class="icon-button" title="通知">N<span class="notice-dot">3</span></button>
+                    <div class="user">
+                        <div class="avatar">谭</div>
+                        <div><strong>谭总</strong><small>系统管理员</small></div>
+                    </div>
+                </div>
+            </header>
+
+            <section class="content">
+                <div class="page-head">
+                    <div>
+                        <h1>客户管理</h1>
+                        <p>按客户邮箱聚合历史工单和客户档案，第一版只读查看，不提供新增或编辑客户入口。</p>
+                    </div>
+                    <div class="head-actions">
+                        <button class="btn">刷新</button>
+                        <button class="btn">导出</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-label"><span>客户总数</span><span>total</span></div>
+                        <div class="metric-value"><strong>4</strong><span>位</span></div>
+                        <small>来源合并客户档案和历史工单邮箱。</small>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label"><span>有工单客户</span><span>ticketCount &gt; 0</span></div>
+                        <div class="metric-value"><strong>4</strong><span>位</span></div>
+                        <small>按未删除工单聚合统计。</small>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label"><span>本周来信</span><span>lastMailAt</span></div>
+                        <div class="metric-value"><strong>9</strong><span>封</span></div>
+                        <small>用于判断近期活跃客户。</small>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label"><span>备注覆盖</span><span>remark</span></div>
+                        <div class="metric-value"><strong>2</strong><span>条</span></div>
+                        <small>备注只展示，暂不提供编辑。</small>
+                    </div>
+                </div>
+
+                <div class="notice">
+                    <span>i</span>
+                    <div>客户页当前定位为只读检索：管理员和处理人可访问；工单聚合客户可能没有客户档案 ID，但仍可按邮箱进入详情并查看关联工单。</div>
+                </div>
+
+                <div class="workspace">
+                    <section class="panel">
+                        <div class="panel-head">
+                            <h2>客户列表</h2>
+                            <span class="chip primary">只读列表</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="filters">
+                                <input class="input" value="Postmaster" aria-label="客户关键字">
+                                <select class="select" aria-label="客户筛选"><option>全部客户</option><option>有备注</option><option>近期来信</option></select>
+                            </div>
+                            <div class="customer-list">
+                                <div class="customer-row active">
+                                    <div class="customer-avatar">P</div>
+                                    <div>
+                                        <div class="customer-title"><strong>Postmaster</strong><span class="chip success">近期来信</span></div>
+                                        <div class="customer-email">Postmaster@163.com</div>
+                                        <div class="customer-meta">
+                                            <span class="chip">最近 2026-07-27 09:54</span>
+                                            <span class="chip primary">点击查看详情</span>
+                                        </div>
+                                    </div>
+                                    <div class="count"><strong>2</strong><span>关联工单</span></div>
+                                </div>
+                                <div class="customer-row">
+                                    <div class="customer-avatar" style="background:#7c3aed;">王</div>
+                                    <div>
+                                        <div class="customer-title"><strong>王晓敏</strong><span class="chip warning">VIP 备注</span></div>
+                                        <div class="customer-email">wang.xm@example.com</div>
+                                        <div class="customer-meta">
+                                            <span class="chip">最近 2026-07-26 18:20</span>
+                                            <span class="chip">客户档案</span>
+                                        </div>
+                                    </div>
+                                    <div class="count"><strong>5</strong><span>关联工单</span></div>
+                                </div>
+                                <div class="customer-row">
+                                    <div class="customer-avatar" style="background:#b45309;">L</div>
+                                    <div>
+                                        <div class="customer-title"><strong>Logistics Team</strong></div>
+                                        <div class="customer-email">ops-logistics@example.cn</div>
+                                        <div class="customer-meta">
+                                            <span class="chip">最近 2026-07-24 11:12</span>
+                                            <span class="chip">历史工单聚合</span>
+                                        </div>
+                                    </div>
+                                    <div class="count"><strong>3</strong><span>关联工单</span></div>
+                                </div>
+                                <div class="customer-row">
+                                    <div class="customer-avatar" style="background:#334155;">M</div>
+                                    <div>
+                                        <div class="customer-title"><strong>Mars Supply</strong></div>
+                                        <div class="customer-email">support@mars-supply.com</div>
+                                        <div class="customer-meta">
+                                            <span class="chip">最近 2026-07-22 15:38</span>
+                                            <span class="chip">无备注</span>
+                                        </div>
+                                    </div>
+                                    <div class="count"><strong>1</strong><span>关联工单</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-head">
+                            <h2>客户详情</h2>
+                            <span class="chip success">只读详情</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="detail-head">
+                                <div class="detail-avatar">P</div>
+                                <div class="detail-title">
+                                    <h3>Postmaster</h3>
+                                    <p>Postmaster@163.com</p>
+                                </div>
+                                <div>
+                                    <button class="btn small">复制邮箱</button>
+                                </div>
+                            </div>
+                            <div class="tabs">
+                                <span class="tab-item active">基本信息</span>
+                                <span class="tab-item">关联工单 2</span>
+                                <span class="tab-item">最近往来</span>
+                            </div>
+                            <div class="info-grid">
+                                <div class="info-card"><span>客户 ID</span><strong>仅工单聚合，暂无档案 ID</strong></div>
+                                <div class="info-card"><span>最近来信</span><strong>2026-07-27 09:54</strong></div>
+                                <div class="info-card"><span>关联工单数</span><strong>2 条</strong></div>
+                                <div class="info-card"><span>创建时间</span><strong>2026-07-24 16:31</strong></div>
+                            </div>
+                            <div class="remark">
+                                备注：系统自动聚合的邮箱客户。若后续需要维护客户名称、标签或备注，应进入独立客户档案能力，不在本页第一版提供编辑。
+                            </div>
+
+                            <div style="margin-top:16px;">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>工单号</th>
+                                            <th>主题</th>
+                                            <th>状态</th>
+                                            <th>SLA</th>
+                                            <th>最近更新</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td><a class="ticket-link" href="#">MT-20260727-0008</a></td>
+                                            <td>SMTP 回执失败导致客户重复来信</td>
+                                            <td><span class="chip primary">处理中</span></td>
+                                            <td><span class="chip success">正常</span></td>
+                                            <td>09:54</td>
+                                        </tr>
+                                        <tr>
+                                            <td><a class="ticket-link" href="#">MT-20260724-0016</a></td>
+                                            <td>邮件线程未正确关联原工单</td>
+                                            <td><span class="chip warning">待客户回复</span></td>
+                                            <td><span class="chip danger">已超时</span></td>
+                                            <td>07-25 17:42</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div class="timeline">
+                                <div class="timeline-item">
+                                    <strong>客户追信进入处理中</strong>
+                                    <small>2026-07-27 09:54 · 关联 MT-20260727-0008</small>
+                                </div>
+                                <div class="timeline-item">
+                                    <strong>处理人回复客户</strong>
+                                    <small>2026-07-25 17:42 · 关联 MT-20260724-0016</small>
+                                </div>
+                                <div class="timeline-item">
+                                    <strong>系统首次识别客户邮箱</strong>
+                                    <small>2026-07-24 16:31 · 从历史工单聚合生成</small>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="status-tabs">
+                    <header>
+                        <h3>状态覆盖</h3>
+                        <span class="chip warning">评审用，不作为业务常驻区</span>
+                    </header>
+                    <div class="tab-row">
+                        <span class="tab active">正常态</span>
+                        <span class="tab">空列表</span>
+                        <span class="tab">加载中</span>
+                        <span class="tab">接口失败</span>
+                        <span class="tab">无权限</span>
+                    </div>
+                    <div class="state-grid">
+                        <div class="state-card"><strong>空列表</strong>保留搜索与筛选，展示“暂无客户记录”；不展示新建客户按钮。</div>
+                        <div class="state-card"><strong>加载中</strong>列表和详情区域骨架加载，刷新与导出按钮进入禁用态。</div>
+                        <div class="state-card"><strong>接口失败</strong>保留当前筛选条件，提示重试；不清空已有详情缓存。</div>
+                        <div class="state-card"><strong>无权限</strong>非管理员或处理人隐藏入口；直达页面时展示无客户查看权限。</div>
+                    </div>
+                </section>
+            </section>
+        </main>
+    </div>
+</body>
+</html>

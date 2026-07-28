@@ -296,9 +296,8 @@
                     </div>
                     <div class="flex items-center space-x-3">
                         <div class="flex items-center bg-white border border-border-light rounded-lg px-3 py-2 text-sm text-text-main">
-                            <i class="fa-regular fa-calendar mr-2 text-text-muted"></i>
-                            <span>2026-07-22</span>
-                            <i class="fa-solid fa-chevron-down ml-2 text-text-muted text-xs"></i>
+                            <i class="fa-regular fa-clock mr-2 text-text-muted"></i>
+                            <span>统计截至 2026-07-22 10:30</span>
                         </div>
                         <button class="flex items-center px-4 py-2 bg-white border border-border-light rounded-lg text-sm text-text-main hover:bg-bg-main transition-colors">
                             <i class="fa-solid fa-rotate-right mr-2 text-text-muted"></i>
@@ -310,25 +309,25 @@
                 <!-- 统计卡片 -->
                 <div class="grid grid-cols-6 gap-4 mb-6">
                     <div class="card stat-card p-5">
-                        <div class="text-sm text-text-sub mb-3">今日新增工单</div>
+                        <div class="text-sm text-text-sub mb-3">工单总数</div>
                         <div class="flex items-end justify-between">
                             <div class="text-3xl font-bold text-text-main">128</div>
                             <div class="w-9 h-9 rounded-lg bg-primary-light flex items-center justify-center text-primary">
                                 <i class="fa-solid fa-envelope-open-text"></i>
                             </div>
                         </div>
-                        <div class="text-xs text-text-muted mt-2">今日客户邮件自动创建</div>
+                        <div class="text-xs text-text-muted mt-2">当前权限范围内总量</div>
                     </div>
                     
                     <div class="card stat-card p-5">
-                        <div class="text-sm text-text-sub mb-3">待处理工单</div>
+                        <div class="text-sm text-text-sub mb-3">待分配工单</div>
                         <div class="flex items-end justify-between">
                             <div class="text-3xl font-bold text-text-main">35</div>
                             <div class="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center text-warning">
                                 <i class="fa-regular fa-clock"></i>
                             </div>
                         </div>
-                        <div class="text-xs text-text-muted mt-2">等待首次响应</div>
+                        <div class="text-xs text-text-muted mt-2">等待分配处理人</div>
                     </div>
                     
                     <div class="card stat-card p-5">
@@ -339,29 +338,29 @@
                                 <i class="fa-solid fa-clipboard-list"></i>
                             </div>
                         </div>
-                        <div class="text-xs text-text-muted mt-2">处理中，跟进中</div>
+                        <div class="text-xs text-text-muted mt-2">已分配并处理中</div>
                     </div>
                     
                     <div class="card stat-card p-5">
-                        <div class="text-sm text-text-sub mb-3">即将超时</div>
+                        <div class="text-sm text-text-sub mb-3">待客户回复</div>
                         <div class="flex items-end justify-between">
-                            <div class="text-3xl font-bold text-text-main">6</div>
-                            <div class="w-9 h-9 rounded-lg bg-warning-light flex items-center justify-center text-warning">
-                                <i class="fa-solid fa-hourglass-half"></i>
+                            <div class="text-3xl font-bold text-text-main">15</div>
+                            <div class="w-9 h-9 rounded-lg bg-success-light flex items-center justify-center text-success">
+                                <i class="fa-regular fa-comment-dots"></i>
                             </div>
                         </div>
-                        <div class="text-xs text-text-muted mt-2">SLA即将超时</div>
+                        <div class="text-xs text-text-muted mt-2">等待客户补充信息</div>
                     </div>
                     
                     <div class="card stat-card p-5">
-                        <div class="text-sm text-text-sub mb-3">已超时</div>
+                        <div class="text-sm text-text-sub mb-3">SLA 已超时</div>
                         <div class="flex items-end justify-between">
                             <div class="text-3xl font-bold text-text-main">2</div>
                             <div class="w-9 h-9 rounded-lg bg-danger-light flex items-center justify-center text-danger">
                                 <i class="fa-solid fa-triangle-exclamation"></i>
                             </div>
                         </div>
-                        <div class="text-xs text-text-muted mt-2">SLA已超时</div>
+                        <div class="text-xs text-text-muted mt-2">需要优先处理</div>
                     </div>
                     
                     <div class="card stat-card p-5">
@@ -376,69 +375,45 @@
                     </div>
                 </div>
                 
-                <!-- 中间三列：SLA / 邮箱 / 系统消息 -->
+                <!-- 中间三列：SLA / 邮箱 / 风险入口 -->
                 <div class="grid grid-cols-3 gap-4 mb-6">
-                    <!-- SLA达成情况 -->
+                    <!-- SLA风险摘要 -->
                     <div class="card p-5">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-text-main">SLA 达成情况</h3>
+                            <h3 class="font-semibold text-text-main">SLA 风险摘要</h3>
+                            <span class="px-2 py-1 bg-danger-light text-danger text-xs rounded font-medium">2 个超时</span>
                         </div>
-                        <div class="flex items-center">
-                            <div class="relative w-36 h-36 mr-5 flex-shrink-0">
-                                <svg class="w-36 h-36 transform -rotate-90" viewBox="0 0 120 120">
-                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#E5E7EB" stroke-width="10"/>
-                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#2563EB" stroke-width="10" stroke-linecap="round"
-                                            stroke-dasharray="314" stroke-dashoffset="25" class="progress-ring-circle"/>
-                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#F59E0B" stroke-width="10" stroke-linecap="round"
-                                            stroke-dasharray="314" stroke-dashoffset="298"/>
-                                    <circle cx="60" cy="60" r="50" fill="none" stroke="#EF4444" stroke-width="10" stroke-linecap="round"
-                                            stroke-dasharray="314" stroke-dashoffset="308"/>
-                                </svg>
-                                <div class="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span class="text-3xl font-bold text-text-main">92%</span>
-                                    <span class="text-xs text-text-muted">SLA达成率</span>
+                        <div class="space-y-3">
+                            <div class="p-3 rounded-lg bg-danger-light border border-danger/20">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <div class="text-sm font-semibold text-text-main">SLA 已超时</div>
+                                        <div class="text-xs text-text-sub mt-1">点击后进入工单列表并筛选超时工单</div>
+                                    </div>
+                                    <div class="text-2xl font-bold text-danger">2</div>
                                 </div>
                             </div>
-                            <div class="flex-1 space-y-3">
-                                <div class="flex items-center justify-between text-sm">
-                                    <div class="flex items-center">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-primary mr-2"></span>
-                                        <span class="text-text-sub">已达成</span>
-                                    </div>
-                                    <span class="font-medium text-text-main">118 (92%)</span>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-xs text-text-muted mb-1">今日已关闭</div>
+                                    <div class="text-lg font-bold text-text-main">42</div>
                                 </div>
-                                <div class="flex items-center justify-between text-sm">
-                                    <div class="flex items-center">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-warning mr-2"></span>
-                                        <span class="text-text-sub">即将超时</span>
-                                    </div>
-                                    <span class="font-medium text-text-main">6 (5%)</span>
-                                </div>
-                                <div class="flex items-center justify-between text-sm">
-                                    <div class="flex items-center">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-danger mr-2"></span>
-                                        <span class="text-text-sub">已超时</span>
-                                    </div>
-                                    <span class="font-medium text-text-main">2 (2%)</span>
-                                </div>
-                                <div class="flex items-center justify-between text-sm">
-                                    <div class="flex items-center">
-                                        <span class="w-2.5 h-2.5 rounded-full bg-gray-300 mr-2"></span>
-                                        <span class="text-text-sub">未计入</span>
-                                    </div>
-                                    <span class="font-medium text-text-main">2 (1%)</span>
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-xs text-text-muted mb-1">活跃工单</div>
+                                    <div class="text-lg font-bold text-text-main">106</div>
                                 </div>
                             </div>
+                            <p class="text-xs text-text-muted leading-5">达成率、预警类等扩展指标不在第一版摘要字段内，后续需要契约确认后再展示。</p>
                         </div>
                         <div class="mt-4 text-right">
-                            <a href="#" class="text-sm text-primary hover:text-primary-hover">查看详情 <i class="fa-solid fa-angle-right ml-1"></i></a>
+                            <a href="#" class="text-sm text-primary hover:text-primary-hover">查看已超时工单 <i class="fa-solid fa-angle-right ml-1"></i></a>
                         </div>
                     </div>
                     
                     <!-- 邮箱运行状态 -->
                     <div class="card p-5">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-text-main">邮箱运行状态</h3>
+                            <h3 class="font-semibold text-text-main">邮箱运行入口</h3>
                             <span class="px-2.5 py-1 bg-success-light text-success text-xs rounded-full font-medium">正常</span>
                         </div>
                         <div class="space-y-4">
@@ -448,81 +423,86 @@
                                 </div>
                                 <span class="text-sm font-medium text-text-main">support@yourdomain.com</span>
                             </div>
-                            <div class="grid grid-cols-2 gap-4 text-sm">
-                                <div>
+                            <div class="grid grid-cols-2 gap-3 text-sm">
+                                <div class="p-3 rounded-lg bg-bg-main">
                                     <div class="text-text-muted mb-1">连接状态</div>
                                     <div class="flex items-center text-success font-medium">
                                         <span class="w-1.5 h-1.5 rounded-full bg-success mr-1.5"></span>
-                                        IMAP 连接正常
+                                        IMAP 正常
                                     </div>
                                 </div>
-                                <div>
-                                    <div class="text-text-muted mb-1">今日接收</div>
-                                    <div class="text-text-main font-semibold">128 <span class="text-text-muted font-normal">封</span></div>
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-text-muted mb-1">最近收取</div>
+                                    <div class="text-text-main font-semibold">10:28</div>
                                 </div>
-                                <div>
-                                    <div class="text-text-muted mb-1">成功建单</div>
-                                    <div class="text-text-main font-semibold">126 <span class="text-text-muted font-normal">封</span></div>
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-text-muted mb-1">收件记录</div>
+                                    <div class="text-primary font-semibold">查看</div>
                                 </div>
-                                <div>
-                                    <div class="text-text-muted mb-1">异常邮件</div>
-                                    <div class="text-danger font-semibold">2 <span class="text-text-muted font-normal">封</span></div>
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-text-muted mb-1">发送失败</div>
+                                    <div class="text-danger font-semibold">处理</div>
                                 </div>
                             </div>
+                            <p class="text-xs text-text-muted leading-5">邮箱统计来自邮箱配置和收发记录；工作台第一版只保留快捷入口。</p>
                         </div>
                         <div class="mt-4 text-right">
-                            <a href="#" class="text-sm text-primary hover:text-primary-hover">查看收件记录 <i class="fa-solid fa-angle-right ml-1"></i></a>
+                            <a href="#" class="text-sm text-primary hover:text-primary-hover">进入邮箱运行记录 <i class="fa-solid fa-angle-right ml-1"></i></a>
                         </div>
                     </div>
                     
-                    <!-- 系统消息 -->
+                    <!-- 风险入口 -->
                     <div class="card p-5">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-text-main">系统消息</h3>
-                            <a href="#" class="text-sm text-primary hover:text-primary-hover">全部消息 <i class="fa-solid fa-angle-right ml-1"></i></a>
+                            <h3 class="font-semibold text-text-main">风险入口</h3>
+                            <span class="px-2 py-1 bg-primary-light text-primary text-xs rounded font-medium">第一版跳转</span>
                         </div>
                         <div class="space-y-3">
-                            <div class="flex items-start">
+                            <div class="flex items-center p-3 rounded-lg border border-danger/20 bg-danger-light">
                                 <div class="w-8 h-8 rounded-full bg-danger-light flex items-center justify-center text-danger flex-shrink-0 mr-3 mt-0.5">
                                     <i class="fa-solid fa-triangle-exclamation text-xs"></i>
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-sm text-text-main">有 2 个工单已超时</div>
+                                    <div class="text-sm font-medium text-text-main">SLA 已超时工单</div>
+                                    <div class="text-xs text-text-sub mt-1">进入全部工单并筛选超时</div>
                                 </div>
-                                <span class="text-xs text-text-muted flex-shrink-0">5 分钟前</span>
+                                <i class="fa-solid fa-angle-right text-danger text-xs"></i>
                             </div>
-                            <div class="flex items-start">
+                            <div class="flex items-center p-3 rounded-lg border border-border-light hover:bg-bg-main">
                                 <div class="w-8 h-8 rounded-full bg-warning-light flex items-center justify-center text-warning flex-shrink-0 mr-3 mt-0.5">
                                     <i class="fa-regular fa-clock text-xs"></i>
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-sm text-text-main">有 6 个工单即将超时</div>
+                                    <div class="text-sm font-medium text-text-main">待分配工单</div>
+                                    <div class="text-xs text-text-sub mt-1">进入全部工单并筛选待分配</div>
                                 </div>
-                                <span class="text-xs text-text-muted flex-shrink-0">12 分钟前</span>
+                                <i class="fa-solid fa-angle-right text-text-muted text-xs"></i>
                             </div>
-                            <div class="flex items-start">
+                            <div class="flex items-center p-3 rounded-lg border border-border-light hover:bg-bg-main">
                                 <div class="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-primary flex-shrink-0 mr-3 mt-0.5">
                                     <i class="fa-regular fa-comment-dots text-xs"></i>
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-sm text-text-main">有 3 个客户新回复待处理</div>
+                                    <div class="text-sm font-medium text-text-main">待客户回复工单</div>
+                                    <div class="text-xs text-text-sub mt-1">进入全部工单并筛选待客户回复</div>
                                 </div>
-                                <span class="text-xs text-text-muted flex-shrink-0">25 分钟前</span>
+                                <i class="fa-solid fa-angle-right text-text-muted text-xs"></i>
                             </div>
-                            <div class="flex items-start">
+                            <div class="flex items-center p-3 rounded-lg border border-border-light hover:bg-bg-main">
                                 <div class="w-8 h-8 rounded-full bg-danger-light flex items-center justify-center text-danger flex-shrink-0 mr-3 mt-0.5">
                                     <i class="fa-solid fa-circle-exclamation text-xs"></i>
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                    <div class="text-sm text-text-main">有 1 封邮件发送失败</div>
+                                    <div class="text-sm font-medium text-text-main">邮件发送失败</div>
+                                    <div class="text-xs text-text-sub mt-1">进入发送日志处理失败记录</div>
                                 </div>
-                                <span class="text-xs text-text-muted flex-shrink-0">1 小时前</span>
+                                <i class="fa-solid fa-angle-right text-text-muted text-xs"></i>
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <!-- 下方三列：我的待办 / 当前处理中工单 / 我的提醒 -->
+                <!-- 下方三列：我的待办 / 处理中入口 / 我的待办摘要 -->
                 <div class="grid grid-cols-3 gap-4 mb-6">
                     <!-- 我的待办 -->
                     <div class="card p-5">
@@ -539,7 +519,7 @@
                                 <div class="text-sm font-medium text-text-main mb-1">TCK-20260722-0001</div>
                                 <div class="text-sm text-text-main mb-1">服务器异常无法登录</div>
                                 <div class="text-xs text-text-muted mb-2">客户：tech@abc.com</div>
-                                <span class="inline-block px-2 py-0.5 bg-primary-light text-primary text-xs rounded">待处理</span>
+                                <span class="inline-block px-2 py-0.5 bg-warning-light text-warning text-xs rounded">待分配</span>
                             </div>
                             
                             <div class="p-3 border border-border-light rounded-lg hover:bg-bg-main transition-colors cursor-pointer">
@@ -572,7 +552,7 @@
                                 <div class="text-sm font-medium text-text-main mb-1">TCK-20260722-0004</div>
                                 <div class="text-sm text-text-main mb-1">邮件通知未收到</div>
                                 <div class="text-xs text-text-muted mb-2">客户：ops@abc.com</div>
-                                <span class="inline-block px-2 py-0.5 bg-primary-light text-primary text-xs rounded">待处理</span>
+                                <span class="inline-block px-2 py-0.5 bg-warning-light text-warning text-xs rounded">待分配</span>
                             </div>
                         </div>
                         <div class="mt-4 text-right">
@@ -580,157 +560,97 @@
                         </div>
                     </div>
                     
-                    <!-- 当前处理中工单 -->
+                    <!-- 处理中工单入口 -->
                     <div class="card p-5">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-text-main">当前处理中工单</h3>
+                            <h3 class="font-semibold text-text-main">处理中工单入口</h3>
                             <a href="#" class="text-sm text-primary hover:text-primary-hover">全部 <i class="fa-solid fa-angle-right ml-1"></i></a>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full">
-                                <thead>
-                                    <tr class="text-xs text-text-muted border-b border-border-light">
-                                        <th class="text-left font-medium py-2 pr-2">工单号</th>
-                                        <th class="text-left font-medium py-2 pr-2">主题</th>
-                                        <th class="text-left font-medium py-2 pr-2">客户</th>
-                                        <th class="text-left font-medium py-2 pr-2">SLA剩余</th>
-                                        <th class="text-left font-medium py-2">操作</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="text-sm">
-                                    <tr class="border-b border-border-light/60 hover:bg-bg-main transition-colors">
-                                        <td class="py-3 pr-2 text-text-main font-medium">TCK-20260721-0985</td>
-                                        <td class="py-3 pr-2 text-text-main">数据库连接异常</td>
-                                        <td class="py-3 pr-2 text-text-sub">db@abc.com</td>
-                                        <td class="py-3 pr-2"><span class="text-danger font-medium">2小时15分</span></td>
-                                        <td class="py-3"><button class="text-text-muted hover:text-primary"><i class="fa-solid fa-ellipsis"></i></button></td>
-                                    </tr>
-                                    <tr class="border-b border-border-light/60 hover:bg-bg-main transition-colors">
-                                        <td class="py-3 pr-2 text-text-main font-medium">TCK-20260721-0981</td>
-                                        <td class="py-3 pr-2 text-text-main">系统登录缓慢</td>
-                                        <td class="py-3 pr-2 text-text-sub">it@abc.com</td>
-                                        <td class="py-3 pr-2"><span class="text-warning font-medium">5小时30分</span></td>
-                                        <td class="py-3"><button class="text-text-muted hover:text-primary"><i class="fa-solid fa-ellipsis"></i></button></td>
-                                    </tr>
-                                    <tr class="border-b border-border-light/60 hover:bg-bg-main transition-colors">
-                                        <td class="py-3 pr-2 text-text-main font-medium">TCK-20260721-0979</td>
-                                        <td class="py-3 pr-2 text-text-main">文件上传失败</td>
-                                        <td class="py-3 pr-2 text-text-sub">user@abc.com</td>
-                                        <td class="py-3 pr-2"><span class="text-warning font-medium">8小时45分</span></td>
-                                        <td class="py-3"><button class="text-text-muted hover:text-primary"><i class="fa-solid fa-ellipsis"></i></button></td>
-                                    </tr>
-                                    <tr class="border-b border-border-light/60 hover:bg-bg-main transition-colors">
-                                        <td class="py-3 pr-2 text-text-main font-medium">TCK-20260721-0973</td>
-                                        <td class="py-3 pr-2 text-text-main">API 调用超时</td>
-                                        <td class="py-3 pr-2 text-text-sub">dev@abc.com</td>
-                                        <td class="py-3 pr-2"><span class="text-text-sub font-medium">12小时20分</span></td>
-                                        <td class="py-3"><button class="text-text-muted hover:text-primary"><i class="fa-solid fa-ellipsis"></i></button></td>
-                                    </tr>
-                                    <tr class="hover:bg-bg-main transition-colors">
-                                        <td class="py-3 pr-2 text-text-main font-medium">TCK-20260721-0988</td>
-                                        <td class="py-3 pr-2 text-text-main">页面显示异常</td>
-                                        <td class="py-3 pr-2 text-text-sub">web@abc.com</td>
-                                        <td class="py-3 pr-2"><span class="text-text-sub font-medium">1天2小时</span></td>
-                                        <td class="py-3"><button class="text-text-muted hover:text-primary"><i class="fa-solid fa-ellipsis"></i></button></td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="space-y-3">
+                            <div class="p-4 rounded-lg bg-primary-light border border-primary/20">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <div class="text-sm font-semibold text-text-main">处理中工单</div>
+                                        <div class="text-xs text-text-sub mt-1">进入全部工单并筛选处理中状态</div>
+                                    </div>
+                                    <div class="text-2xl font-bold text-primary">56</div>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-xs text-text-muted mb-1">SLA 已超时</div>
+                                    <div class="text-lg font-bold text-danger">2</div>
+                                </div>
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-xs text-text-muted mb-1">今日关闭</div>
+                                    <div class="text-lg font-bold text-success">42</div>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between text-sm py-2 border-b border-border-light/60">
+                                    <div>
+                                        <div class="text-text-main font-medium">TCK-20260721-0985</div>
+                                        <div class="text-xs text-text-sub mt-1">数据库连接异常 · db@abc.com</div>
+                                    </div>
+                                    <i class="fa-solid fa-angle-right text-text-muted text-xs"></i>
+                                </div>
+                                <div class="flex items-center justify-between text-sm py-2">
+                                    <div>
+                                        <div class="text-text-main font-medium">TCK-20260721-0981</div>
+                                        <div class="text-xs text-text-sub mt-1">系统登录缓慢 · it@abc.com</div>
+                                    </div>
+                                    <i class="fa-solid fa-angle-right text-text-muted text-xs"></i>
+                                </div>
+                            </div>
                         </div>
                         <div class="mt-4 text-right">
                             <a href="#" class="text-sm text-primary hover:text-primary-hover">查看全部处理中工单 <i class="fa-solid fa-angle-right ml-1"></i></a>
                         </div>
                     </div>
                     
-                    <!-- 我的提醒 -->
+                    <!-- 我的待办摘要 -->
                     <div class="card p-5">
                         <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-text-main">我的提醒</h3>
-                            <button class="text-text-muted hover:text-primary"><i class="fa-solid fa-gear"></i></button>
+                            <h3 class="font-semibold text-text-main">我的待办摘要</h3>
+                            <span class="text-xs text-text-muted">按当前处理人</span>
                         </div>
-                        <div class="space-y-5">
-                            <!-- SLA超时提醒 -->
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <div class="flex items-center">
-                                        <span class="w-1 h-4 bg-danger rounded-full mr-2"></span>
-                                        <span class="text-sm font-medium text-text-main">SLA 超时提醒</span>
-                                    </div>
-                                    <span class="text-lg font-bold text-danger">2</span>
+                        <div class="space-y-4">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="p-3 rounded-lg bg-bg-main">
+                                    <div class="text-xs text-text-muted mb-1">我的待办</div>
+                                    <div class="text-2xl font-bold text-text-main">12</div>
                                 </div>
-                                <div class="space-y-2 ml-3">
-                                    <div class="flex items-center justify-between text-sm py-2 border-b border-border-light/60">
-                                        <div>
-                                            <div class="text-text-main font-medium">TCK-20260721-0956</div>
-                                            <div class="text-xs text-text-sub">服务器重启后异常</div>
-                                        </div>
-                                        <span class="text-xs text-text-muted">30分钟前</span>
-                                    </div>
-                                    <div class="flex items-center justify-between text-sm py-2 border-b border-border-light/60">
-                                        <div>
-                                            <div class="text-text-main font-medium">TCK-20260721-0942</div>
-                                            <div class="text-xs text-text-sub">接口调用失败问题</div>
-                                        </div>
-                                        <span class="text-xs text-text-muted">1小时前</span>
-                                    </div>
+                                <div class="p-3 rounded-lg bg-danger-light border border-danger/20">
+                                    <div class="text-xs text-text-muted mb-1">SLA 已超时</div>
+                                    <div class="text-2xl font-bold text-danger">1</div>
                                 </div>
                             </div>
-                            
-                            <!-- 即将超时提醒 -->
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
-                                    <div class="flex items-center">
-                                        <span class="w-1 h-4 bg-warning rounded-full mr-2"></span>
-                                        <span class="text-sm font-medium text-text-main">即将超时提醒</span>
-                                    </div>
-                                    <span class="text-lg font-bold text-warning">6</span>
-                                </div>
-                                <div class="space-y-2 ml-3">
-                                    <div class="flex items-center justify-between text-sm py-2 border-b border-border-light/60">
-                                        <div>
-                                            <div class="text-text-main font-medium">TCK-20260722-0007</div>
-                                            <div class="text-xs text-text-sub">数据同步延迟</div>
-                                        </div>
-                                        <span class="text-xs text-text-muted">1小时15分后</span>
-                                    </div>
-                                    <div class="flex items-center justify-between text-sm py-2 border-b border-border-light/60">
-                                        <div>
-                                            <div class="text-text-main font-medium">TCK-20260722-0008</div>
-                                            <div class="text-xs text-text-sub">校园网配置问题</div>
-                                        </div>
-                                        <span class="text-xs text-text-muted">2小时10分后</span>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- 客户新回复 -->
-                            <div>
-                                <div class="flex items-center justify-between mb-2">
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between p-3 rounded-lg border border-border-light">
                                     <div class="flex items-center">
                                         <span class="w-1 h-4 bg-primary rounded-full mr-2"></span>
-                                        <span class="text-sm font-medium text-text-main">客户新回复</span>
+                                        <span class="text-sm font-medium text-text-main">处理中</span>
                                     </div>
-                                    <span class="text-lg font-bold text-primary">3</span>
+                                    <span class="text-lg font-bold text-primary">7</span>
                                 </div>
-                                <div class="space-y-2 ml-3">
-                                    <div class="flex items-center justify-between text-sm py-2 border-b border-border-light/60">
-                                        <div>
-                                            <div class="text-text-main font-medium">TCK-20260721-0981</div>
-                                            <div class="text-xs text-text-sub">系统登录缓慢</div>
-                                        </div>
-                                        <span class="text-xs text-text-muted">15分钟前</span>
+                                <div class="flex items-center justify-between p-3 rounded-lg border border-border-light">
+                                    <div class="flex items-center">
+                                        <span class="w-1 h-4 bg-success rounded-full mr-2"></span>
+                                        <span class="text-sm font-medium text-text-main">待客户回复</span>
                                     </div>
-                                    <div class="flex items-center justify-between text-sm py-2">
-                                        <div>
-                                            <div class="text-text-main font-medium">TCK-20260721-0973</div>
-                                            <div class="text-xs text-text-sub">API 调用超时</div>
-                                        </div>
-                                        <span class="text-xs text-text-muted">26分钟前</span>
+                                    <span class="text-lg font-bold text-success">4</span>
+                                </div>
+                                <div class="flex items-center justify-between p-3 rounded-lg border border-border-light">
+                                    <div class="flex items-center">
+                                        <span class="w-1 h-4 bg-warning rounded-full mr-2"></span>
+                                        <span class="text-sm font-medium text-text-main">待分配</span>
                                     </div>
+                                    <span class="text-lg font-bold text-warning">1</span>
                                 </div>
                             </div>
                         </div>
                         <div class="mt-4 text-right">
-                            <a href="#" class="text-sm text-primary hover:text-primary-hover">查看所有提醒 <i class="fa-solid fa-angle-right ml-1"></i></a>
+                            <a href="#" class="text-sm text-primary hover:text-primary-hover">查看我的待办 <i class="fa-solid fa-angle-right ml-1"></i></a>
                         </div>
                     </div>
                 </div>
@@ -738,80 +658,127 @@
                 <!-- 最近活动 -->
                 <div class="card p-5">
                     <div class="flex items-center justify-between mb-5">
-                        <h3 class="font-semibold text-text-main">最近活动</h3>
-                        <a href="#" class="text-sm text-primary hover:text-primary-hover">全部活动 <i class="fa-solid fa-angle-right ml-1"></i></a>
+                        <div>
+                            <h3 class="font-semibold text-text-main">最近活动</h3>
+                            <p class="text-xs text-text-muted mt-1">后续由操作日志沉淀活动流；第一版先保留入口，不阻断工作台上线。</p>
+                        </div>
+                        <span class="px-2 py-1 bg-warning-light text-warning text-xs rounded font-medium">后续扩展</span>
                     </div>
-                    <div class="grid grid-cols-2 gap-x-8 gap-y-4">
-                        <div class="flex items-start">
-                            <div class="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-primary flex-shrink-0 mr-3">
-                                <i class="fa-regular fa-envelope text-xs"></i>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="p-4 rounded-lg border border-border-light bg-bg-main">
+                            <div class="w-8 h-8 rounded-lg bg-primary-light text-primary flex items-center justify-center mb-3">
+                                <i class="fa-regular fa-envelope"></i>
                             </div>
-                            <div class="flex-1">
-                                <div class="flex items-center text-sm">
-                                    <span class="text-text-muted w-10">10:01</span>
-                                    <span class="text-text-main font-medium">收到客户邮件</span>
-                                </div>
-                                <div class="text-xs text-text-sub mt-1 ml-10">来源：support@yourdomain.com · 工单：TCK-20260722-0001</div>
+                            <div class="text-sm font-semibold text-text-main">邮件事件</div>
+                            <p class="text-xs text-text-sub mt-1 leading-5">收到客户邮件、发送失败、自动回复等事件后续合并展示。</p>
+                        </div>
+                        <div class="p-4 rounded-lg border border-border-light bg-bg-main">
+                            <div class="w-8 h-8 rounded-lg bg-success-light text-success flex items-center justify-center mb-3">
+                                <i class="fa-regular fa-folder-open"></i>
+                            </div>
+                            <div class="text-sm font-semibold text-text-main">工单事件</div>
+                            <p class="text-xs text-text-sub mt-1 leading-5">创建、分配、打开、关闭等关键动作后续按时间排序。</p>
+                        </div>
+                        <div class="p-4 rounded-lg border border-border-light bg-bg-main">
+                            <div class="w-8 h-8 rounded-lg bg-warning-light text-warning flex items-center justify-center mb-3">
+                                <i class="fa-regular fa-clock"></i>
+                            </div>
+                            <div class="text-sm font-semibold text-text-main">SLA 事件</div>
+                            <p class="text-xs text-text-sub mt-1 leading-5">预警、超时、恢复等事件后续与提醒任务统一展示。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 状态覆盖（评审用，不作为业务常驻区） -->
+                <div class="card p-5 mt-5 border-dashed border-primary/30">
+                    <div class="flex items-start justify-between gap-4 mb-4">
+                        <div>
+                            <h3 class="font-semibold text-text-main">状态覆盖</h3>
+                            <p class="text-sm text-text-sub mt-1">工作台前端实现时按数据状态条件渲染；以下仅用于 PG-13 评审确认，不作为页面常驻业务模块。</p>
+                        </div>
+                        <span class="px-2 py-1 bg-warning-light text-warning text-xs rounded font-medium whitespace-nowrap">评审用</span>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-4 mb-5">
+                        <div class="rounded-xl border border-border-light bg-white p-4">
+                            <div class="w-9 h-9 rounded-lg bg-primary-light text-primary flex items-center justify-center mb-3">
+                                <i class="fa-regular fa-folder-open"></i>
+                            </div>
+                            <div class="font-semibold text-text-main mb-1">空态</div>
+                            <p class="text-xs text-text-sub leading-5">无工单、无待办或无风险数据时展示空态文案，保留刷新入口，不显示假数据。</p>
+                        </div>
+                        <div class="rounded-xl border border-border-light bg-white p-4">
+                            <div class="w-9 h-9 rounded-lg bg-primary-light text-primary flex items-center justify-center mb-3">
+                                <i class="fa-solid fa-rotate fa-spin"></i>
+                            </div>
+                            <div class="font-semibold text-text-main mb-1">加载中</div>
+                            <p class="text-xs text-text-sub leading-5">刷新期间统计卡片、SLA、邮箱状态、待办列表使用骨架屏，刷新按钮置为 loading。</p>
+                        </div>
+                        <div class="rounded-xl border border-border-light bg-white p-4">
+                            <div class="w-9 h-9 rounded-lg bg-danger-light text-danger flex items-center justify-center mb-3">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                            </div>
+                            <div class="font-semibold text-text-main mb-1">接口失败</div>
+                            <p class="text-xs text-text-sub leading-5">保留最近一次成功数据；失败模块显示错误说明和重试按钮，不影响其他模块继续查看。</p>
+                        </div>
+                        <div class="rounded-xl border border-border-light bg-white p-4">
+                            <div class="w-9 h-9 rounded-lg bg-warning-light text-warning flex items-center justify-center mb-3">
+                                <i class="fa-solid fa-shield-halved"></i>
+                            </div>
+                            <div class="font-semibold text-text-main mb-1">无权限</div>
+                            <p class="text-xs text-text-sub leading-5">无工作台查看权限时显示权限提示；有部分数据权限时仅隐藏对应卡片，不暴露接口错误。</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="rounded-xl border border-border-light bg-bg-main p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-sm font-semibold text-text-main">空列表示例</span>
+                                <span class="px-2 py-0.5 bg-primary-light text-primary text-xs rounded">我的待办</span>
+                            </div>
+                            <div class="min-h-[118px] rounded-lg bg-white border border-border-light flex flex-col items-center justify-center text-center px-4">
+                                <i class="fa-regular fa-circle-check text-2xl text-success mb-3"></i>
+                                <div class="text-sm font-semibold text-text-main">暂无待办工单</div>
+                                <p class="text-xs text-text-sub mt-1">当前筛选范围内没有需要处理的工单。</p>
+                                <button class="mt-3 h-8 px-3 rounded-lg border border-border-light text-xs text-text-main bg-white">刷新</button>
                             </div>
                         </div>
-                        <div class="flex items-start">
-                            <div class="w-8 h-8 rounded-full bg-danger-light flex items-center justify-center text-danger flex-shrink-0 mr-3">
-                                <i class="fa-solid fa-user-plus text-xs"></i>
+
+                        <div class="rounded-xl border border-border-light bg-bg-main p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-sm font-semibold text-text-main">加载中示例</span>
+                                <span class="px-2 py-0.5 bg-primary-light text-primary text-xs rounded">统计卡片</span>
                             </div>
-                            <div class="flex-1">
-                                <div class="flex items-center text-sm">
-                                    <span class="text-text-muted w-10">10:05</span>
-                                    <span class="text-text-main font-medium">分配工单给 李工</span>
+                            <div class="space-y-3">
+                                <div class="h-16 rounded-lg bg-white border border-border-light p-3">
+                                    <div class="h-3 w-24 bg-gray-200 rounded animate-pulse mb-3"></div>
+                                    <div class="h-6 w-16 bg-gray-200 rounded animate-pulse"></div>
                                 </div>
-                                <div class="text-xs text-text-sub mt-1 ml-10">处理人：李工 · 工单：TCK-20260722-0001</div>
+                                <div class="h-16 rounded-lg bg-white border border-border-light p-3">
+                                    <div class="h-3 w-32 bg-gray-200 rounded animate-pulse mb-3"></div>
+                                    <div class="h-6 w-20 bg-gray-200 rounded animate-pulse"></div>
+                                </div>
                             </div>
                         </div>
-                        <div class="flex items-start">
-                            <div class="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-primary flex-shrink-0 mr-3">
-                                <i class="fa-solid fa-plus text-xs"></i>
+
+                        <div class="rounded-xl border border-border-light bg-bg-main p-4">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="text-sm font-semibold text-text-main">失败/权限示例</span>
+                                <span class="px-2 py-0.5 bg-danger-light text-danger text-xs rounded">模块级</span>
                             </div>
-                            <div class="flex-1">
-                                <div class="flex items-center text-sm">
-                                    <span class="text-text-muted w-10">10:02</span>
-                                    <span class="text-text-main font-medium">创建工单</span>
+                            <div class="rounded-lg bg-white border border-danger/20 p-3 mb-3">
+                                <div class="flex items-start gap-3">
+                                    <i class="fa-solid fa-circle-exclamation text-danger mt-0.5"></i>
+                                    <div>
+                                        <div class="text-sm font-semibold text-text-main">工作台统计加载失败</div>
+                                        <p class="text-xs text-text-sub mt-1">网络异常或接口超时，请稍后重试。</p>
+                                        <button class="mt-2 h-7 px-3 rounded-lg bg-danger text-white text-xs">重试</button>
+                                    </div>
                                 </div>
-                                <div class="text-xs text-text-sub mt-1 ml-10">工单：TCK-20260722-0001 · 处理人：系统</div>
                             </div>
-                        </div>
-                        <div class="flex items-start">
-                            <div class="w-8 h-8 rounded-full bg-success-light flex items-center justify-center text-success flex-shrink-0 mr-3">
-                                <i class="fa-regular fa-folder-open text-xs"></i>
-                            </div>
-                            <div class="flex-1">
-                                <div class="flex items-center text-sm">
-                                    <span class="text-text-muted w-10">10:08</span>
-                                    <span class="text-text-main font-medium">处理人打开工单</span>
-                                </div>
-                                <div class="text-xs text-text-sub mt-1 ml-10">处理人：李工 · 工单：TCK-20260722-0001</div>
-                            </div>
-                        </div>
-                        <div class="flex items-start">
-                            <div class="w-8 h-8 rounded-full bg-success-light flex items-center justify-center text-success flex-shrink-0 mr-3">
-                                <i class="fa-solid fa-reply text-xs"></i>
-                            </div>
-                            <div class="flex-1">
-                                <div class="flex items-center text-sm">
-                                    <span class="text-text-muted w-10">10:03</span>
-                                    <span class="text-text-main font-medium">自动回复客户</span>
-                                </div>
-                                <div class="text-xs text-text-sub mt-1 ml-10">客户：tech@ab0722-0001 · 工单：TCK-20260722-0001</div>
-                            </div>
-                        </div>
-                        <div class="flex items-start">
-                            <div class="w-8 h-8 rounded-full bg-primary-light flex items-center justify-center text-primary flex-shrink-0 mr-3">
-                                <i class="fa-regular fa-comment-dots text-xs"></i>
-                            </div>
-                            <div class="flex-1">
-                                <div class="flex items-center text-sm">
-                                    <span class="text-text-muted w-10">10:15</span>
-                                    <span class="text-text-main font-medium">客户回复邮件</span>
-                                </div>
-                                <div class="text-xs text-text-sub mt-1 ml-10">客户：tech@abc.com · 工单：TCK-20260722-0001</div>
+                            <div class="rounded-lg bg-white border border-warning/20 p-3">
+                                <div class="text-sm font-semibold text-text-main">无工作台查看权限</div>
+                                <p class="text-xs text-text-sub mt-1">请联系管理员开通工作台或相关数据权限。</p>
                             </div>
                         </div>
                     </div>

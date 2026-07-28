@@ -1,11 +1,15 @@
 package com.ntn.fziot.mailtrace.application.bizservice.ticket;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleMatchResult;
 import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleService;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
+import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
@@ -73,6 +77,8 @@ class TicketBizServiceTest {
     private TicketAttachmentMapper ticketAttachmentMapper;
     @Mock
     private AssignmentRuleService assignmentRuleService;
+    @Mock
+    private SlaDeadlineService slaDeadlineService;
 
     @InjectMocks
     private TicketBizService ticketBizService;
@@ -95,6 +101,7 @@ class TicketBizServiceTest {
         lenient().when(mailboxMapper.selectById(11L)).thenReturn(mailbox());
         lenient().when(userMapper.selectById(2L)).thenReturn(agent(2L, "张三", "agent@example.com"));
         lenient().when(assignmentRuleService.matchForTicket(any(), any(), any(), any())).thenReturn(null);
+        lenient().when(slaDeadlineService.calculateForNewTicket(any())).thenReturn(SlaDeadlineResult.none());
     }
 
     @Test
@@ -185,10 +192,16 @@ class TicketBizServiceTest {
     void handleCustomerFollowUp_whenClosed_shouldReopenToProcessing() {
         TicketEntity ticket = ticket(105L, TicketBizService.STATUS_CLOSED);
         when(ticketMapper.selectById(105L)).thenReturn(ticket);
+        LocalDateTime mailSentAt = LocalDateTime.parse("2026-07-27T09:30:00");
 
         ticketBizService.handleCustomerFollowUp(
                 105L, "Re: test", "customer@example.com", "追信", "<p>追信</p>",
-                "<msg-1@example.com>", LocalDateTime.now());
+                "<msg-1@example.com>", mailSentAt);
+
+        ArgumentCaptor<TicketEntity> updateCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).updateById(updateCaptor.capture());
+        assertTrue(updateCaptor.getAllValues().stream()
+                .anyMatch(update -> mailSentAt.equals(update.getLastCustomerMailAt())));
 
         ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
         verify(ticketEventMapper).insert(eventCaptor.capture());
@@ -200,16 +213,37 @@ class TicketBizServiceTest {
     void handleCustomerFollowUp_whenWaitingCustomer_shouldReturnToProcessing() {
         TicketEntity ticket = ticket(107L, TicketBizService.STATUS_WAITING_CUSTOMER);
         when(ticketMapper.selectById(107L)).thenReturn(ticket);
+        LocalDateTime mailSentAt = LocalDateTime.parse("2026-07-27T10:15:00");
 
         ticketBizService.handleCustomerFollowUp(
                 107L, "Re: waiting", "customer@example.com", "已补充", "<p>已补充</p>",
-                "<msg-2@example.com>", LocalDateTime.now());
+                "<msg-2@example.com>", mailSentAt);
 
         verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).update(eq(null), any());
+        ArgumentCaptor<TicketEntity> updateCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).updateById(updateCaptor.capture());
+        assertTrue(updateCaptor.getAllValues().stream()
+                .anyMatch(update -> mailSentAt.equals(update.getLastCustomerMailAt())));
+
         ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
         verify(ticketEventMapper).insert(eventCaptor.capture());
         assertEquals(TicketBizService.EVENT_CUSTOMER_FOLLOWUP, eventCaptor.getValue().getEventType());
         assertTrue(eventCaptor.getValue().getEventContent().contains("自动转为处理中"));
+    }
+
+    @Test
+    void pageTickets_whenSlaBreachedProvided_shouldQueryBySlaBreached() {
+        Page<TicketEntity> pageResult = Page.of(1, 10);
+        pageResult.setRecords(List.of(ticket(108L, TicketBizService.STATUS_PROCESSING)));
+        pageResult.setTotal(1);
+        when(ticketMapper.selectPage(any(), any())).thenReturn(pageResult);
+
+        ticketBizService.pageTickets(admin, null, "ALL", true,
+                null, null, null, null, 1, 10);
+
+        ArgumentCaptor<LambdaQueryWrapper<TicketEntity>> queryCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(ticketMapper).selectPage(any(), queryCaptor.capture());
+        assertTrue(queryCaptor.getValue().getSqlSegment().contains("sla_breached"));
     }
 
     @Test
@@ -247,6 +281,41 @@ class TicketBizServiceTest {
     }
 
     @Test
+    void createTicket_shouldApplySlaDeadlines() {
+        LocalDateTime mailSentAt = LocalDateTime.parse("2026-07-27T10:00:00");
+        LocalDateTime responseDeadline = LocalDateTime.parse("2026-07-27T14:00:00");
+        LocalDateTime resolveDeadline = LocalDateTime.parse("2026-07-28T11:00:00");
+        when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-202");
+        when(slaDeadlineService.calculateForNewTicket(mailSentAt))
+                .thenReturn(new SlaDeadlineResult(20L, responseDeadline, resolveDeadline));
+        when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
+            TicketEntity ticket = invocation.getArgument(0);
+            ticket.setId(202L);
+            return 1;
+        });
+
+        Long ticketId = ticketBizService.createTicket(
+                11L, "SLA 咨询", "customer@example.com", "客户",
+                "正文", "<p>正文</p>", "<msg-202@example.com>",
+                null, null, mailSentAt);
+
+        assertEquals(202L, ticketId);
+        ArgumentCaptor<TicketEntity> ticketCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper).insert(ticketCaptor.capture());
+        TicketEntity saved = ticketCaptor.getValue();
+        assertEquals(TicketBizService.STATUS_PENDING_ASSIGN, saved.getStatus());
+        assertEquals(11L, saved.getMailboxId());
+        assertEquals("customer@example.com", saved.getCustomerEmail());
+        assertEquals(20L, saved.getSlaPolicyId());
+        assertEquals(responseDeadline, saved.getSlaResponseDeadline());
+        assertEquals(resolveDeadline, saved.getSlaResolveDeadline());
+        assertEquals(false, saved.getSlaBreached());
+        assertEquals(false, saved.getSlaWarningSent());
+        assertEquals(false, saved.getSlaBreachNotified());
+        assertEquals(mailSentAt, saved.getLastCustomerMailAt());
+    }
+
+    @Test
     void createTicket_whenNoRuleMatches_shouldFallbackMailboxDefaultAssignee() {
         MailboxEntity mailbox = mailbox();
         mailbox.setDefaultAssigneeId(2L);
@@ -267,6 +336,10 @@ class TicketBizServiceTest {
 
         assertEquals(201L, ticketId);
         verify(assignmentRuleService).matchForTicket(11L, "support@example.com", "普通咨询", "customer@example.com");
+        ArgumentCaptor<TicketEntity> ticketCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper).insert(ticketCaptor.capture());
+        assertEquals(2L, ticketCaptor.getValue().getAssigneeId());
+        assertEquals(TicketBizService.STATUS_PROCESSING, ticketCaptor.getValue().getStatus());
 
         ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
         verify(ticketEventMapper, org.mockito.Mockito.atLeast(2)).insert(eventCaptor.capture());
@@ -284,6 +357,25 @@ class TicketBizServiceTest {
                 () -> ticketBizService.updateStatus(admin, 106L, new TicketStatusRequest("WAITING_CUSTOMER", "manual")));
 
         assertTrue(ex.getMessage().contains("不能手动变更"));
+    }
+
+    @Test
+    void stats_shouldUseExplicitActiveTotalCount() {
+        when(ticketMapper.countActiveTotal()).thenReturn(20L);
+        when(ticketMapper.countByStatus("PENDING_ASSIGN")).thenReturn(3L);
+        when(ticketMapper.countByStatus("PROCESSING")).thenReturn(7L);
+        when(ticketMapper.countByStatus("WAITING_CUSTOMER")).thenReturn(4L);
+        when(ticketMapper.countSlaOverdue()).thenReturn(2L);
+        when(ticketMapper.countClosedToday()).thenReturn(5L);
+
+        TicketBizService.TicketStats stats = ticketBizService.stats();
+
+        assertEquals(20L, stats.totalCount());
+        assertEquals(3L, stats.pendingAssignCount());
+        assertEquals(7L, stats.processingCount());
+        assertEquals(4L, stats.waitingCustomerCount());
+        assertEquals(2L, stats.slaOverdueCount());
+        assertEquals(5L, stats.closedTodayCount());
     }
 
     private TicketEntity ticket(Long id, String status) {

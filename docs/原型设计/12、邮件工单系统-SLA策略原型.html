@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邮件工单系统 - SLA策略原型</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-soft: #eff6ff;
+            --success: #10b981;
+            --success-soft: #ecfdf5;
+            --warning: #f59e0b;
+            --warning-soft: #fffbeb;
+            --danger: #ef4444;
+            --danger-soft: #fef2f2;
+            --bg: #f5f6f8;
+            --surface: #ffffff;
+            --line: #e5e7eb;
+            --line-soft: #f1f5f9;
+            --text: #111827;
+            --sub: #4b5563;
+            --muted: #9ca3af;
+            --shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            color: var(--text);
+            background: var(--bg);
+            font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+        }
+        button, input, select, textarea { font: inherit; }
+        button { cursor: pointer; }
+        .shell {
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            overflow: hidden;
+        }
+        .sidebar {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--line);
+            background: #fff;
+        }
+        .logo {
+            height: 64px;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo-mark {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--primary);
+            font-weight: 800;
+        }
+        .logo strong { font-size: 16px; font-weight: 800; }
+        .nav { flex: 1; overflow-y: auto; padding: 12px; }
+        .nav-group { margin-bottom: 16px; }
+        .nav-title {
+            padding: 8px 12px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .nav-item {
+            min-height: 40px;
+            border-radius: 8px;
+            padding: 0 12px;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--sub);
+            text-decoration: none;
+            font-weight: 650;
+        }
+        .nav-item.active { color: var(--primary); background: var(--primary-soft); }
+        .nav-main { min-width: 0; display: flex; align-items: center; gap: 10px; }
+        .nav-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 5px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: 11px;
+            font-weight: 900;
+        }
+        .active .nav-icon { background: #dbeafe; color: var(--primary); }
+        .badge {
+            min-width: 20px;
+            border-radius: 999px;
+            padding: 2px 7px;
+            color: #fff;
+            background: var(--danger);
+            font-size: 12px;
+            font-weight: 800;
+            line-height: 1.3;
+            text-align: center;
+        }
+        .badge.warning { background: var(--warning); }
+        .collapse {
+            height: 48px;
+            border-top: 1px solid var(--line);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--sub);
+            font-weight: 650;
+        }
+        .main { min-width: 0; height: 100vh; display: flex; flex-direction: column; }
+        .topbar {
+            height: 64px;
+            flex: 0 0 64px;
+            padding: 0 24px;
+            border-bottom: 1px solid var(--line);
+            display: grid;
+            grid-template-columns: minmax(180px, 280px) minmax(300px, 560px) auto;
+            align-items: center;
+            gap: 24px;
+            background: #fff;
+        }
+        .breadcrumb { display: flex; align-items: center; gap: 10px; color: var(--sub); }
+        .breadcrumb strong { color: var(--text); }
+        .menu-button {
+            width: 32px;
+            height: 32px;
+            border: 0;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: var(--sub);
+            font-weight: 900;
+        }
+        .search {
+            height: 36px;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            padding: 0 11px;
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            background: #fff;
+            color: var(--muted);
+        }
+        .search input { flex: 1; min-width: 0; border: 0; outline: 0; color: var(--text); }
+        .kbd {
+            border-radius: 6px;
+            padding: 2px 6px;
+            background: #f1f5f9;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .top-actions { justify-self: end; display: flex; align-items: center; gap: 14px; }
+        .icon-button {
+            width: 36px;
+            height: 36px;
+            border: 0;
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            font-weight: 900;
+            position: relative;
+        }
+        .notice-dot {
+            position: absolute;
+            right: 5px;
+            top: 3px;
+            min-width: 16px;
+            height: 16px;
+            border-radius: 999px;
+            padding: 0 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--danger);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 900;
+        }
+        .user { display: flex; align-items: center; gap: 10px; }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #059669;
+            color: #fff;
+            font-weight: 900;
+        }
+        .user strong { display: block; font-size: 13px; }
+        .user small { color: var(--sub); font-weight: 650; }
+        .content {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 24px;
+        }
+        .page-head {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+        }
+        h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: 0; }
+        p { margin: 0; color: var(--sub); }
+        .head-actions { display: flex; gap: 10px; }
+        .btn {
+            height: 38px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 0 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--text);
+            background: #fff;
+            font-weight: 800;
+        }
+        .btn.primary { border-color: var(--primary); color: #fff; background: var(--primary); }
+        .btn.primary:hover { background: var(--primary-dark); }
+        .btn.danger { color: var(--danger); border-color: #fecaca; background: var(--danger-soft); }
+        .btn.small { height: 30px; padding: 0 10px; font-size: 12px; }
+        .btn.icon {
+            width: 30px;
+            padding: 0;
+            color: #64748b;
+            background: #f8fafc;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .metric {
+            min-height: 104px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 16px;
+            background: var(--surface);
+            box-shadow: var(--shadow);
+        }
+        .metric-label { display: flex; justify-content: space-between; color: var(--sub); font-weight: 750; }
+        .metric-value { margin-top: 12px; display: flex; align-items: baseline; gap: 8px; }
+        .metric-value strong { font-size: 28px; letter-spacing: 0; }
+        .metric-value span { color: var(--sub); font-weight: 750; }
+        .metric small { display: block; margin-top: 8px; color: var(--muted); line-height: 1.45; }
+        .notice {
+            margin-bottom: 18px;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: var(--primary-soft);
+            color: #1e3a8a;
+            font-weight: 650;
+        }
+        .notice span:first-child {
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #dbeafe;
+            color: var(--primary);
+            font-weight: 900;
+            flex: 0 0 auto;
+        }
+        .state-strip {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .state-mini {
+            min-height: 58px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+        }
+        .state-mini strong { display: block; margin-bottom: 3px; font-size: 13px; }
+        .state-mini span:last-child { color: var(--muted); font-size: 12px; line-height: 1.35; }
+        .workspace {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.92fr) minmax(420px, 1.2fr) minmax(300px, 0.86fr);
+            gap: 16px;
+            align-items: start;
+        }
+        .panel {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+            box-shadow: var(--shadow);
+        }
+        .panel-head {
+            min-height: 54px;
+            padding: 0 16px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .panel-head h2 { margin: 0; font-size: 16px; }
+        .panel-body { padding: 16px; }
+        .filters {
+            display: grid;
+            grid-template-columns: 1fr 112px 116px;
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .field { display: grid; gap: 7px; }
+        .field label { color: #374151; font-size: 12px; font-weight: 800; }
+        .input, .select, .textarea {
+            width: 100%;
+            border: 1px solid #dbe2ea;
+            border-radius: 8px;
+            color: var(--text);
+            background: #fff;
+            outline: 0;
+        }
+        .input, .select { height: 38px; padding: 0 11px; }
+        .textarea { min-height: 74px; padding: 10px 11px; resize: vertical; line-height: 1.5; }
+        .policy-list { border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+        .policy-row {
+            min-height: 116px;
+            border-bottom: 1px solid var(--line-soft);
+            padding: 13px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            background: #fff;
+        }
+        .policy-row:last-child { border-bottom: 0; }
+        .policy-row.active {
+            border-left: 3px solid var(--primary);
+            padding-left: 10px;
+            background: #f8fbff;
+        }
+        .policy-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .policy-title strong {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 15px;
+        }
+        .policy-meta {
+            margin-top: 8px;
+            color: var(--sub);
+            font-size: 12px;
+            line-height: 1.55;
+        }
+        .policy-kpis {
+            margin-top: 9px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+        }
+        .policy-kpis span {
+            border-radius: 8px;
+            padding: 7px 8px;
+            background: #f8fafc;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 750;
+        }
+        .policy-actions {
+            display: grid;
+            grid-template-columns: repeat(2, 30px);
+            gap: 6px;
+            align-content: start;
+        }
+        .chip {
+            border-radius: 999px;
+            padding: 3px 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+        .chip.primary { color: var(--primary); background: var(--primary-soft); }
+        .chip.success { color: #047857; background: var(--success-soft); }
+        .chip.warning { color: #b45309; background: var(--warning-soft); }
+        .chip.danger { color: #b91c1c; background: var(--danger-soft); }
+        .switch {
+            width: 42px;
+            height: 24px;
+            border-radius: 999px;
+            padding: 3px;
+            display: inline-flex;
+            align-items: center;
+            background: #cbd5e1;
+        }
+        .switch.on { justify-content: flex-end; background: var(--success); }
+        .switch i {
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            display: block;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .field.full { grid-column: 1 / -1; }
+        .binary-row {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .binary {
+            min-height: 62px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: #fff;
+        }
+        .binary strong { display: block; font-size: 13px; }
+        .binary small { color: var(--muted); font-weight: 650; line-height: 1.35; }
+        .help {
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .validation {
+            margin-top: 14px;
+            border-radius: 8px;
+            padding: 12px;
+            display: grid;
+            gap: 8px;
+            background: #f8fafc;
+        }
+        .check {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.45;
+        }
+        .check.ok span:first-child { color: #059669; }
+        .check.warn span:first-child { color: #b45309; }
+        .editor-foot {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .danger-zone {
+            margin-top: 16px;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 12px;
+            background: var(--danger-soft);
+        }
+        .danger-zone strong { display: block; color: #991b1b; }
+        .danger-zone p { margin: 5px 0 10px; color: #7f1d1d; font-size: 12px; line-height: 1.5; }
+        .preview-card {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 13px;
+            background: #fff;
+        }
+        .preview-card + .preview-card { margin-top: 12px; }
+        .preview-title {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .preview-title strong { font-size: 14px; }
+        .calendar-lines {
+            display: grid;
+            gap: 8px;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .calendar-lines div {
+            min-height: 34px;
+            border-radius: 8px;
+            padding: 8px 9px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            background: #f8fafc;
+        }
+        .timeline {
+            margin-top: 4px;
+            display: grid;
+            gap: 12px;
+            position: relative;
+        }
+        .timeline::before {
+            content: "";
+            position: absolute;
+            left: 11px;
+            top: 12px;
+            bottom: 12px;
+            width: 2px;
+            background: #e2e8f0;
+        }
+        .time-item {
+            min-width: 0;
+            display: grid;
+            grid-template-columns: 24px minmax(0, 1fr);
+            gap: 10px;
+            position: relative;
+        }
+        .dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--primary);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 900;
+            z-index: 1;
+        }
+        .dot.warning { background: var(--warning); }
+        .dot.danger { background: var(--danger); }
+        .time-box {
+            border: 1px solid var(--line-soft);
+            border-radius: 8px;
+            padding: 9px 10px;
+            background: #f8fafc;
+        }
+        .time-box strong { display: block; margin-bottom: 3px; font-size: 13px; }
+        .time-box span { color: var(--sub); font-size: 12px; font-weight: 650; }
+        .state-grid {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .state {
+            min-height: 126px;
+            border: 1px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 14px;
+            background: #fff;
+        }
+        .state strong { display: block; margin-bottom: 6px; }
+        .state p { color: var(--muted); font-size: 12px; line-height: 1.55; }
+        .loading-lines { display: grid; gap: 7px; margin-top: 4px; }
+        .loading-lines i {
+            height: 10px;
+            border-radius: 999px;
+            display: block;
+            background: linear-gradient(90deg, #e5e7eb, #f8fafc, #e5e7eb);
+        }
+        .empty-mark, .error-mark, .lock-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            margin-bottom: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+        }
+        .empty-mark { color: #64748b; background: #f1f5f9; }
+        .error-mark { color: #b91c1c; background: var(--danger-soft); }
+        .lock-mark { color: #b45309; background: var(--warning-soft); }
+        @media (max-width: 1180px) {
+            .shell { grid-template-columns: 84px minmax(0, 1fr); }
+            .logo strong, .nav-title, .nav-label, .badge, .collapse span, .user div { display: none; }
+            .nav-item { justify-content: center; padding: 0; }
+            .workspace { grid-template-columns: 1fr; }
+            .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 760px) {
+            .topbar { grid-template-columns: auto 1fr auto; gap: 10px; padding: 0 14px; }
+            .search { display: none; }
+            .content { padding: 16px; }
+            .page-head, .editor-foot { flex-direction: column; align-items: stretch; }
+            .head-actions, .editor-foot > div { display: flex; flex-wrap: wrap; gap: 8px; }
+            .metrics, .form-grid, .filters, .binary-row, .state-grid, .state-strip { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="logo">
+                <div class="logo-mark">M</div>
+                <strong>MailTrace</strong>
+            </div>
+            <nav class="nav">
+                <div class="nav-group">
+                    <div class="nav-title">工作台</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">D</span><span class="nav-label">业务概览</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">T</span><span class="nav-label">全部工单</span></span><span class="badge warning">12</span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">M</span><span class="nav-label">邮箱管理</span></span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">处理配置</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">R</span><span class="nav-label">分配规则</span></span></a>
+                    <a class="nav-item active" href="#"><span class="nav-main"><span class="nav-icon">S</span><span class="nav-label">SLA策略</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">C</span><span class="nav-label">工作日历</span></span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">系统管理</div>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">U</span><span class="nav-label">用户管理</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">N</span><span class="nav-label">通知模板</span></span></a>
+                    <a class="nav-item" href="#"><span class="nav-main"><span class="nav-icon">P</span><span class="nav-label">编号规则</span></span></a>
+                </div>
+            </nav>
+            <div class="collapse"><strong>&lt;</strong><span>收起菜单</span></div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div class="breadcrumb">
+                    <button class="menu-button" title="折叠菜单">=</button>
+                    <span>处理配置</span>
+                    <strong>SLA策略</strong>
+                </div>
+                <label class="search">
+                    <span>搜索</span>
+                    <input value="VIP 策略" aria-label="全局搜索">
+                    <span class="kbd">⌘K</span>
+                </label>
+                <div class="top-actions">
+                    <button class="icon-button" title="帮助">?</button>
+                    <button class="icon-button" title="通知">N<span class="notice-dot">3</span></button>
+                    <div class="user">
+                        <div class="avatar">谭</div>
+                        <div><strong>谭总</strong><small>系统管理员</small></div>
+                    </div>
+                </div>
+            </header>
+
+            <section class="content">
+                <div class="page-head">
+                    <div>
+                        <h1>SLA策略</h1>
+                        <p>维护首次响应、解决时限、预警阈值和升级阈值，绑定工作日历后按工作时间计算截止时间。</p>
+                    </div>
+                    <div class="head-actions">
+                        <button class="btn">刷新</button>
+                        <button class="btn primary">新建策略</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric">
+                        <div class="metric-label"><span>策略总数</span><span>summary.totalCount</span></div>
+                        <div class="metric-value"><strong>5</strong><span>条</span></div>
+                        <small>包含启用、停用和默认策略。</small>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label"><span>启用策略</span><span>enabledCount</span></div>
+                        <div class="metric-value"><strong>4</strong><span>条</span></div>
+                        <small>仅启用策略参与新工单 SLA 计算。</small>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label"><span>默认策略</span><span>defaultCount</span></div>
+                        <div class="metric-value"><strong>1</strong><span>条</span></div>
+                        <small>默认策略必须启用，不能停用或删除。</small>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label"><span>绑定日历</span><span>calendarId</span></div>
+                        <div class="metric-value"><strong>3</strong><span>个</span></div>
+                        <small>策略保存时必须选择工作日历。</small>
+                    </div>
+                </div>
+
+                <div class="notice">
+                    <span>i</span>
+                    <div>默认策略只影响后续新建工单；历史工单已有的响应截止、解决截止不自动重算。若策略停用，已绑定历史工单保留原 SLA 字段。</div>
+                </div>
+
+                <div class="state-strip">
+                    <div class="state-mini"><span class="empty-mark">0</span><span><strong>空列表</strong>显示新建策略入口和默认策略提示</span></div>
+                    <div class="state-mini"><span class="empty-mark">...</span><span><strong>加载中</strong>列表骨架屏，保存和删除禁用</span></div>
+                    <div class="state-mini"><span class="error-mark">!</span><span><strong>接口失败</strong>保留筛选条件，可点击重试</span></div>
+                    <div class="state-mini"><span class="lock-mark">L</span><span><strong>无权限</strong>隐藏编辑操作，只读查看策略</span></div>
+                </div>
+
+                <div class="workspace">
+                    <section class="panel">
+                        <div class="panel-head">
+                            <h2>策略列表</h2>
+                            <span class="chip primary">GET /api/v1/sla-policies</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="filters">
+                                <input class="input" value="VIP" aria-label="策略关键字">
+                                <select class="select" aria-label="启停筛选"><option>全部状态</option><option>启用</option><option>停用</option></select>
+                                <select class="select" aria-label="默认筛选"><option>全部策略</option><option>默认策略</option><option>非默认</option></select>
+                            </div>
+
+                            <div class="policy-list">
+                                <div class="policy-row active">
+                                    <div>
+                                        <div class="policy-title"><strong>VIP 客户 2 小时响应</strong><span class="chip success">启用</span><span class="chip primary">默认</span></div>
+                                        <div class="policy-meta">绑定日历：客服工作日历 · Asia/Shanghai · 周一至周五 09:00-18:00</div>
+                                        <div class="policy-kpis">
+                                            <span>响应时限 2 工作小时</span>
+                                            <span>解决时限 16 工作小时</span>
+                                            <span>预警阈值 剩余 1 小时</span>
+                                            <span>升级阈值 超时后 2 小时</span>
+                                        </div>
+                                    </div>
+                                    <div class="policy-actions">
+                                        <button class="btn icon" title="编辑">E</button>
+                                        <button class="btn icon" title="设置默认">D</button>
+                                        <button class="btn icon" title="启停">S</button>
+                                        <button class="btn icon" title="删除">X</button>
+                                    </div>
+                                </div>
+                                <div class="policy-row">
+                                    <div>
+                                        <div class="policy-title"><strong>普通客户标准 SLA</strong><span class="chip success">启用</span></div>
+                                        <div class="policy-meta">绑定日历：客服工作日历 · 新工单无匹配策略时可切换为默认</div>
+                                        <div class="policy-kpis">
+                                            <span>响应时限 4 工作小时</span>
+                                            <span>解决时限 24 工作小时</span>
+                                            <span>预警阈值 剩余 2 小时</span>
+                                            <span>升级阈值 超时后 4 小时</span>
+                                        </div>
+                                    </div>
+                                    <div class="policy-actions">
+                                        <button class="btn icon" title="编辑">E</button>
+                                        <button class="btn icon" title="设置默认">D</button>
+                                        <button class="btn icon" title="启停">S</button>
+                                        <button class="btn icon" title="删除">X</button>
+                                    </div>
+                                </div>
+                                <div class="policy-row">
+                                    <div>
+                                        <div class="policy-title"><strong>节假日临时策略</strong><span class="chip warning">停用</span></div>
+                                        <div class="policy-meta">绑定日历：节假日值班日历 · 停用后不参与新工单 SLA 计算</div>
+                                        <div class="policy-kpis">
+                                            <span>响应时限 8 工作小时</span>
+                                            <span>解决时限 48 工作小时</span>
+                                            <span>预警阈值 剩余 4 小时</span>
+                                            <span>升级阈值 未配置</span>
+                                        </div>
+                                    </div>
+                                    <div class="policy-actions">
+                                        <button class="btn icon" title="编辑">E</button>
+                                        <button class="btn icon" title="设置默认">D</button>
+                                        <button class="btn icon" title="启停">S</button>
+                                        <button class="btn icon" title="删除">X</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-head">
+                            <h2>新建/编辑策略</h2>
+                            <span class="chip success">保存后立即生效</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="form-grid">
+                                <div class="field full">
+                                    <label>策略名称</label>
+                                    <input class="input" value="VIP 客户 2 小时响应" aria-label="策略名称">
+                                    <div class="help">policyName，最多 64 字。列表按名称搜索。</div>
+                                </div>
+                                <div class="binary-row">
+                                    <div class="binary">
+                                        <div><strong>启用策略</strong><small>PATCH /{id}/enabled</small></div>
+                                        <span class="switch on"><i></i></span>
+                                    </div>
+                                    <div class="binary">
+                                        <div><strong>默认策略</strong><small>PATCH /{id}/default</small></div>
+                                        <span class="switch on"><i></i></span>
+                                    </div>
+                                </div>
+                                <div class="field">
+                                    <label>首次响应时限（工作小时）</label>
+                                    <input class="input" value="2" aria-label="首次响应时限">
+                                    <div class="help">responseHours，必填，1-9999。</div>
+                                </div>
+                                <div class="field">
+                                    <label>解决时限（工作小时）</label>
+                                    <input class="input" value="16" aria-label="解决时限">
+                                    <div class="help">resolveHours，可空；填写时应不小于首次响应时限。</div>
+                                </div>
+                                <div class="field">
+                                    <label>预警阈值（剩余工作小时）</label>
+                                    <input class="input" value="1" aria-label="预警阈值">
+                                    <div class="help">warningRemainHours，必填；用于即将超时提醒。</div>
+                                </div>
+                                <div class="field">
+                                    <label>升级阈值（超时后工作小时）</label>
+                                    <input class="input" value="2" aria-label="升级阈值">
+                                    <div class="help">escalateAfterBreachHours，可空；用于超时后升级提醒。</div>
+                                </div>
+                                <div class="field full">
+                                    <label>绑定日历</label>
+                                    <select class="select" aria-label="绑定日历">
+                                        <option>客服工作日历 / Asia/Shanghai / 周一至周五 09:00-18:00</option>
+                                        <option>节假日值班日历 / Asia/Shanghai / 周一至周日 10:00-16:00</option>
+                                    </select>
+                                    <div class="help">calendarId，必填；deadline 计算以所选工作日历为准。</div>
+                                </div>
+                                <div class="field full">
+                                    <label>策略说明</label>
+                                    <textarea class="textarea">VIP 客户售后优先，要求 2 工作小时内首次响应，16 工作小时内解决。</textarea>
+                                </div>
+                            </div>
+
+                            <div class="validation">
+                                <div class="check ok"><span>OK</span><span>默认策略必须为启用状态；当前策略已启用。</span></div>
+                                <div class="check ok"><span>OK</span><span>首次响应时限 2 小时小于解决时限 16 小时。</span></div>
+                                <div class="check ok"><span>OK</span><span>预警阈值 1 小时小于首次响应和解决时限。</span></div>
+                                <div class="check warn"><span>提示</span><span>设置为默认后，其他策略会自动取消默认标记。</span></div>
+                            </div>
+
+                            <div class="danger-zone">
+                                <strong>删除确认</strong>
+                                <p>删除前弹出二次确认：默认策略、已被历史工单引用或已绑定 SLA 计算记录时禁止删除。</p>
+                                <button class="btn danger small">确认删除当前策略</button>
+                            </div>
+
+                            <div class="editor-foot">
+                                <span class="chip warning">接口异常时保留表单草稿</span>
+                                <div>
+                                    <button class="btn">取消</button>
+                                    <button class="btn primary">保存策略</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <aside class="panel">
+                        <div class="panel-head">
+                            <h2>SLA 预览</h2>
+                            <button class="btn small">重新计算</button>
+                        </div>
+                        <div class="panel-body">
+                            <div class="preview-card">
+                                <div class="preview-title"><strong>绑定日历</strong><span class="chip primary">calendarId=1</span></div>
+                                <div class="calendar-lines">
+                                    <div><span>时区</span><strong>Asia/Shanghai</strong></div>
+                                    <div><span>工作日</span><strong>周一至周五</strong></div>
+                                    <div><span>工作时段</span><strong>09:00-18:00</strong></div>
+                                    <div><span>节假日</span><strong>自动跳过</strong></div>
+                                </div>
+                            </div>
+
+                            <div class="preview-card">
+                                <div class="preview-title"><strong>示例工单</strong><span class="chip success">新建时计算</span></div>
+                                <div class="calendar-lines">
+                                    <div><span>建单时间</span><strong>2026-07-27 15:30</strong></div>
+                                    <div><span>首次响应截止</span><strong>2026-07-27 17:30</strong></div>
+                                    <div><span>解决截止</span><strong>2026-07-29 13:30</strong></div>
+                                </div>
+                            </div>
+
+                            <div class="preview-card">
+                                <div class="preview-title"><strong>提醒时间线</strong><span class="chip warning">预警阈值</span></div>
+                                <div class="timeline">
+                                    <div class="time-item">
+                                        <span class="dot">1</span>
+                                        <div class="time-box"><strong>新建工单</strong><span>套用当前默认 SLA 策略，写入策略 ID 与截止时间。</span></div>
+                                    </div>
+                                    <div class="time-item">
+                                        <span class="dot warning">2</span>
+                                        <div class="time-box"><strong>即将超时</strong><span>剩余 1 工作小时触发 warning 事件和通知。</span></div>
+                                    </div>
+                                    <div class="time-item">
+                                        <span class="dot danger">3</span>
+                                        <div class="time-box"><strong>已超时</strong><span>超过解决截止后标记 breach，超时后 2 工作小时触发升级。</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+
+                <div class="state-grid">
+                    <div class="state">
+                        <span class="empty-mark">0</span>
+                        <strong>空列表</strong>
+                        <p>列表 records 为空时展示“新建策略”主按钮，并提示必须至少保留一个启用默认策略。</p>
+                    </div>
+                    <div class="state">
+                        <strong>加载中</strong>
+                        <div class="loading-lines"><i></i><i></i><i></i><i></i></div>
+                        <p style="margin-top:10px;">加载策略和工作日历时使用骨架屏，按钮禁用，避免重复提交。</p>
+                    </div>
+                    <div class="state">
+                        <span class="error-mark">!</span>
+                        <strong>接口失败</strong>
+                        <p>列表、保存、启停、默认或删除失败时弹出错误提示；筛选和表单内容不清空。</p>
+                    </div>
+                    <div class="state">
+                        <span class="lock-mark">L</span>
+                        <strong>无权限</strong>
+                        <p>非管理员只读查看 SLA 策略；新建、保存、启停、默认、删除按钮隐藏或禁用。</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>

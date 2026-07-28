@@ -36,7 +36,6 @@ import {
   Home,
   Inbox,
   Layers,
-  ListChecks,
   Loader,
   LogOut,
   LockKeyhole,
@@ -45,7 +44,6 @@ import {
   MessageCircle,
   PanelLeftClose,
   PanelLeftOpen,
-  PieChart,
   Plus,
   Power,
   PowerOff,
@@ -387,6 +385,43 @@ type TicketPageResponse = {
   pages: number
 }
 
+type DashboardSummary = {
+  totalCount: number
+  pendingAssignCount: number
+  processingCount: number
+  waitingCustomerCount: number
+  slaOverdueCount: number
+  closedTodayCount: number
+  activeCount: number
+}
+
+type DashboardTodoListResponse = {
+  records: TicketSummary[]
+  totalCount: number
+  processingCount: number
+  waitingCustomerCount: number
+  slaOverdueCount: number
+  limit: number
+}
+
+type CustomerReadonly = {
+  id: number | null
+  email: string
+  displayName: string | null
+  lastMailAt: string | null
+  ticketCount: number
+  remark: string | null
+  createdAt: string | null
+}
+
+type CustomerPageResponse = {
+  records: CustomerReadonly[]
+  total: number
+  page: number
+  size: number
+  pages: number
+}
+
 type TicketEvent = {
   id: number
   eventType: string
@@ -497,6 +532,19 @@ function isTerminalTicket(status: string) {
   return status === 'CLOSED' || status === 'CANCELLED'
 }
 
+function customerDisplayName(customer: CustomerReadonly | null) {
+  return customer?.displayName?.trim() || customer?.email || '-'
+}
+
+function customerInitial(customer: CustomerReadonly | null) {
+  const text = customerDisplayName(customer)
+  return text === '-' ? '?' : text.slice(0, 1).toUpperCase()
+}
+
+function formatCustomerDate(value: string | null) {
+  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+}
+
 /** 将 HTML 转文本并保留换行 */
 function htmlToText(html: string): string {
   return html
@@ -542,6 +590,182 @@ type MailSendLogPageResponse = {
   pages: number
 }
 
+type AssignmentRuleMatchType = 'DEFAULT' | 'SUBJECT_KEYWORD' | 'MAILBOX' | 'FROM_EMAIL'
+
+type AssignmentRule = {
+  id: number
+  ruleName: string
+  enabled: boolean
+  priorityOrder: number
+  defaultRule: boolean
+  matchType: AssignmentRuleMatchType
+  matchValue: string | null
+  assigneeId: number
+  assigneeName: string | null
+  notifyEnabled: boolean
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+type AssignmentRuleSummary = {
+  totalCount: number
+  enabledCount: number
+  disabledCount: number
+  defaultCount: number
+}
+
+type AssignmentRuleListResponse = {
+  records: AssignmentRule[]
+  summary: AssignmentRuleSummary
+}
+
+type AssignmentRuleFormState = {
+  id: number | null
+  ruleName: string
+  enabled: boolean
+  priorityOrder: number
+  defaultRule: boolean
+  matchType: AssignmentRuleMatchType
+  matchValue: string
+  assigneeId: string
+  notifyEnabled: boolean
+}
+
+type AssignmentRuleTestForm = {
+  mailboxId: string
+  subject: string
+  fromEmail: string
+}
+
+type AssignmentRuleMatchResponse = {
+  matched: boolean
+  ruleId: number | null
+  ruleName: string | null
+  matchType: AssignmentRuleMatchType | null
+  matchValue: string | null
+  assigneeId: number | null
+  assigneeName: string | null
+  notifyEnabled: boolean | null
+}
+
+type AssignmentRuleConfirmAction = {
+  type: 'delete'
+  rule: AssignmentRule
+} | null
+
+type SlaPolicy = {
+  id: number
+  policyName: string
+  enabled: boolean
+  defaultPolicy: boolean
+  responseHours: number
+  resolveHours: number | null
+  warningRemainHours: number
+  escalateAfterBreachHours: number | null
+  calendarId: number
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+type SlaPolicySummary = {
+  totalCount: number
+  enabledCount: number
+  disabledCount: number
+  defaultCount: number
+}
+
+type SlaPolicyListResponse = {
+  records: SlaPolicy[]
+  summary: SlaPolicySummary
+}
+
+type SlaPolicyFormState = {
+  id: number | null
+  policyName: string
+  enabled: boolean
+  defaultPolicy: boolean
+  responseHours: number
+  resolveHours: string
+  warningRemainHours: number
+  escalateAfterBreachHours: string
+  calendarId: string
+}
+
+type WorkCalendar = {
+  id: number
+  calendarName: string
+  timezone: string
+  workdays: number[]
+  workStartTime: string
+  workEndTime: string
+  defaultCalendar: boolean
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+type WorkCalendarListResponse = {
+  records: WorkCalendar[]
+  summary: {
+    totalCount: number
+    defaultCount: number
+  }
+}
+
+type WorkCalendarFormState = {
+  id: number | null
+  calendarName: string
+  timezone: string
+  workdays: number[]
+  workStartTime: string
+  workEndTime: string
+  defaultCalendar: boolean
+}
+
+type Holiday = {
+  id: number
+  calendarId: number
+  holidayDate: string
+  holidayName: string
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+type HolidayListResponse = {
+  records: Holiday[]
+  summary: {
+    totalCount: number
+  }
+}
+
+type NationalHolidayPresetResponse = {
+  year: number
+  sourceName: string
+  sourceUrl: string
+  supportedYears: number[]
+  records: Array<{
+    holidayDate: string
+    holidayName: string
+  }>
+  makeupWorkdayDates: string[]
+}
+
+type HolidayFormState = {
+  id: number | null
+  calendarId: string
+  holidayDate: string
+  holidayName: string
+}
+
+type SlaPolicyConfirmAction = {
+  type: 'delete'
+  policy: SlaPolicy
+} | null
+
+type WorkCalendarConfirmAction =
+  | { type: 'delete-calendar'; calendar: WorkCalendar }
+  | { type: 'delete-holiday'; holiday: Holiday }
+  | null
+
 const TOKEN_KEY = 'mailtrace_token'
 const USER_KEY = 'mailtrace_user'
 const REMEMBER_KEY = 'mailtrace_remember'
@@ -555,10 +779,7 @@ const menuGroups: MenuGroup[] = [
     title: '工单中心',
     items: [
       { title: '全部工单', icon: Layers },
-      { title: '我的工单', icon: Folder },
-      { title: '待处理', icon: Clock, badge: '39', tone: 'danger' },
-      { title: '待客户回复', icon: MessageCircle, badge: '15', tone: 'warning' },
-      { title: '已关闭', icon: CircleCheck },
+      { title: '客户管理', icon: Users },
     ],
   },
   {
@@ -574,10 +795,9 @@ const menuGroups: MenuGroup[] = [
     title: 'SLA管理',
     adminOnly: true,
     items: [
+      { title: '分配规则', icon: ShieldCheck },
       { title: 'SLA策略', icon: Timer },
       { title: '工作日历', icon: CalendarDays },
-      { title: '超时记录', icon: TriangleAlert },
-      { title: '统计报表', icon: PieChart, badge: 'NEW', tone: 'new' },
     ],
   },
   {
@@ -587,7 +807,6 @@ const menuGroups: MenuGroup[] = [
       { title: '用户管理', icon: UserCog, adminOnly: true },
       { title: '编号规则', icon: SlidersHorizontal },
       { title: '通知模板', icon: Bell },
-      { title: '操作日志', icon: ListChecks },
     ],
   },
 ]
@@ -646,6 +865,57 @@ const emptyMailboxForm: MailboxFormState = {
   autoReplyEnabled: true,
   autoReplyTemplateId: '',
 }
+
+const emptyAssignmentRuleForm: AssignmentRuleFormState = {
+  id: null,
+  ruleName: '',
+  enabled: true,
+  priorityOrder: 100,
+  defaultRule: false,
+  matchType: 'SUBJECT_KEYWORD',
+  matchValue: '',
+  assigneeId: '',
+  notifyEnabled: true,
+}
+
+const emptyAssignmentRuleTestForm: AssignmentRuleTestForm = {
+  mailboxId: '',
+  subject: '',
+  fromEmail: '',
+}
+
+const emptySlaPolicyForm: SlaPolicyFormState = {
+  id: null,
+  policyName: '',
+  enabled: true,
+  defaultPolicy: false,
+  responseHours: 4,
+  resolveHours: '24',
+  warningRemainHours: 1,
+  escalateAfterBreachHours: '2',
+  calendarId: '',
+}
+
+const emptyWorkCalendarForm: WorkCalendarFormState = {
+  id: null,
+  calendarName: '',
+  timezone: 'Asia/Shanghai',
+  workdays: [1, 2, 3, 4, 5],
+  workStartTime: '09:00',
+  workEndTime: '18:00',
+  defaultCalendar: false,
+}
+
+const emptyHolidayForm: HolidayFormState = {
+  id: null,
+  calendarId: '',
+  holidayDate: dayjs().format('YYYY-MM-DD'),
+  holidayName: '',
+}
+
+const slaPreviewBaseTime = dayjs('2026-07-27T15:30:00')
+const calendarPreviewBaseTime = dayjs('2026-10-01T15:30:00')
+const weekdayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
 const mailboxSteps: Array<{ key: MailboxStepKey; label: string }> = [
   { key: 'basic', label: '基础信息' },
@@ -789,6 +1059,10 @@ function formatDateTime(value: string | null) {
   return value.replace('T', ' ').slice(0, 16)
 }
 
+function formatOptionalDateTime(value: string | null) {
+  return value ? value.replace('T', ' ').slice(0, 16) : '-'
+}
+
 function formatSyncTime(value: string | null) {
   if (!value) return '未同步'
   return value.replace('T', ' ').slice(0, 16)
@@ -862,6 +1136,55 @@ function toMailboxForm(mailbox: Mailbox): MailboxFormState {
   }
 }
 
+function toAssignmentRuleForm(rule: AssignmentRule): AssignmentRuleFormState {
+  return {
+    id: rule.id,
+    ruleName: rule.ruleName,
+    enabled: rule.enabled,
+    priorityOrder: rule.priorityOrder,
+    defaultRule: rule.defaultRule,
+    matchType: rule.matchType,
+    matchValue: rule.matchValue || '',
+    assigneeId: String(rule.assigneeId),
+    notifyEnabled: rule.notifyEnabled,
+  }
+}
+
+function toSlaPolicyForm(policy: SlaPolicy): SlaPolicyFormState {
+  return {
+    id: policy.id,
+    policyName: policy.policyName,
+    enabled: policy.enabled,
+    defaultPolicy: policy.defaultPolicy,
+    responseHours: policy.responseHours,
+    resolveHours: policy.resolveHours == null ? '' : String(policy.resolveHours),
+    warningRemainHours: policy.warningRemainHours,
+    escalateAfterBreachHours: policy.escalateAfterBreachHours == null ? '' : String(policy.escalateAfterBreachHours),
+    calendarId: String(policy.calendarId),
+  }
+}
+
+function toWorkCalendarForm(calendar: WorkCalendar): WorkCalendarFormState {
+  return {
+    id: calendar.id,
+    calendarName: calendar.calendarName,
+    timezone: calendar.timezone,
+    workdays: calendar.workdays,
+    workStartTime: calendar.workStartTime,
+    workEndTime: calendar.workEndTime,
+    defaultCalendar: calendar.defaultCalendar,
+  }
+}
+
+function toHolidayForm(holiday: Holiday): HolidayFormState {
+  return {
+    id: holiday.id,
+    calendarId: String(holiday.calendarId),
+    holidayDate: holiday.holidayDate,
+    holidayName: holiday.holidayName,
+  }
+}
+
 function mailboxStatusLabel(status: MailboxConnectionStatus) {
   if (status === 'OK') return '正常'
   if (status === 'ERROR') return '异常'
@@ -871,6 +1194,187 @@ function mailboxStatusLabel(status: MailboxConnectionStatus) {
 function secondsLabel(value: number) {
   if (value % 60 === 0) return `${value / 60} 分钟`
   return `${value} 秒`
+}
+
+function assignmentMatchTypeLabel(value: string | null) {
+  return ({
+    DEFAULT: '默认兜底',
+    SUBJECT_KEYWORD: '主题关键词',
+    MAILBOX: '来源邮箱',
+    FROM_EMAIL: '客户邮箱',
+  } as Record<string, string>)[value || ''] || value || '-'
+}
+
+function assignmentRuleText(rule: AssignmentRule) {
+  if (rule.matchType === 'DEFAULT') return 'DEFAULT · 未命中其他规则时兜底'
+  return `${assignmentMatchTypeLabel(rule.matchType)} = ${rule.matchValue || '-'}`
+}
+
+function workdayLabel(workdays?: number[]) {
+  if (!workdays || workdays.length === 0) return '未配置'
+  const sorted = [...workdays].sort((a, b) => a - b)
+  if (sorted.join(',') === '1,2,3,4,5') return '周一至周五'
+  if (sorted.join(',') === '1,2,3,4,5,6,7') return '周一至周日'
+  return sorted.map((day) => weekdayNames[day - 1] || `周${day}`).join('、')
+}
+
+function hoursLabel(value: number | null | undefined, fallback = '未配置') {
+  if (value == null || Number.isNaN(value)) return fallback
+  return `${value} 工作小时`
+}
+
+function parseClockMinutes(value: string | undefined, fallback: number) {
+  const [hourText, minuteText] = (value || '').split(':')
+  const hour = Number(hourText)
+  const minute = Number(minuteText || 0)
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return fallback
+  return hour * 60 + minute
+}
+
+function calendarDayNumber(value: dayjs.Dayjs) {
+  const day = value.day()
+  return day === 0 ? 7 : day
+}
+
+function withClockMinutes(value: dayjs.Dayjs, minutes: number) {
+  return value.hour(Math.floor(minutes / 60)).minute(minutes % 60).second(0).millisecond(0)
+}
+
+function nextWorkStart(value: dayjs.Dayjs, calendar: WorkCalendar) {
+  const startMinutes = parseClockMinutes(calendar.workStartTime, 9 * 60)
+  const endMinutes = parseClockMinutes(calendar.workEndTime, 18 * 60)
+  let cursor = value
+  for (let i = 0; i < 14; i += 1) {
+    const isWorkday = calendar.workdays.includes(calendarDayNumber(cursor))
+    const startAt = withClockMinutes(cursor, startMinutes)
+    const endAt = withClockMinutes(cursor, endMinutes)
+    if (!isWorkday || !endAt.isAfter(startAt)) {
+      cursor = cursor.add(1, 'day').startOf('day')
+      continue
+    }
+    if (cursor.isBefore(startAt)) return startAt
+    if (cursor.isBefore(endAt)) return cursor
+    cursor = cursor.add(1, 'day').startOf('day')
+  }
+  return value
+}
+
+function nextWorkStartWithHolidays(value: dayjs.Dayjs, calendar: WorkCalendar, holidayDates: Set<string>) {
+  const startMinutes = parseClockMinutes(calendar.workStartTime, 9 * 60)
+  const endMinutes = parseClockMinutes(calendar.workEndTime, 18 * 60)
+  let cursor = value
+  for (let i = 0; i < 30; i += 1) {
+    const dateKey = cursor.format('YYYY-MM-DD')
+    const isWorkday = calendar.workdays.includes(calendarDayNumber(cursor)) && !holidayDates.has(dateKey)
+    const startAt = withClockMinutes(cursor, startMinutes)
+    const endAt = withClockMinutes(cursor, endMinutes)
+    if (!isWorkday || !endAt.isAfter(startAt)) {
+      cursor = cursor.add(1, 'day').startOf('day')
+      continue
+    }
+    if (cursor.isBefore(startAt)) return startAt
+    if (cursor.isBefore(endAt)) return cursor
+    cursor = cursor.add(1, 'day').startOf('day')
+  }
+  return value
+}
+
+function addWorkHours(value: dayjs.Dayjs, hours: number, calendar: WorkCalendar | null) {
+  if (!calendar) return value.add(hours, 'hour')
+  const endMinutes = parseClockMinutes(calendar.workEndTime, 18 * 60)
+  let remainingMinutes = Math.max(0, Math.round(hours * 60))
+  let cursor = nextWorkStart(value, calendar)
+
+  for (let i = 0; i < 100 && remainingMinutes > 0; i += 1) {
+    const endAt = withClockMinutes(cursor, endMinutes)
+    const availableMinutes = Math.max(0, endAt.diff(cursor, 'minute'))
+    if (remainingMinutes <= availableMinutes) {
+      return cursor.add(remainingMinutes, 'minute')
+    }
+    remainingMinutes -= availableMinutes
+    cursor = nextWorkStart(cursor.add(1, 'day').startOf('day'), calendar)
+  }
+
+  return cursor
+}
+
+function addWorkHoursWithHolidays(value: dayjs.Dayjs, hours: number, calendar: WorkCalendar | null, holidayDates: Set<string>) {
+  if (!calendar) return value.add(hours, 'hour')
+  const endMinutes = parseClockMinutes(calendar.workEndTime, 18 * 60)
+  let remainingMinutes = Math.max(0, Math.round(hours * 60))
+  let cursor = nextWorkStartWithHolidays(value, calendar, holidayDates)
+
+  for (let i = 0; i < 120 && remainingMinutes > 0; i += 1) {
+    const endAt = withClockMinutes(cursor, endMinutes)
+    const availableMinutes = Math.max(0, endAt.diff(cursor, 'minute'))
+    if (remainingMinutes <= availableMinutes) {
+      return cursor.add(remainingMinutes, 'minute')
+    }
+    remainingMinutes -= availableMinutes
+    cursor = nextWorkStartWithHolidays(cursor.add(1, 'day').startOf('day'), calendar, holidayDates)
+  }
+
+  return cursor
+}
+
+function resolveSlaPreview(form: SlaPolicyFormState, calendar: WorkCalendar | null) {
+  const responseHours = Math.max(1, Number(form.responseHours) || 1)
+  const resolveHours = form.resolveHours.trim() ? Math.max(1, Number(form.resolveHours) || responseHours) : null
+  const warningHours = Math.max(1, Number(form.warningRemainHours) || 1)
+  const escalateHours = form.escalateAfterBreachHours.trim()
+    ? Math.max(1, Number(form.escalateAfterBreachHours) || 1)
+    : null
+  const responseDeadline = addWorkHours(slaPreviewBaseTime, responseHours, calendar)
+  const resolveDeadline = resolveHours == null ? null : addWorkHours(slaPreviewBaseTime, resolveHours, calendar)
+  const warningAt = resolveDeadline
+    ? addWorkHours(resolveDeadline, -warningHours, null)
+    : addWorkHours(responseDeadline, -warningHours, null)
+  const escalateAt = resolveDeadline && escalateHours != null ? addWorkHours(resolveDeadline, escalateHours, calendar) : null
+
+  return {
+    responseDeadline,
+    resolveDeadline,
+    warningAt,
+    escalateAt,
+  }
+}
+
+function resolveCalendarSlaExample(
+  calendar: WorkCalendar | null,
+  holidays: Holiday[],
+  createdAt: dayjs.Dayjs,
+  responseHours: number,
+  resolveHours: number,
+) {
+  const holidayDates = new Set(holidays.map((holiday) => holiday.holidayDate))
+  const startAt = calendar ? nextWorkStartWithHolidays(createdAt, calendar, holidayDates) : createdAt
+  return {
+    startAt,
+    responseDeadline: addWorkHoursWithHolidays(createdAt, responseHours, calendar, holidayDates),
+    resolveDeadline: addWorkHoursWithHolidays(createdAt, resolveHours, calendar, holidayDates),
+  }
+}
+
+function buildMonthCells(month: string, calendar: WorkCalendar | null, holidays: Holiday[]) {
+  const monthStart = dayjs(`${month}-01`)
+  const gridStart = monthStart.subtract(calendarDayNumber(monthStart) - 1, 'day')
+  const holidayMap = new Map(holidays.map((holiday) => [holiday.holidayDate, holiday.holidayName]))
+
+  return Array.from({ length: 42 }, (_value, index) => {
+    const date = gridStart.add(index, 'day')
+    const dateKey = date.format('YYYY-MM-DD')
+    const holidayName = holidayMap.get(dateKey) || ''
+    const inMonth = date.isSame(monthStart, 'month')
+    const isWorkday = Boolean(calendar?.workdays.includes(calendarDayNumber(date))) && !holidayName
+    return {
+      date,
+      dateKey,
+      inMonth,
+      holidayName,
+      isWorkday,
+      isToday: date.isSame(dayjs(), 'day'),
+    }
+  })
 }
 
 function App() {
@@ -922,6 +1426,7 @@ function App() {
   const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false)
   // ---- 工单列表 ----
   const [ticketStatusTab, setTicketStatusTab] = useState('ALL')
+  const [ticketSlaBreachedOnly, setTicketSlaBreachedOnly] = useState(false)
   const [ticketKeyword, setTicketKeyword] = useState('')
   const [ticketPage, setTicketPage] = useState(1)
   const [ticketPageSize] = useState(20)
@@ -964,6 +1469,11 @@ function App() {
   const [statusReason, setStatusReason] = useState('')
   const [statusSending, setStatusSending] = useState(false)
   const [ticketStats, setTicketStats] = useState<any>(null)
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
+  const [dashboardTodos, setDashboardTodos] = useState<DashboardTodoListResponse | null>(null)
+  const [dashboardLoading, setDashboardLoading] = useState(false)
+  const [dashboardError, setDashboardError] = useState('')
+  const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<string | null>(null)
   const [ticketRule, setTicketRule] = useState<TicketNumberRule | null>(null)
   const [ticketRuleForm, setTicketRuleForm] = useState<TicketRuleFormState>(emptyTicketRuleForm)
   const [ticketRuleDirty, setTicketRuleDirty] = useState(false)
@@ -973,6 +1483,19 @@ function App() {
   const [ticketRuleError, setTicketRuleError] = useState('')
   const [ticketRuleMessage, setTicketRuleMessage] = useState('')
   const [ticketRuleConfirmOpen, setTicketRuleConfirmOpen] = useState(false)
+  const [customerKeyword, setCustomerKeyword] = useState('')
+  const [customerPage, setCustomerPage] = useState(1)
+  const [customerPageSize, setCustomerPageSize] = useState(20)
+  const [customersData, setCustomersData] = useState<CustomerPageResponse | null>(null)
+  const [customersLoading, setCustomersLoading] = useState(false)
+  const [customersError, setCustomersError] = useState('')
+  const [selectedCustomerEmail, setSelectedCustomerEmail] = useState('')
+  const [customerDetail, setCustomerDetail] = useState<CustomerReadonly | null>(null)
+  const [customerDetailLoading, setCustomerDetailLoading] = useState(false)
+  const [customerDetailError, setCustomerDetailError] = useState('')
+  const [customerTicketsData, setCustomerTicketsData] = useState<TicketPageResponse | null>(null)
+  const [customerTicketsLoading, setCustomerTicketsLoading] = useState(false)
+  const [customerTicketsError, setCustomerTicketsError] = useState('')
   const [activeSystemGroup, setActiveSystemGroup] = useState<SystemGroupKey>('ticket')
   const [mailboxKeyword, setMailboxKeyword] = useState('')
   const [mailboxStatusFilter, setMailboxStatusFilter] = useState('ALL')
@@ -1016,11 +1539,62 @@ function App() {
   const [sendLogDetail, setSendLogDetail] = useState<MailSendLog | null>(null)
   const [sendLogStats, setSendLogStats] = useState<{ totalCount: number; successCount: number; failCount: number } | null>(null)
   const [sendPendingCount, setSendPendingCount] = useState(0)
+  const [assignmentRulesData, setAssignmentRulesData] = useState<AssignmentRuleListResponse | null>(null)
+  const [assignmentRulesLoading, setAssignmentRulesLoading] = useState(false)
+  const [assignmentRulesError, setAssignmentRulesError] = useState('')
+  const [assignmentKeyword, setAssignmentKeyword] = useState('')
+  const [assignmentEnabledFilter, setAssignmentEnabledFilter] = useState('ALL')
+  const [assignmentMatchTypeFilter, setAssignmentMatchTypeFilter] = useState('ALL')
+  const [assignmentForm, setAssignmentForm] = useState<AssignmentRuleFormState>(emptyAssignmentRuleForm)
+  const [assignmentRuleDirty, setAssignmentRuleDirty] = useState(false)
+  const [assignmentSaving, setAssignmentSaving] = useState(false)
+  const [assignmentActionLoading, setAssignmentActionLoading] = useState(false)
+  const [assignmentConfirmAction, setAssignmentConfirmAction] = useState<AssignmentRuleConfirmAction>(null)
+  const [assignmentAssignees, setAssignmentAssignees] = useState<ManagedUser[]>([])
+  const [assignmentTestForm, setAssignmentTestForm] = useState<AssignmentRuleTestForm>(emptyAssignmentRuleTestForm)
+  const [assignmentTesting, setAssignmentTesting] = useState(false)
+  const [assignmentMatchResult, setAssignmentMatchResult] = useState<AssignmentRuleMatchResponse | null>(null)
+  const [slaPoliciesData, setSlaPoliciesData] = useState<SlaPolicyListResponse | null>(null)
+  const [slaPoliciesLoading, setSlaPoliciesLoading] = useState(false)
+  const [slaPoliciesError, setSlaPoliciesError] = useState('')
+  const [slaPolicyKeyword, setSlaPolicyKeyword] = useState('')
+  const [slaPolicyEnabledFilter, setSlaPolicyEnabledFilter] = useState('ALL')
+  const [slaPolicyDefaultFilter, setSlaPolicyDefaultFilter] = useState('ALL')
+  const [slaPolicyForm, setSlaPolicyForm] = useState<SlaPolicyFormState>(emptySlaPolicyForm)
+  const [slaPolicyDirty, setSlaPolicyDirty] = useState(false)
+  const [slaPolicySaving, setSlaPolicySaving] = useState(false)
+  const [slaPolicyActionLoading, setSlaPolicyActionLoading] = useState(false)
+  const [slaPolicyConfirmAction, setSlaPolicyConfirmAction] = useState<SlaPolicyConfirmAction>(null)
+  const [workCalendars, setWorkCalendars] = useState<WorkCalendar[]>([])
+  const [workCalendarsLoading, setWorkCalendarsLoading] = useState(false)
+  const [workCalendarData, setWorkCalendarData] = useState<WorkCalendarListResponse | null>(null)
+  const [workCalendarError, setWorkCalendarError] = useState('')
+  const [workCalendarKeyword, setWorkCalendarKeyword] = useState('')
+  const [workCalendarDefaultFilter, setWorkCalendarDefaultFilter] = useState('ALL')
+  const [workCalendarForm, setWorkCalendarForm] = useState<WorkCalendarFormState>(emptyWorkCalendarForm)
+  const [workCalendarDirty, setWorkCalendarDirty] = useState(false)
+  const [workCalendarSaving, setWorkCalendarSaving] = useState(false)
+  const [workCalendarActionLoading, setWorkCalendarActionLoading] = useState(false)
+  const [workCalendarConfirmAction, setWorkCalendarConfirmAction] = useState<WorkCalendarConfirmAction>(null)
+  const [calendarSlaPolicies, setCalendarSlaPolicies] = useState<SlaPolicy[]>([])
+  const [holidaysData, setHolidaysData] = useState<HolidayListResponse | null>(null)
+  const [holidaysLoading, setHolidaysLoading] = useState(false)
+  const [holidaysError, setHolidaysError] = useState('')
+  const [holidayMonth, setHolidayMonth] = useState('2026-10')
+  const [holidayKeyword, setHolidayKeyword] = useState('')
+  const [holidayForm, setHolidayForm] = useState<HolidayFormState>(emptyHolidayForm)
+  const [holidayDirty, setHolidayDirty] = useState(false)
+  const [holidaySaving, setHolidaySaving] = useState(false)
+  const [holidayImporting, setHolidayImporting] = useState(false)
+  const [calendarPreviewCreatedAt, setCalendarPreviewCreatedAt] = useState(calendarPreviewBaseTime.format('YYYY-MM-DDTHH:mm:ss'))
+  const [calendarPreviewResponseHours, setCalendarPreviewResponseHours] = useState('2')
+  const [calendarPreviewResolveHours, setCalendarPreviewResolveHours] = useState('16')
 
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const isAdmin = user?.roleCode === 'ADMIN'
+  const canReadCustomers = user?.roleCode === 'ADMIN' || user?.roleCode === 'AGENT'
   const activeSystemGroupConfig = systemGroups.find((group) => group.key === activeSystemGroup) || systemGroups[0]
   const visibleMenuGroups = useMemo(
     () =>
@@ -1386,11 +1960,426 @@ function App() {
     if (token) void fetchSendPendingCount()
   }, [token, fetchSendPendingCount])
 
+  const fetchAssignmentRules = useCallback(async () => {
+    if (!token || activeMenu !== '分配规则') return
+    if (!isAdmin) {
+      setAssignmentRulesData(null)
+      setAssignmentRulesError('当前账号没有分配规则管理权限')
+      return
+    }
+
+    const params = new URLSearchParams()
+    if (assignmentKeyword.trim()) params.set('keyword', assignmentKeyword.trim())
+    if (assignmentEnabledFilter !== 'ALL') params.set('enabled', assignmentEnabledFilter)
+    if (assignmentMatchTypeFilter !== 'ALL') params.set('matchType', assignmentMatchTypeFilter)
+
+    setAssignmentRulesLoading(true)
+    setAssignmentRulesError('')
+    try {
+      const query = params.toString()
+      const data = await requestApi<AssignmentRuleListResponse>(
+        `/api/v1/assignment-rules${query ? `?${query}` : ''}`,
+        { headers: authHeaders(token) },
+      )
+      setAssignmentRulesData(data)
+      const selected = data.records.find((rule) => rule.id === assignmentForm.id) || data.records[0] || null
+      if (selected && !assignmentRuleDirty) {
+        setAssignmentForm(toAssignmentRuleForm(selected))
+        setAssignmentMatchResult(null)
+      }
+      if (!selected && !assignmentRuleDirty) {
+        setAssignmentForm(emptyAssignmentRuleForm)
+        setAssignmentMatchResult(null)
+      }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentRulesError(error instanceof Error ? error.message : '分配规则加载失败')
+    } finally {
+      setAssignmentRulesLoading(false)
+    }
+  }, [
+    activeMenu,
+    assignmentEnabledFilter,
+    assignmentForm.id,
+    assignmentKeyword,
+    assignmentMatchTypeFilter,
+    assignmentRuleDirty,
+    handleAuthExpired,
+    isAdmin,
+    token,
+  ])
+
+  useEffect(() => {
+    void fetchAssignmentRules()
+  }, [fetchAssignmentRules])
+
+  const fetchSlaPolicies = useCallback(async () => {
+    if (!token || activeMenu !== 'SLA策略') return
+    if (!isAdmin) {
+      setSlaPoliciesData(null)
+      setSlaPoliciesError('当前账号没有 SLA 策略管理权限')
+      return
+    }
+
+    const params = new URLSearchParams()
+    if (slaPolicyKeyword.trim()) params.set('keyword', slaPolicyKeyword.trim())
+    if (slaPolicyEnabledFilter !== 'ALL') params.set('enabled', slaPolicyEnabledFilter)
+    if (slaPolicyDefaultFilter !== 'ALL') params.set('defaultPolicy', slaPolicyDefaultFilter)
+
+    setSlaPoliciesLoading(true)
+    setSlaPoliciesError('')
+    try {
+      const query = params.toString()
+      const data = await requestApi<SlaPolicyListResponse>(
+        `/api/v1/sla-policies${query ? `?${query}` : ''}`,
+        { headers: authHeaders(token) },
+      )
+      setSlaPoliciesData(data)
+      const selected = data.records.find((policy) => policy.id === slaPolicyForm.id) || data.records[0] || null
+      if (selected && !slaPolicyDirty) {
+        setSlaPolicyForm(toSlaPolicyForm(selected))
+      }
+      if (!selected && !slaPolicyDirty) {
+        setSlaPolicyForm({
+          ...emptySlaPolicyForm,
+          calendarId: workCalendars[0] ? String(workCalendars[0].id) : '',
+        })
+      }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setSlaPoliciesError(error instanceof Error ? error.message : 'SLA 策略加载失败')
+    } finally {
+      setSlaPoliciesLoading(false)
+    }
+  }, [
+    activeMenu,
+    handleAuthExpired,
+    isAdmin,
+    slaPolicyDefaultFilter,
+    slaPolicyDirty,
+    slaPolicyEnabledFilter,
+    slaPolicyForm.id,
+    slaPolicyKeyword,
+    token,
+    workCalendars,
+  ])
+
+  useEffect(() => {
+    void fetchSlaPolicies()
+  }, [fetchSlaPolicies])
+
+  const fetchWorkCalendarsForSla = useCallback(async () => {
+    if (!token || activeMenu !== 'SLA策略' || !isAdmin) return
+    setWorkCalendarsLoading(true)
+    try {
+      const data = await requestApi<WorkCalendarListResponse>('/api/v1/work-calendars', {
+        headers: authHeaders(token),
+      })
+      setWorkCalendars(data.records)
+      setSlaPolicyForm((form) => {
+        if (form.calendarId || !data.records[0]) return form
+        return { ...form, calendarId: String(data.records[0].id) }
+      })
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setSlaPoliciesError(error instanceof Error ? error.message : '工作日历加载失败')
+    } finally {
+      setWorkCalendarsLoading(false)
+    }
+  }, [activeMenu, handleAuthExpired, isAdmin, token])
+
+  useEffect(() => {
+    void fetchWorkCalendarsForSla()
+  }, [fetchWorkCalendarsForSla])
+
+  const fetchWorkCalendarsPage = useCallback(async () => {
+    if (!token || activeMenu !== '工作日历') return
+    if (!isAdmin) {
+      setWorkCalendarData(null)
+      setWorkCalendarError('当前账号没有工作日历管理权限')
+      return
+    }
+
+    const params = new URLSearchParams()
+    if (workCalendarKeyword.trim()) params.set('keyword', workCalendarKeyword.trim())
+    if (workCalendarDefaultFilter !== 'ALL') params.set('defaultCalendar', workCalendarDefaultFilter)
+
+    setWorkCalendarsLoading(true)
+    setWorkCalendarError('')
+    try {
+      const query = params.toString()
+      const data = await requestApi<WorkCalendarListResponse>(
+        `/api/v1/work-calendars${query ? `?${query}` : ''}`,
+        { headers: authHeaders(token) },
+      )
+      setWorkCalendarData(data)
+      setWorkCalendars(data.records)
+      const selected = data.records.find((calendar) => calendar.id === workCalendarForm.id) || data.records[0] || null
+      if (selected && !workCalendarDirty) {
+        setWorkCalendarForm(toWorkCalendarForm(selected))
+        setHolidayForm((form) => ({
+          ...form,
+          calendarId: String(selected.id),
+        }))
+      }
+      if (!selected && !workCalendarDirty) {
+        setWorkCalendarForm(emptyWorkCalendarForm)
+        setHolidayForm(emptyHolidayForm)
+      }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setWorkCalendarError(error instanceof Error ? error.message : '工作日历加载失败')
+    } finally {
+      setWorkCalendarsLoading(false)
+    }
+  }, [
+    activeMenu,
+    handleAuthExpired,
+    isAdmin,
+    token,
+    workCalendarDefaultFilter,
+    workCalendarDirty,
+    workCalendarForm.id,
+    workCalendarKeyword,
+  ])
+
+  useEffect(() => {
+    void fetchWorkCalendarsPage()
+  }, [fetchWorkCalendarsPage])
+
+  const fetchCalendarSlaPolicies = useCallback(async () => {
+    if (!token || activeMenu !== '工作日历' || !isAdmin) return
+    try {
+      const data = await requestApi<SlaPolicyListResponse>('/api/v1/sla-policies', {
+        headers: authHeaders(token),
+      })
+      setCalendarSlaPolicies(data.records)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setWorkCalendarError(error instanceof Error ? error.message : 'SLA 策略引用加载失败')
+    }
+  }, [activeMenu, handleAuthExpired, isAdmin, token])
+
+  useEffect(() => {
+    void fetchCalendarSlaPolicies()
+  }, [fetchCalendarSlaPolicies])
+
+  const fetchHolidays = useCallback(async () => {
+    if (!token || activeMenu !== '工作日历') return
+    if (!isAdmin) {
+      setHolidaysData(null)
+      setHolidaysError('当前账号没有节假日管理权限')
+      return
+    }
+    if (!workCalendarForm.id) {
+      setHolidaysData({ records: [], summary: { totalCount: 0 } })
+      return
+    }
+
+    const month = dayjs(`${holidayMonth}-01`)
+    const params = new URLSearchParams({
+      calendarId: String(workCalendarForm.id),
+      dateFrom: month.startOf('month').format('YYYY-MM-DD'),
+      dateTo: month.endOf('month').format('YYYY-MM-DD'),
+    })
+    if (holidayKeyword.trim()) params.set('keyword', holidayKeyword.trim())
+
+    setHolidaysLoading(true)
+    setHolidaysError('')
+    try {
+      const data = await requestApi<HolidayListResponse>(`/api/v1/holidays?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setHolidaysData(data)
+      setHolidayForm((form) => ({
+        ...form,
+        calendarId: String(workCalendarForm.id),
+      }))
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setHolidaysError(error instanceof Error ? error.message : '节假日加载失败')
+    } finally {
+      setHolidaysLoading(false)
+    }
+  }, [
+    activeMenu,
+    handleAuthExpired,
+    holidayKeyword,
+    holidayMonth,
+    isAdmin,
+    token,
+    workCalendarForm.id,
+  ])
+
+  useEffect(() => {
+    void fetchHolidays()
+  }, [fetchHolidays])
+
+  const fetchAssignmentAssignees = useCallback(async () => {
+    if (!token || activeMenu !== '分配规则' || !isAdmin) return
+    try {
+      const data = await requestApi<UserPageResponse>('/api/v1/users?page=1&size=100&roleCode=AGENT&enabled=true', {
+        headers: authHeaders(token),
+      })
+      setAssignmentAssignees(data.records)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentAssignees([])
+    }
+  }, [activeMenu, handleAuthExpired, isAdmin, token])
+
+  useEffect(() => {
+    void fetchAssignmentAssignees()
+  }, [fetchAssignmentAssignees])
+
+  const fetchCustomers = useCallback(async () => {
+    if (!token || activeMenu !== '客户管理') return
+    if (!canReadCustomers) {
+      setCustomersData(null)
+      setCustomersError('当前账号没有客户查看权限')
+      setSelectedCustomerEmail('')
+      return
+    }
+
+    const params = new URLSearchParams({
+      page: String(customerPage),
+      size: String(customerPageSize),
+    })
+    if (customerKeyword.trim()) params.set('keyword', customerKeyword.trim())
+
+    setCustomersLoading(true)
+    setCustomersError('')
+    try {
+      const data = await requestApi<CustomerPageResponse>(`/api/v1/customers?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setCustomersData(data)
+      setSelectedCustomerEmail((current) => {
+        if (current && data.records.some((customer) => customer.email === current)) return current
+        return data.records[0]?.email || ''
+      })
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setCustomersError(error instanceof Error ? error.message : '客户列表加载失败')
+    } finally {
+      setCustomersLoading(false)
+    }
+  }, [
+    activeMenu,
+    canReadCustomers,
+    customerKeyword,
+    customerPage,
+    customerPageSize,
+    handleAuthExpired,
+    token,
+  ])
+
+  useEffect(() => {
+    void fetchCustomers()
+  }, [fetchCustomers])
+
+  const fetchCustomerDetail = useCallback(async () => {
+    if (!token || activeMenu !== '客户管理' || !canReadCustomers) return
+    if (!selectedCustomerEmail) {
+      setCustomerDetail(null)
+      setCustomerDetailError('')
+      return
+    }
+
+    setCustomerDetailLoading(true)
+    setCustomerDetailError('')
+    try {
+      const data = await requestApi<CustomerReadonly>(
+        `/api/v1/customers/${encodeURIComponent(selectedCustomerEmail)}`,
+        { headers: authHeaders(token) },
+      )
+      setCustomerDetail(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setCustomerDetail(null)
+      setCustomerDetailError(error instanceof Error ? error.message : '客户详情加载失败')
+    } finally {
+      setCustomerDetailLoading(false)
+    }
+  }, [activeMenu, canReadCustomers, handleAuthExpired, selectedCustomerEmail, token])
+
+  useEffect(() => {
+    void fetchCustomerDetail()
+  }, [fetchCustomerDetail])
+
+  const fetchCustomerTickets = useCallback(async () => {
+    if (!token || activeMenu !== '客户管理' || !canReadCustomers || !selectedCustomerEmail) {
+      setCustomerTicketsData(null)
+      return
+    }
+
+    const params = new URLSearchParams({
+      page: '1',
+      size: '5',
+      keyword: selectedCustomerEmail,
+    })
+
+    setCustomerTicketsLoading(true)
+    setCustomerTicketsError('')
+    try {
+      const data = await requestApi<TicketPageResponse>(`/api/v1/tickets?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setCustomerTicketsData(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setCustomerTicketsError(error instanceof Error ? error.message : '关联工单加载失败')
+    } finally {
+      setCustomerTicketsLoading(false)
+    }
+  }, [activeMenu, canReadCustomers, handleAuthExpired, selectedCustomerEmail, token])
+
+  useEffect(() => {
+    void fetchCustomerTickets()
+  }, [fetchCustomerTickets])
+
+  // ---- 工作台 ----
+  const fetchDashboard = useCallback(async () => {
+    if (!token || activeMenu !== '工作台') return
+    setDashboardLoading(true)
+    setDashboardError('')
+    try {
+      const [summary, todos] = await Promise.all([
+        requestApi<DashboardSummary>('/api/v1/dashboard/summary', { headers: authHeaders(token) }),
+        requestApi<DashboardTodoListResponse>('/api/v1/dashboard/my-todos?limit=5', { headers: authHeaders(token) }),
+      ])
+      setDashboardSummary(summary)
+      setDashboardTodos(todos)
+      setDashboardUpdatedAt(dayjs().format('YYYY-MM-DD HH:mm'))
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setDashboardError(error instanceof ApiError ? error.message : '加载工作台数据失败')
+    } finally {
+      setDashboardLoading(false)
+    }
+  }, [activeMenu, handleAuthExpired, token])
+
+  useEffect(() => {
+    if (activeMenu === '工作台') {
+      void fetchDashboard()
+    }
+  }, [activeMenu, fetchDashboard])
+
+  const navigateToTickets = useCallback((status: string = 'ALL', slaBreachedOnly = false) => {
+    setTicketStatusTab(status)
+    setTicketSlaBreachedOnly(slaBreachedOnly)
+    setTicketKeyword('')
+    setTicketPage(1)
+    setShowTicketDetailPage(false)
+    setActiveMenu('全部工单')
+  }, [])
+
   // ---- 工单列表 ----
   const fetchTickets = useCallback(async () => {
     if (!token || activeMenu !== '全部工单') return
     const params = new URLSearchParams({ page: String(ticketPage), size: String(ticketPageSize) })
     if (ticketStatusTab !== 'ALL') params.set('status', ticketStatusTab)
+    if (ticketSlaBreachedOnly) params.set('slaBreached', 'true')
     if (ticketKeyword.trim()) params.set('keyword', ticketKeyword.trim())
 
     setTicketsLoading(true)
@@ -1404,7 +2393,7 @@ function App() {
     } finally {
       setTicketsLoading(false)
     }
-  }, [token, activeMenu, ticketPage, ticketPageSize, ticketStatusTab, ticketKeyword, handleAuthExpired])
+  }, [token, activeMenu, ticketPage, ticketPageSize, ticketStatusTab, ticketSlaBreachedOnly, ticketKeyword, handleAuthExpired])
 
   const handleBackToList = useCallback(() => {
     setShowTicketDetailPage(false)
@@ -1653,7 +2642,7 @@ function App() {
   }, [token])
 
   useEffect(() => {
-    if (activeMenu === '收件记录' || activeMenu === '发件记录') {
+    if (activeMenu === '收件记录' || activeMenu === '发件记录' || activeMenu === '分配规则') {
       void fetchMailboxList()
     }
   }, [fetchMailboxList, activeMenu])
@@ -1823,6 +2812,575 @@ function App() {
       setMailboxesError(error instanceof Error ? error.message : '邮箱操作失败')
     } finally {
       setMailboxActionLoading(false)
+    }
+  }
+
+  function resetAssignmentFilters() {
+    setAssignmentKeyword('')
+    setAssignmentEnabledFilter('ALL')
+    setAssignmentMatchTypeFilter('ALL')
+  }
+
+  function updateAssignmentForm(patch: Partial<AssignmentRuleFormState>) {
+    setAssignmentForm((value) => {
+      const next = { ...value, ...patch }
+      if (patch.matchType === 'DEFAULT') {
+        next.defaultRule = true
+        next.matchValue = ''
+      } else if (patch.matchType) {
+        next.defaultRule = false
+      }
+      return next
+    })
+    setAssignmentRuleDirty(true)
+    setAssignmentMatchResult(null)
+    setAssignmentRulesError('')
+  }
+
+  function selectAssignmentRule(rule: AssignmentRule) {
+    setAssignmentForm(toAssignmentRuleForm(rule))
+    setAssignmentRuleDirty(false)
+    setAssignmentMatchResult(null)
+    setAssignmentRulesError('')
+  }
+
+  function openCreateAssignmentRule() {
+    setAssignmentForm({
+      ...emptyAssignmentRuleForm,
+      priorityOrder: (assignmentRulesData?.records.length ?? 0) * 10 + 10,
+      assigneeId: assignmentAssignees[0] ? String(assignmentAssignees[0].id) : '',
+    })
+    setAssignmentRuleDirty(true)
+    setAssignmentMatchResult(null)
+    setAssignmentRulesError('')
+  }
+
+  function buildAssignmentRulePayload() {
+    return {
+      ruleName: assignmentForm.ruleName.trim(),
+      enabled: assignmentForm.enabled,
+      priorityOrder: Number(assignmentForm.priorityOrder),
+      defaultRule: assignmentForm.matchType === 'DEFAULT',
+      matchType: assignmentForm.matchType,
+      matchValue: assignmentForm.matchType === 'DEFAULT' ? '' : assignmentForm.matchValue.trim(),
+      assigneeId: assignmentForm.assigneeId ? Number(assignmentForm.assigneeId) : null,
+      notifyEnabled: assignmentForm.notifyEnabled,
+    }
+  }
+
+  async function saveAssignmentRule() {
+    if (!token) return
+    setAssignmentSaving(true)
+    setAssignmentRulesError('')
+    try {
+      const saved = await requestApi<AssignmentRule>(
+        assignmentForm.id ? `/api/v1/assignment-rules/${assignmentForm.id}` : '/api/v1/assignment-rules',
+        {
+          method: assignmentForm.id ? 'PUT' : 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify(buildAssignmentRulePayload()),
+        },
+      )
+      setAssignmentForm(toAssignmentRuleForm(saved))
+      setAssignmentRuleDirty(false)
+      await fetchAssignmentRules()
+      message.success('分配规则已保存')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentRulesError(error instanceof Error ? error.message : '分配规则保存失败')
+    } finally {
+      setAssignmentSaving(false)
+    }
+  }
+
+  async function toggleAssignmentRule(rule: AssignmentRule, enabled: boolean) {
+    if (!token) return
+    setAssignmentActionLoading(true)
+    setAssignmentRulesError('')
+    try {
+      const saved = await requestApi<AssignmentRule>(`/api/v1/assignment-rules/${rule.id}/enabled`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ enabled }),
+      })
+      if (assignmentForm.id === saved.id) {
+        setAssignmentForm(toAssignmentRuleForm(saved))
+        setAssignmentRuleDirty(false)
+      }
+      await fetchAssignmentRules()
+      message.success(enabled ? '规则已启用' : '规则已停用')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentRulesError(error instanceof Error ? error.message : '规则启停失败')
+    } finally {
+      setAssignmentActionLoading(false)
+    }
+  }
+
+  async function moveAssignmentRule(rule: AssignmentRule, direction: 1 | -1) {
+    if (!token || !assignmentRulesData) return
+    const records = [...assignmentRulesData.records].sort((a, b) => a.priorityOrder - b.priorityOrder || a.id - b.id)
+    const index = records.findIndex((item) => item.id === rule.id)
+    const targetIndex = index + direction
+    if (index < 0 || targetIndex < 0 || targetIndex >= records.length) return
+    const current = records[index]
+    const target = records[targetIndex]
+    records[index] = { ...target, priorityOrder: current.priorityOrder }
+    records[targetIndex] = { ...current, priorityOrder: target.priorityOrder }
+
+    setAssignmentActionLoading(true)
+    setAssignmentRulesError('')
+    try {
+      await requestApi<AssignmentRule[]>('/api/v1/assignment-rules/sort', {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          rules: records.map((item) => ({ id: item.id, priorityOrder: item.priorityOrder })),
+        }),
+      })
+      await fetchAssignmentRules()
+      message.success('规则排序已保存')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentRulesError(error instanceof Error ? error.message : '规则排序失败')
+    } finally {
+      setAssignmentActionLoading(false)
+    }
+  }
+
+  async function runAssignmentRuleTest() {
+    if (!token) return
+    setAssignmentTesting(true)
+    setAssignmentRulesError('')
+    try {
+      const mailbox = mailboxes.find((item) => String(item.id) === assignmentTestForm.mailboxId)
+      const result = await requestApi<AssignmentRuleMatchResponse>('/api/v1/assignment-rules/test-match', {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          mailboxId: assignmentTestForm.mailboxId ? Number(assignmentTestForm.mailboxId) : null,
+          mailboxAddress: mailbox?.emailAddress || '',
+          subject: assignmentTestForm.subject.trim(),
+          fromEmail: assignmentTestForm.fromEmail.trim(),
+        }),
+      })
+      setAssignmentMatchResult(result)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentRulesError(error instanceof Error ? error.message : '测试匹配失败')
+    } finally {
+      setAssignmentTesting(false)
+    }
+  }
+
+  async function submitAssignmentConfirm() {
+    if (!token || !assignmentConfirmAction) return
+    setAssignmentActionLoading(true)
+    setAssignmentRulesError('')
+    try {
+      await requestApi<void>(`/api/v1/assignment-rules/${assignmentConfirmAction.rule.id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      })
+      if (assignmentForm.id === assignmentConfirmAction.rule.id) {
+        setAssignmentForm(emptyAssignmentRuleForm)
+        setAssignmentRuleDirty(false)
+      }
+      setAssignmentConfirmAction(null)
+      await fetchAssignmentRules()
+      message.success('分配规则已删除')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentRulesError(error instanceof Error ? error.message : '分配规则删除失败')
+    } finally {
+      setAssignmentActionLoading(false)
+    }
+  }
+
+  function resetSlaPolicyFilters() {
+    setSlaPolicyKeyword('')
+    setSlaPolicyEnabledFilter('ALL')
+    setSlaPolicyDefaultFilter('ALL')
+  }
+
+  function updateSlaPolicyForm(patch: Partial<SlaPolicyFormState>) {
+    setSlaPolicyForm((value) => {
+      const next = { ...value, ...patch }
+      if (patch.defaultPolicy === true) {
+        next.enabled = true
+      }
+      if (patch.enabled === false && value.defaultPolicy) {
+        next.defaultPolicy = false
+      }
+      return next
+    })
+    setSlaPolicyDirty(true)
+    setSlaPoliciesError('')
+  }
+
+  function selectSlaPolicy(policy: SlaPolicy) {
+    setSlaPolicyForm(toSlaPolicyForm(policy))
+    setSlaPolicyDirty(false)
+    setSlaPoliciesError('')
+  }
+
+  function openCreateSlaPolicy() {
+    setSlaPolicyForm({
+      ...emptySlaPolicyForm,
+      calendarId: workCalendars[0] ? String(workCalendars[0].id) : '',
+    })
+    setSlaPolicyDirty(true)
+    setSlaPoliciesError('')
+  }
+
+  function buildSlaPolicyPayload() {
+    return {
+      policyName: slaPolicyForm.policyName.trim(),
+      enabled: slaPolicyForm.enabled,
+      defaultPolicy: slaPolicyForm.defaultPolicy,
+      responseHours: Number(slaPolicyForm.responseHours),
+      resolveHours: slaPolicyForm.resolveHours.trim() ? Number(slaPolicyForm.resolveHours) : null,
+      warningRemainHours: Number(slaPolicyForm.warningRemainHours),
+      escalateAfterBreachHours: slaPolicyForm.escalateAfterBreachHours.trim()
+        ? Number(slaPolicyForm.escalateAfterBreachHours)
+        : null,
+      calendarId: slaPolicyForm.calendarId ? Number(slaPolicyForm.calendarId) : null,
+    }
+  }
+
+  async function saveSlaPolicy() {
+    if (!token) return
+    setSlaPolicySaving(true)
+    setSlaPoliciesError('')
+    try {
+      const saved = await requestApi<SlaPolicy>(
+        slaPolicyForm.id ? `/api/v1/sla-policies/${slaPolicyForm.id}` : '/api/v1/sla-policies',
+        {
+          method: slaPolicyForm.id ? 'PUT' : 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify(buildSlaPolicyPayload()),
+        },
+      )
+      setSlaPolicyForm(toSlaPolicyForm(saved))
+      setSlaPolicyDirty(false)
+      await fetchSlaPolicies()
+      message.success('SLA 策略已保存')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setSlaPoliciesError(error instanceof Error ? error.message : 'SLA 策略保存失败')
+    } finally {
+      setSlaPolicySaving(false)
+    }
+  }
+
+  async function toggleSlaPolicy(policy: SlaPolicy, enabled: boolean) {
+    if (!token) return
+    setSlaPolicyActionLoading(true)
+    setSlaPoliciesError('')
+    try {
+      const saved = await requestApi<SlaPolicy>(`/api/v1/sla-policies/${policy.id}/enabled`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ enabled }),
+      })
+      if (slaPolicyForm.id === saved.id) {
+        setSlaPolicyForm(toSlaPolicyForm(saved))
+        setSlaPolicyDirty(false)
+      }
+      await fetchSlaPolicies()
+      message.success(enabled ? 'SLA 策略已启用' : 'SLA 策略已停用')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setSlaPoliciesError(error instanceof Error ? error.message : 'SLA 策略启停失败')
+    } finally {
+      setSlaPolicyActionLoading(false)
+    }
+  }
+
+  async function setDefaultSlaPolicy(policy: SlaPolicy) {
+    if (!token) return
+    setSlaPolicyActionLoading(true)
+    setSlaPoliciesError('')
+    try {
+      const saved = await requestApi<SlaPolicy>(`/api/v1/sla-policies/${policy.id}/default`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ defaultPolicy: true }),
+      })
+      setSlaPolicyForm(toSlaPolicyForm(saved))
+      setSlaPolicyDirty(false)
+      await fetchSlaPolicies()
+      message.success('默认 SLA 策略已更新')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setSlaPoliciesError(error instanceof Error ? error.message : '默认策略设置失败')
+    } finally {
+      setSlaPolicyActionLoading(false)
+    }
+  }
+
+  async function submitSlaPolicyConfirm() {
+    if (!token || !slaPolicyConfirmAction) return
+    setSlaPolicyActionLoading(true)
+    setSlaPoliciesError('')
+    try {
+      await requestApi<void>(`/api/v1/sla-policies/${slaPolicyConfirmAction.policy.id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      })
+      if (slaPolicyForm.id === slaPolicyConfirmAction.policy.id) {
+        setSlaPolicyForm({
+          ...emptySlaPolicyForm,
+          calendarId: workCalendars[0] ? String(workCalendars[0].id) : '',
+        })
+        setSlaPolicyDirty(false)
+      }
+      setSlaPolicyConfirmAction(null)
+      await fetchSlaPolicies()
+      message.success('SLA 策略已删除')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setSlaPoliciesError(error instanceof Error ? error.message : 'SLA 策略删除失败')
+    } finally {
+      setSlaPolicyActionLoading(false)
+    }
+  }
+
+  function resetWorkCalendarFilters() {
+    setWorkCalendarKeyword('')
+    setWorkCalendarDefaultFilter('ALL')
+  }
+
+  function updateWorkCalendarForm(patch: Partial<WorkCalendarFormState>) {
+    setWorkCalendarForm((value) => ({ ...value, ...patch }))
+    setWorkCalendarDirty(true)
+    setWorkCalendarError('')
+  }
+
+  function selectWorkCalendar(calendar: WorkCalendar) {
+    setWorkCalendarForm(toWorkCalendarForm(calendar))
+    setWorkCalendarDirty(false)
+    setWorkCalendarError('')
+    setHolidayForm({
+      ...emptyHolidayForm,
+      calendarId: String(calendar.id),
+      holidayDate: `${holidayMonth}-01`,
+    })
+    setHolidayDirty(false)
+  }
+
+  function openCreateWorkCalendar() {
+    setWorkCalendarForm(emptyWorkCalendarForm)
+    setWorkCalendarDirty(true)
+    setWorkCalendarError('')
+    setHolidayForm(emptyHolidayForm)
+    setHolidayDirty(false)
+  }
+
+  function buildWorkCalendarPayload() {
+    return {
+      calendarName: workCalendarForm.calendarName.trim(),
+      timezone: workCalendarForm.timezone.trim() || 'Asia/Shanghai',
+      workdays: [...workCalendarForm.workdays].sort((a, b) => a - b),
+      workStartTime: workCalendarForm.workStartTime,
+      workEndTime: workCalendarForm.workEndTime,
+      defaultCalendar: workCalendarForm.defaultCalendar,
+    }
+  }
+
+  async function saveWorkCalendar() {
+    if (!token) return
+    setWorkCalendarSaving(true)
+    setWorkCalendarError('')
+    try {
+      const saved = await requestApi<WorkCalendar>(
+        workCalendarForm.id ? `/api/v1/work-calendars/${workCalendarForm.id}` : '/api/v1/work-calendars',
+        {
+          method: workCalendarForm.id ? 'PUT' : 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify(buildWorkCalendarPayload()),
+        },
+      )
+      setWorkCalendarForm(toWorkCalendarForm(saved))
+      setWorkCalendarDirty(false)
+      setHolidayForm((form) => ({
+        ...form,
+        calendarId: String(saved.id),
+      }))
+      await fetchWorkCalendarsPage()
+      message.success('工作日历已保存')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setWorkCalendarError(error instanceof Error ? error.message : '工作日历保存失败')
+    } finally {
+      setWorkCalendarSaving(false)
+    }
+  }
+
+  async function setDefaultWorkCalendar(calendar: WorkCalendar) {
+    if (!token) return
+    setWorkCalendarActionLoading(true)
+    setWorkCalendarError('')
+    try {
+      const saved = await requestApi<WorkCalendar>(`/api/v1/work-calendars/${calendar.id}/default`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ defaultCalendar: true }),
+      })
+      setWorkCalendarForm(toWorkCalendarForm(saved))
+      setWorkCalendarDirty(false)
+      await fetchWorkCalendarsPage()
+      message.success('默认工作日历已更新')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setWorkCalendarError(error instanceof Error ? error.message : '默认工作日历设置失败')
+    } finally {
+      setWorkCalendarActionLoading(false)
+    }
+  }
+
+  function openCreateHoliday() {
+    setHolidayForm({
+      ...emptyHolidayForm,
+      calendarId: workCalendarForm.id ? String(workCalendarForm.id) : '',
+      holidayDate: `${holidayMonth}-01`,
+    })
+    setHolidayDirty(true)
+    setHolidaysError('')
+  }
+
+  function updateHolidayForm(patch: Partial<HolidayFormState>) {
+    setHolidayForm((value) => ({ ...value, ...patch }))
+    setHolidayDirty(true)
+    setHolidaysError('')
+  }
+
+  function selectHoliday(holiday: Holiday) {
+    setHolidayForm(toHolidayForm(holiday))
+    setHolidayDirty(false)
+    setHolidaysError('')
+  }
+
+  function buildHolidayPayload() {
+    return {
+      calendarId: holidayForm.calendarId ? Number(holidayForm.calendarId) : null,
+      holidayDate: holidayForm.holidayDate,
+      holidayName: holidayForm.holidayName.trim(),
+    }
+  }
+
+  async function saveHoliday() {
+    if (!token) return
+    setHolidaySaving(true)
+    setHolidaysError('')
+    try {
+      const saved = await requestApi<Holiday>(
+        holidayForm.id ? `/api/v1/holidays/${holidayForm.id}` : '/api/v1/holidays',
+        {
+          method: holidayForm.id ? 'PUT' : 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify(buildHolidayPayload()),
+        },
+      )
+      setHolidayForm(toHolidayForm(saved))
+      setHolidayDirty(false)
+      await fetchHolidays()
+      message.success('节假日已保存')
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setHolidaysError(error instanceof Error ? error.message : '节假日保存失败')
+    } finally {
+      setHolidaySaving(false)
+    }
+  }
+
+  async function importNationalHolidays() {
+    if (!token || !workCalendarForm.id) return
+    const importYear = Number(holidayMonth.slice(0, 4)) || dayjs().year()
+    setHolidayImporting(true)
+    setHolidaysError('')
+    try {
+      const preset = await requestApi<NationalHolidayPresetResponse>(
+        `/api/v1/holidays/national-presets?year=${importYear}`,
+        { headers: authHeaders(token) },
+      )
+      const params = new URLSearchParams({
+        calendarId: String(workCalendarForm.id),
+        dateFrom: `${importYear}-01-01`,
+        dateTo: `${importYear}-12-31`,
+      })
+      const data = await requestApi<HolidayListResponse>(`/api/v1/holidays?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      const existingDates = new Set(data.records.map((holiday) => holiday.holidayDate))
+      const missingHolidays = preset.records.filter((holiday) => !existingDates.has(holiday.holidayDate))
+
+      for (const holiday of missingHolidays) {
+        await requestApi<Holiday>('/api/v1/holidays', {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            calendarId: workCalendarForm.id,
+            holidayDate: holiday.holidayDate,
+            holidayName: holiday.holidayName,
+          }),
+        })
+      }
+
+      await fetchHolidays()
+      if (missingHolidays.length > 0) {
+        message.success(`已从${preset.sourceName}导入 ${missingHolidays.length} 天 ${importYear} 法定节假日`)
+      } else {
+        message.info(`${importYear} 法定节假日已存在，无需重复导入`)
+      }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setHolidaysError(error instanceof Error ? error.message : '法定节假日导入失败')
+    } finally {
+      setHolidayImporting(false)
+    }
+  }
+
+  async function submitWorkCalendarConfirm() {
+    if (!token || !workCalendarConfirmAction) return
+    setWorkCalendarActionLoading(true)
+    setWorkCalendarError('')
+    setHolidaysError('')
+    try {
+      if (workCalendarConfirmAction.type === 'delete-calendar') {
+        await requestApi<void>(`/api/v1/work-calendars/${workCalendarConfirmAction.calendar.id}`, {
+          method: 'DELETE',
+          headers: authHeaders(token),
+        })
+        if (workCalendarForm.id === workCalendarConfirmAction.calendar.id) {
+          setWorkCalendarForm(emptyWorkCalendarForm)
+          setWorkCalendarDirty(false)
+        }
+        await fetchWorkCalendarsPage()
+        await fetchHolidays()
+        message.success('工作日历已删除')
+      } else {
+        await requestApi<void>(`/api/v1/holidays/${workCalendarConfirmAction.holiday.id}`, {
+          method: 'DELETE',
+          headers: authHeaders(token),
+        })
+        if (holidayForm.id === workCalendarConfirmAction.holiday.id) {
+          openCreateHoliday()
+        }
+        await fetchHolidays()
+        message.success('节假日已删除')
+      }
+      setWorkCalendarConfirmAction(null)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      const fallback = workCalendarConfirmAction.type === 'delete-calendar' ? '工作日历删除失败' : '节假日删除失败'
+      if (workCalendarConfirmAction.type === 'delete-calendar') {
+        setWorkCalendarError(error instanceof Error ? error.message : fallback)
+      } else {
+        setHolidaysError(error instanceof Error ? error.message : fallback)
+      }
+    } finally {
+      setWorkCalendarActionLoading(false)
     }
   }
 
@@ -2203,6 +3761,169 @@ function App() {
     const todayTicketCount = Math.max(0, todayReceivedCount - (mailboxesData?.summary.errorMailboxes ?? 0))
     const mailboxRowColors = ['#2563eb', '#f97316', '#10b981', '#8b5cf6', '#ef4444', '#14b8a6']
     const mailboxDailyCount = (mailbox: Mailbox, index: number) => (mailbox.connectionStatus === 'ERROR' ? 0 : Math.max(0, 20 - index * 5))
+    const assignmentRecords = assignmentRulesData?.records ?? []
+    const assignmentSummary = assignmentRulesData?.summary
+    const sortedAssignmentRecords = [...assignmentRecords].sort((a, b) => a.priorityOrder - b.priorityOrder || a.id - b.id)
+    const selectedAssignmentRule = assignmentForm.id
+      ? assignmentRecords.find((rule) => rule.id === assignmentForm.id) || null
+      : null
+    const assignmentMailboxOptions = mailboxes.map((mailbox) => ({
+      value: String(mailbox.id),
+      label: `${mailbox.mailboxName} ${mailbox.emailAddress}`,
+    }))
+    const assignmentAssigneeOptions = assignmentAssignees.map((agent) => ({
+      value: String(agent.id),
+      label: `${agent.displayName} / ${agent.email}`,
+    }))
+    const slaPolicyRecords = slaPoliciesData?.records ?? []
+    const slaPolicySummary = slaPoliciesData?.summary
+    const selectedSlaPolicy = slaPolicyForm.id
+      ? slaPolicyRecords.find((policy) => policy.id === slaPolicyForm.id) || null
+      : null
+    const selectedWorkCalendar = workCalendars.find((calendar) => String(calendar.id) === slaPolicyForm.calendarId) || null
+    const slaCalendarOptions = workCalendars.map((calendar) => ({
+      value: String(calendar.id),
+      label: `${calendar.calendarName} / ${calendar.timezone} / ${workdayLabel(calendar.workdays)} ${calendar.workStartTime}-${calendar.workEndTime}`,
+    }))
+    const slaPreview = resolveSlaPreview(slaPolicyForm, selectedWorkCalendar)
+    const slaCalendarCount = new Set(slaPolicyRecords.map((policy) => policy.calendarId)).size
+    const slaResolveHoursInvalid = Boolean(
+      slaPolicyForm.resolveHours.trim()
+      && Number(slaPolicyForm.resolveHours) < Number(slaPolicyForm.responseHours),
+    )
+    const slaWarningInvalid = Number(slaPolicyForm.warningRemainHours) >= Number(slaPolicyForm.responseHours)
+    const workCalendarRecords = workCalendarData?.records ?? []
+    const workCalendarSummary = workCalendarData?.summary
+    const selectedCalendarForPage = workCalendarForm.id
+      ? workCalendarRecords.find((calendar) => calendar.id === workCalendarForm.id) || null
+      : null
+    const holidayRecords = holidaysData?.records ?? []
+    const selectedCalendarPolicyCount = selectedCalendarForPage
+      ? calendarSlaPolicies.filter((policy) => policy.calendarId === selectedCalendarForPage.id).length
+      : 0
+    const totalCalendarPolicyCount = calendarSlaPolicies.length
+    const selectedCalendarHolidayCount = holidayRecords.filter((holiday) => holiday.calendarId === selectedCalendarForPage?.id).length
+    const workCalendarStartMinutes = parseClockMinutes(workCalendarForm.workStartTime, 9 * 60)
+    const workCalendarEndMinutes = parseClockMinutes(workCalendarForm.workEndTime, 18 * 60)
+    const workCalendarTimeInvalid = workCalendarStartMinutes >= workCalendarEndMinutes
+    const workCalendarDeleteBlockedReason = selectedCalendarForPage?.defaultCalendar
+      ? '默认日历不可删除'
+      : selectedCalendarPolicyCount > 0
+        ? `已被 ${selectedCalendarPolicyCount} 条 SLA 策略引用`
+        : selectedCalendarHolidayCount > 0
+          ? `当前月份已配置 ${selectedCalendarHolidayCount} 个节假日`
+          : ''
+    const monthCells = buildMonthCells(holidayMonth, selectedCalendarForPage, holidayRecords)
+    const calendarPreviewCreatedAtValue = dayjs(calendarPreviewCreatedAt)
+    const calendarPreviewResponseHoursValue = Math.max(1, Number(calendarPreviewResponseHours) || 1)
+    const calendarPreviewResolveHoursValue = Math.max(1, Number(calendarPreviewResolveHours) || 1)
+    const calendarSlaExample = resolveCalendarSlaExample(
+      selectedCalendarForPage,
+      holidayRecords,
+      calendarPreviewCreatedAtValue,
+      calendarPreviewResponseHoursValue,
+      calendarPreviewResolveHoursValue,
+    )
+    const holidayDateValue = holidayForm.holidayDate ? dayjs(holidayForm.holidayDate) : null
+    const holidayMonthValue = holidayMonth ? dayjs(`${holidayMonth}-01`) : null
+    const holidayImportYear = Number(holidayMonth.slice(0, 4)) || dayjs().year()
+    const customerRecords = customersData?.records ?? []
+    const selectedCustomer = customerDetail || customerRecords.find((customer) => customer.email === selectedCustomerEmail) || null
+    const customerRemarkCount = customerRecords.filter((customer) => customer.remark?.trim()).length
+    const customerWithTicketCount = customerRecords.filter((customer) => customer.ticketCount > 0).length
+    const recentCustomerCount = customerRecords.filter((customer) => (
+      customer.lastMailAt ? dayjs().diff(dayjs(customer.lastMailAt), 'day') <= 7 : false
+    )).length
+    const dashboardCards = [
+      {
+        key: 'total',
+        label: '工单总数',
+        value: dashboardSummary?.totalCount,
+        help: '当前权限范围内总量',
+        icon: Layers,
+        tone: 'blue',
+        onClick: () => navigateToTickets('ALL'),
+      },
+      {
+        key: 'pending',
+        label: '待分配工单',
+        value: dashboardSummary?.pendingAssignCount,
+        help: '等待分配处理人',
+        icon: Clock,
+        tone: 'amber',
+        onClick: () => navigateToTickets('PENDING_ASSIGN'),
+      },
+      {
+        key: 'processing',
+        label: '处理中工单',
+        value: dashboardSummary?.processingCount,
+        help: '已分配并处理中',
+        icon: Folder,
+        tone: 'blue',
+        onClick: () => navigateToTickets('PROCESSING'),
+      },
+      {
+        key: 'waiting',
+        label: '待客户回复',
+        value: dashboardSummary?.waitingCustomerCount,
+        help: '等待客户补充信息',
+        icon: MessageCircle,
+        tone: 'green',
+        onClick: () => navigateToTickets('WAITING_CUSTOMER'),
+      },
+      {
+        key: 'overdue',
+        label: 'SLA 已超时',
+        value: dashboardSummary?.slaOverdueCount,
+        help: '需要优先处理',
+        icon: TriangleAlert,
+        tone: 'red',
+        onClick: () => navigateToTickets('ALL', true),
+      },
+      {
+        key: 'closed',
+        label: '今日已关闭',
+        value: dashboardSummary?.closedTodayCount,
+        help: '已解决并关闭',
+        icon: CircleCheck,
+        tone: 'green',
+        onClick: () => navigateToTickets('CLOSED'),
+      },
+    ]
+    const dashboardTodoRecords = dashboardTodos?.records ?? []
+    const dashboardHasAnyData = Boolean(
+      dashboardSummary && (
+        dashboardSummary.totalCount > 0
+        || dashboardSummary.activeCount > 0
+        || dashboardTodoRecords.length > 0
+      ),
+    )
+    const dashboardRiskItems = [
+      {
+        label: 'SLA 已超时工单',
+        detail: '进入全部工单并筛选超时记录',
+        value: dashboardSummary?.slaOverdueCount ?? 0,
+        tone: 'red',
+        icon: TriangleAlert,
+        onClick: () => navigateToTickets('ALL', true),
+      },
+      {
+        label: '待分配工单',
+        detail: '进入全部工单并筛选待分配',
+        value: dashboardSummary?.pendingAssignCount ?? 0,
+        tone: 'amber',
+        icon: Clock,
+        onClick: () => navigateToTickets('PENDING_ASSIGN'),
+      },
+      {
+        label: '待客户回复工单',
+        detail: '进入全部工单并筛选待客户回复',
+        value: dashboardSummary?.waitingCustomerCount ?? 0,
+        tone: 'blue',
+        icon: MessageCircle,
+        onClick: () => navigateToTickets('WAITING_CUSTOMER'),
+      },
+    ]
 
     return (
       <div className={sidebarCollapsed ? 'app-workspace shell-collapsed' : 'app-workspace'}>
@@ -2361,7 +4082,257 @@ function App() {
             </div>
           </header>
 
-          {activeMenu === '全部工单' ? (
+          {activeMenu === '工作台' ? (
+            <section className="app-content dashboard-page" aria-label="工作台">
+              <div className="content-title dashboard-title">
+                <div>
+                  <h1>工作台</h1>
+                  <p>查看工单处理状态、SLA 风险以及邮件运行入口</p>
+                </div>
+                <div className="content-actions">
+                  <button type="button" disabled>
+                    <Clock size={16} />
+                    {dashboardUpdatedAt ? `统计截至 ${dashboardUpdatedAt}` : '统计截至 -'}
+                  </button>
+                  <button disabled={dashboardLoading} onClick={() => void fetchDashboard()} type="button">
+                    {dashboardLoading ? <Loader size={16} className="spin-icon" /> : <RefreshCw size={16} />}
+                    刷新数据
+                  </button>
+                </div>
+              </div>
+
+              {dashboardError && !dashboardSummary && !dashboardTodos ? (
+                <div className="permission-state dashboard-error-state">
+                  {dashboardError.includes('仅管理员') || dashboardError.includes('权限') ? (
+                    <>
+                      <LockKeyhole size={36} />
+                      <strong>无工作台查看权限</strong>
+                      <p>请联系管理员开通工作台或相关数据权限。</p>
+                    </>
+                  ) : (
+                    <>
+                      <TriangleAlert size={36} />
+                      <strong>工作台统计加载失败</strong>
+                      <p>{dashboardError}</p>
+                      <button onClick={() => void fetchDashboard()} type="button">重试</button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {dashboardError && (
+                    <Alert
+                      message="部分工作台数据加载失败"
+                      description={dashboardError}
+                      type="error"
+                      showIcon
+                      action={<Button size="small" danger onClick={() => void fetchDashboard()}>重试</Button>}
+                      style={{ marginBottom: 16 }}
+                    />
+                  )}
+
+                  <div className="dashboard-metrics">
+                    {dashboardCards.map((card) => {
+                      const Icon = card.icon
+                      return (
+                        <button className="dashboard-metric" key={card.key} onClick={card.onClick} type="button">
+                          <span className="dashboard-metric__label">{card.label}</span>
+                          <strong>{dashboardLoading && dashboardSummary == null ? '--' : card.value ?? 0}</strong>
+                          <small>{card.help}</small>
+                          <i className={`dashboard-metric__icon ${card.tone}`}>
+                            <Icon size={19} />
+                          </i>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {dashboardLoading && !dashboardSummary && !dashboardTodos ? (
+                    <div className="dashboard-grid">
+                      <div className="dashboard-panel dashboard-skeleton"><span /><span /><span /></div>
+                      <div className="dashboard-panel dashboard-skeleton"><span /><span /><span /></div>
+                      <div className="dashboard-panel dashboard-skeleton"><span /><span /><span /></div>
+                    </div>
+                  ) : !dashboardHasAnyData ? (
+                    <div className="empty-state dashboard-empty">
+                      <CircleCheck size={36} />
+                      <strong>暂无工作台数据</strong>
+                      <p>当前权限范围内没有工单或待办记录。可以刷新数据，或从全部工单查看历史记录。</p>
+                      <button onClick={() => void fetchDashboard()} type="button">刷新</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="dashboard-grid">
+                        <section className="dashboard-panel">
+                          <div className="dashboard-panel__head">
+                            <div>
+                              <h2>SLA 风险摘要</h2>
+                              <p>第一版展示已超时风险和活跃工单</p>
+                            </div>
+                            <Tag color={(dashboardSummary?.slaOverdueCount ?? 0) > 0 ? 'red' : 'green'}>
+                              {(dashboardSummary?.slaOverdueCount ?? 0) > 0 ? `${dashboardSummary?.slaOverdueCount} 个超时` : '暂无超时'}
+                            </Tag>
+                          </div>
+                          <button className="dashboard-risk-card red" onClick={() => navigateToTickets('ALL', true)} type="button">
+                            <span>
+                              <strong>SLA 已超时</strong>
+                              <small>进入全部工单并筛选超时记录</small>
+                            </span>
+                            <b>{dashboardSummary?.slaOverdueCount ?? 0}</b>
+                          </button>
+                          <div className="dashboard-mini-grid">
+                            <div><small>今日已关闭</small><strong>{dashboardSummary?.closedTodayCount ?? 0}</strong></div>
+                            <div><small>活跃工单</small><strong>{dashboardSummary?.activeCount ?? 0}</strong></div>
+                          </div>
+                        </section>
+
+                        <section className="dashboard-panel">
+                          <div className="dashboard-panel__head">
+                            <div>
+                              <h2>邮箱运行入口</h2>
+                              <p>快捷进入邮箱配置、收件记录和发送日志</p>
+                            </div>
+                            <Tag color="green">入口</Tag>
+                          </div>
+                          <div className="dashboard-entry-grid">
+                            <button onClick={() => setActiveMenu('邮箱配置')} type="button">
+                              <Settings size={18} /><span>邮箱配置</span><small>查看连接状态</small>
+                            </button>
+                            <button onClick={() => setActiveMenu('收件记录')} type="button">
+                              <Inbox size={18} /><span>收件记录</span><small>检查拉取结果</small>
+                            </button>
+                            <button onClick={() => setActiveMenu('发件记录')} type="button">
+                              <Send size={18} /><span>发送日志</span><small>处理失败记录</small>
+                            </button>
+                          </div>
+                        </section>
+
+                        <section className="dashboard-panel">
+                          <div className="dashboard-panel__head">
+                            <div>
+                              <h2>风险入口</h2>
+                              <p>通过已有工单列表筛选处理</p>
+                            </div>
+                            <Tag color="blue">第一版跳转</Tag>
+                          </div>
+                          <div className="dashboard-risk-list">
+                            {dashboardRiskItems.map((item) => {
+                              const Icon = item.icon
+                              return (
+                                <button key={item.label} onClick={item.onClick} type="button">
+                                  <i className={item.tone}><Icon size={17} /></i>
+                                  <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                                  <b>{item.value}</b>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </section>
+                      </div>
+
+                      <div className="dashboard-lower-grid">
+                        <section className="dashboard-panel dashboard-todos">
+                          <div className="dashboard-panel__head">
+                            <div>
+                              <h2>我的待办 <span>({dashboardTodos?.totalCount ?? 0})</span></h2>
+                              <p>按当前登录处理人过滤，SLA 近的优先</p>
+                            </div>
+                            <button className="link-button" onClick={() => navigateToTickets('ALL')} type="button">全部</button>
+                          </div>
+                          {dashboardTodoRecords.length === 0 ? (
+                            <div className="dashboard-inline-empty">
+                              <CircleCheck size={28} />
+                              <strong>暂无待办工单</strong>
+                              <small>当前没有需要你处理的工单。</small>
+                            </div>
+                          ) : (
+                            <div className="dashboard-todo-list">
+                              {dashboardTodoRecords.map((ticket) => {
+                                const statusText = ticket.status === 'PENDING_ASSIGN' ? '待分配' : statusLabel(ticket.status)
+                                return (
+                                  <button key={ticket.id} onClick={() => { void handleOpenDetail(ticket.id); setActiveMenu('全部工单') }} type="button">
+                                    <div className="dashboard-todo__top">
+                                      <span className={`priority-pill ${priorityBadgeClass(ticket.priority)}`}>{priorityBadgeText(ticket.priority)}</span>
+                                      <small>{relativeTime(ticket.createdAt)}</small>
+                                    </div>
+                                    <strong>{ticket.ticketNo}</strong>
+                                    <span>{ticket.subject}</span>
+                                    <small>客户：{ticket.customerEmail}</small>
+                                    <div className="dashboard-todo__foot">
+                                      <Tag color={ticket.status === 'WAITING_CUSTOMER' ? 'green' : ticket.status === 'PROCESSING' ? 'blue' : 'orange'}>
+                                        {statusText}
+                                      </Tag>
+                                      <small className={ticket.slaBreached ? 'danger-text' : ''}>
+                                        SLA：{ticket.slaBreached ? '已超时' : formatOptionalDateTime(ticket.slaResponseDeadline)}
+                                      </small>
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </section>
+
+                        <section className="dashboard-panel">
+                          <div className="dashboard-panel__head">
+                            <div>
+                              <h2>处理中工单入口</h2>
+                              <p>从全部工单筛选处理中状态</p>
+                            </div>
+                            <button className="link-button" onClick={() => navigateToTickets('PROCESSING')} type="button">全部</button>
+                          </div>
+                          <button className="dashboard-processing-card" onClick={() => navigateToTickets('PROCESSING')} type="button">
+                            <span><strong>处理中工单</strong><small>进入全部工单并筛选处理状态</small></span>
+                            <b>{dashboardSummary?.processingCount ?? 0}</b>
+                          </button>
+                          <div className="dashboard-mini-grid">
+                            <div><small>SLA 已超时</small><strong className="danger-text">{dashboardSummary?.slaOverdueCount ?? 0}</strong></div>
+                            <div><small>今日已关闭</small><strong className="success-text">{dashboardSummary?.closedTodayCount ?? 0}</strong></div>
+                          </div>
+                        </section>
+
+                        <section className="dashboard-panel">
+                          <div className="dashboard-panel__head">
+                            <div>
+                              <h2>我的待办摘要</h2>
+                              <p>按当前处理人统计</p>
+                            </div>
+                          </div>
+                          <div className="dashboard-summary-grid">
+                            <div><small>我的待办</small><strong>{dashboardTodos?.totalCount ?? 0}</strong></div>
+                            <div className="red"><small>SLA 已超时</small><strong>{dashboardTodos?.slaOverdueCount ?? 0}</strong></div>
+                          </div>
+                          <div className="dashboard-risk-list compact">
+                            <button onClick={() => navigateToTickets('PROCESSING')} type="button">
+                              <i className="blue" /><span><strong>处理中</strong></span><b>{dashboardTodos?.processingCount ?? 0}</b>
+                            </button>
+                            <button onClick={() => navigateToTickets('WAITING_CUSTOMER')} type="button">
+                              <i className="green" /><span><strong>待客户回复</strong></span><b>{dashboardTodos?.waitingCustomerCount ?? 0}</b>
+                            </button>
+                          </div>
+                        </section>
+                      </div>
+
+                      <section className="dashboard-panel dashboard-activity">
+                        <div className="dashboard-panel__head">
+                          <div>
+                            <h2>最近活动</h2>
+                            <p>后续由操作日志沉淀活动流；第一版先保留入口，不阻断工作台上线。</p>
+                          </div>
+                          <Tag color="orange">后续扩展</Tag>
+                        </div>
+                        <div className="dashboard-extension-grid">
+                          <div><Mail size={18} /><strong>邮件事件</strong><small>收到客户邮件、发送失败、自动回复等后续合并展示。</small></div>
+                          <div><Folder size={18} /><strong>工单事件</strong><small>创建、分配、打开、关闭等关键动作后续排序展示。</small></div>
+                          <div><Timer size={18} /><strong>SLA 事件</strong><small>预警、超时、恢复等事件后续与提醒任务统一展示。</small></div>
+                        </div>
+                      </section>
+                    </>
+                  )}
+                </>
+              )}
+            </section>
+          ) : activeMenu === '全部工单' ? (
             showTicketDetailPage && ticketDetail ? (
               /* ===== 全屏工单详情页 (PG-15) ===== */
               <div className="ticket-detail-page">
@@ -2765,12 +4736,11 @@ function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <h2>全部工单</h2>
-                      <div className="tickets-header-sub">共 {ticketStats?.totalCount ?? ticketsData?.total ?? 0} 个工单，包含所有状态的工单信息</div>
+                      <div className="tickets-header-sub">当前筛选共 {ticketsData?.total ?? ticketStats?.totalCount ?? 0} 个工单，统计卡片展示全量口径</div>
                     </div>
                     <div className="tickets-header-actions">
                       <Button icon={<ReloadOutlined />} onClick={() => { void fetchTickets(); void fetchTicketStats() }} loading={ticketsLoading}>刷新</Button>
                       <Button>导出</Button>
-                      <Button type="primary">新建工单</Button>
                     </div>
                   </div>
                   {/* 统计标签栏 — 纯数据展示，不做交互 */}
@@ -2826,21 +4796,24 @@ function App() {
 
                     <div style={{ marginBottom: 20 }}>
                       <div className="tickets-filter-title">工单状态</div>
-                      {[{ k: 'ALL', v: '全部' }, { k: 'PENDING_ASSIGN', v: '待分配' }, { k: 'PROCESSING', v: '处理中' }, { k: 'WAITING_CUSTOMER', v: '待客户回复' }, { k: 'CLOSED', v: '已关闭' }].map(item => (
-                        <div key={item.k} className={`tickets-filter-item ${ticketStatusTab === item.k ? 'active' : ''}`}
-                          onClick={() => { setTicketStatusTab(item.k); setTicketPage(1) }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{
-                              width: 14, height: 14, borderRadius: 3,
-                              border: ticketStatusTab === item.k ? '2px solid #2563eb' : '2px solid #d1d5db',
-                              background: ticketStatusTab === item.k ? '#2563eb' : 'transparent',
-                              display: 'inline-block'
-                            }} />
-                            <span>{item.v}</span>
+                      {[{ k: 'ALL', v: '全部' }, { k: 'PENDING_ASSIGN', v: '待分配' }, { k: 'PROCESSING', v: '处理中' }, { k: 'WAITING_CUSTOMER', v: '待客户回复' }, { k: 'CLOSED', v: '已关闭' }].map(item => {
+                        const isStatusActive = ticketStatusTab === item.k && !ticketSlaBreachedOnly
+                        return (
+                          <div key={item.k} className={`tickets-filter-item ${isStatusActive ? 'active' : ''}`}
+                            onClick={() => { setTicketStatusTab(item.k); setTicketSlaBreachedOnly(false); setTicketPage(1) }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                width: 14, height: 14, borderRadius: 3,
+                                border: isStatusActive ? '2px solid #2563eb' : '2px solid #d1d5db',
+                                background: isStatusActive ? '#2563eb' : 'transparent',
+                                display: 'inline-block'
+                              }} />
+                              <span>{item.v}</span>
+                            </div>
+                            <span className="count">{item.k === 'ALL' ? ticketsData?.total ?? '-' : ticketsData?.records?.filter(r => r.status === item.k).length ?? '-'}</span>
                           </div>
-                          <span className="count">{item.k === 'ALL' ? ticketsData?.total ?? '-' : ticketsData?.records?.filter(r => r.status === item.k).length ?? '-'}</span>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
 
                     <div style={{ marginBottom: 20 }}>
@@ -2864,11 +4837,11 @@ function App() {
                     <div style={{ marginBottom: 20 }}>
                       <div className="tickets-filter-title">SLA状态</div>
                       {[
-                        { v: '即将超时', color: '#f59e0b', count: '-' },
-                        { v: '已超时', color: '#ef4444', count: ticketStats?.slaOverdueCount ?? '-' },
-                        { v: '正常', color: '#10b981', count: '-' },
+                        { v: '即将超时', color: '#f59e0b', count: '-', active: false, onClick: undefined },
+                        { v: '已超时', color: '#ef4444', count: ticketStats?.slaOverdueCount ?? '-', active: ticketSlaBreachedOnly, onClick: () => navigateToTickets('ALL', true) },
+                        { v: '正常', color: '#10b981', count: '-', active: false, onClick: undefined },
                       ].map(item => (
-                        <div key={item.v} className="tickets-filter-item">
+                        <div key={item.v} className={`tickets-filter-item ${item.active ? 'active' : ''}`} onClick={item.onClick}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, display: 'inline-block' }} />
                             <span>{item.v}</span>
@@ -2886,7 +4859,7 @@ function App() {
                     </div>
 
                     {ticketsError && <Alert message={ticketsError} type="error" showIcon style={{ marginBottom: 12 }} />}
-                    <Button block size="small" onClick={() => { setTicketKeyword(''); setTicketStatusTab('ALL'); setTicketPage(1) }}>清空筛选</Button>
+                    <Button block size="small" onClick={() => { setTicketKeyword(''); setTicketStatusTab('ALL'); setTicketSlaBreachedOnly(false); setTicketPage(1) }}>清空筛选</Button>
                   </div>
 
                   {/* === 中间工单列表 === */}
@@ -2958,6 +4931,1605 @@ function App() {
                 </div>
               </div>
             )
+          ) : activeMenu === '客户管理' ? (
+            <section className="app-content customer-page" aria-label="客户管理">
+              <div className="content-title">
+                <div>
+                  <h1>客户管理</h1>
+                  <p>按客户邮箱聚合历史工单和客户档案；第一版仅提供只读检索、详情和关联工单查看。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={customersLoading} onClick={() => void fetchCustomers()} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                </div>
+              </div>
+
+              {!canReadCustomers ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无客户查看权限</strong>
+                  <p>客户只读页面仅允许管理员和客服处理人访问。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="user-metrics customer-metrics">
+                    <div className="user-metric">
+                      <span>客户总数</span>
+                      <strong>{customersData?.total ?? '-'}</strong>
+                      <small>合并客户档案和历史工单邮箱。</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>当前页有工单客户</span>
+                      <strong>{customerWithTicketCount}</strong>
+                      <small>按当前页 `ticketCount` 统计。</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>7 天内来信</span>
+                      <strong>{recentCustomerCount}</strong>
+                      <small>按当前页最近来信时间估算。</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>备注覆盖</span>
+                      <strong>{customerRemarkCount}</strong>
+                      <small>备注只展示，不提供编辑入口。</small>
+                    </div>
+                  </div>
+
+                  {customersError && (
+                    <Alert
+                      message={customersError}
+                      type="error"
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      action={<Button size="small" onClick={() => void fetchCustomers()}>重试</Button>}
+                    />
+                  )}
+
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} xl={9}>
+                      <Card
+                        title="客户列表"
+                        extra={<Tag color="blue">只读列表</Tag>}
+                        className="customer-card"
+                      >
+                        <Input.Search
+                          allowClear
+                          placeholder="搜索邮箱或展示名"
+                          value={customerKeyword}
+                          onChange={(event) => {
+                            setCustomerKeyword(event.target.value)
+                            setCustomerPage(1)
+                          }}
+                          onSearch={() => {
+                            setCustomerPage(1)
+                            void fetchCustomers()
+                          }}
+                          style={{ marginBottom: 14 }}
+                        />
+
+                        <div className="customer-list">
+                          {customersLoading && !customersData ? (
+                            <div className="customer-state">
+                              <Typography.Text type="secondary">客户列表加载中...</Typography.Text>
+                            </div>
+                          ) : customerRecords.length === 0 ? (
+                            <div className="customer-state">
+                              <Empty description="暂无客户记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                            </div>
+                          ) : (
+                            customerRecords.map((customer) => {
+                              const active = customer.email === selectedCustomerEmail
+                              return (
+                                <button
+                                  key={customer.email}
+                                  className={active ? 'customer-row active' : 'customer-row'}
+                                  onClick={() => setSelectedCustomerEmail(customer.email)}
+                                  type="button"
+                                >
+                                  <span className="customer-avatar">{customerInitial(customer)}</span>
+                                  <span className="customer-row__main">
+                                    <span className="customer-row__title">
+                                      <strong>{customerDisplayName(customer)}</strong>
+                                      {customer.lastMailAt && <Tag color="green">近期来信</Tag>}
+                                      {customer.remark?.trim() && <Tag color="gold">有备注</Tag>}
+                                    </span>
+                                    <span className="customer-row__email">{customer.email}</span>
+                                    <span className="customer-row__meta">
+                                      最近 {formatCustomerDate(customer.lastMailAt)}
+                                    </span>
+                                  </span>
+                                  <span className="customer-row__count">
+                                    <strong>{customer.ticketCount}</strong>
+                                    <small>工单</small>
+                                  </span>
+                                </button>
+                              )
+                            })
+                          )}
+                        </div>
+
+                        {customersData && customersData.total > 0 && (
+                          <Pagination
+                            current={customerPage}
+                            pageSize={customerPageSize}
+                            total={customersData.total}
+                            showSizeChanger
+                            pageSizeOptions={[10, 20, 50, 100]}
+                            size="small"
+                            showTotal={(total) => `共 ${total} 位客户`}
+                            onChange={(page, size) => {
+                              setCustomerPage(page)
+                              setCustomerPageSize(size)
+                            }}
+                            style={{ marginTop: 14 }}
+                          />
+                        )}
+                      </Card>
+                    </Col>
+
+                    <Col xs={24} xl={15}>
+                      <Card
+                        title="客户详情"
+                        extra={<Tag color="green">只读详情</Tag>}
+                        className="customer-card"
+                      >
+                        {customerDetailLoading && !selectedCustomer ? (
+                          <div className="customer-state">
+                            <Typography.Text type="secondary">客户详情加载中...</Typography.Text>
+                          </div>
+                        ) : customerDetailError ? (
+                          <Alert
+                            message={customerDetailError}
+                            type="error"
+                            showIcon
+                            action={<Button size="small" onClick={() => void fetchCustomerDetail()}>重试</Button>}
+                          />
+                        ) : !selectedCustomer ? (
+                          <div className="customer-state">
+                            <Empty description="请选择客户" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="customer-detail-head">
+                              <span className="customer-detail-avatar">{customerInitial(selectedCustomer)}</span>
+                              <div>
+                                <Typography.Title level={4} style={{ margin: 0 }}>
+                                  {customerDisplayName(selectedCustomer)}
+                                </Typography.Title>
+                                <Typography.Text type="secondary">{selectedCustomer.email}</Typography.Text>
+                              </div>
+                              <Button
+                                size="small"
+                                onClick={() => {
+                                  void navigator.clipboard?.writeText(selectedCustomer.email)
+                                  message.success('客户邮箱已复制')
+                                }}
+                              >
+                                复制邮箱
+                              </Button>
+                            </div>
+
+                            <Descriptions
+                              bordered
+                              size="small"
+                              column={{ xs: 1, md: 2 }}
+                              items={[
+                                { key: 'id', label: '客户ID', children: selectedCustomer.id ?? '仅工单聚合，暂无档案 ID' },
+                                { key: 'lastMailAt', label: '最近来信', children: formatCustomerDate(selectedCustomer.lastMailAt) },
+                                { key: 'ticketCount', label: '关联工单数', children: `${selectedCustomer.ticketCount} 条` },
+                                { key: 'createdAt', label: '创建时间', children: formatCustomerDate(selectedCustomer.createdAt) },
+                              ]}
+                            />
+
+                            <Alert
+                              style={{ marginTop: 16 }}
+                              type="info"
+                              showIcon
+                              message={selectedCustomer.remark?.trim() || '暂无客户备注'}
+                              description="备注第一版仅展示，不提供新建或编辑客户入口。"
+                            />
+
+                            <div className="customer-section-head">
+                              <div>
+                                <strong>关联工单</strong>
+                                <span>按客户邮箱从工单列表查询</span>
+                              </div>
+                              <Button
+                                size="small"
+                                loading={customerTicketsLoading}
+                                onClick={() => void fetchCustomerTickets()}
+                              >
+                                刷新工单
+                              </Button>
+                            </div>
+
+                            {customerTicketsError && (
+                              <Alert message={customerTicketsError} type="error" showIcon style={{ marginBottom: 12 }} />
+                            )}
+
+                            <Table<TicketSummary>
+                              rowKey="id"
+                              size="small"
+                              loading={customerTicketsLoading}
+                              dataSource={customerTicketsData?.records ?? []}
+                              pagination={false}
+                              locale={{
+                                emptyText: <Empty description="暂无关联工单" image={Empty.PRESENTED_IMAGE_SIMPLE} />,
+                              }}
+                              columns={[
+                                {
+                                  title: '工单号',
+                                  dataIndex: 'ticketNo',
+                                  width: 150,
+                                  render: (value: string, record) => (
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      onClick={() => {
+                                        setTicketKeyword(selectedCustomer.email)
+                                        setActiveMenu('全部工单')
+                                        void handleOpenDetail(record.id)
+                                      }}
+                                      style={{ padding: 0 }}
+                                    >
+                                      {value}
+                                    </Button>
+                                  ),
+                                },
+                                { title: '主题', dataIndex: 'subject', ellipsis: true },
+                                {
+                                  title: '状态',
+                                  dataIndex: 'status',
+                                  width: 112,
+                                  render: (value: string, record) => {
+                                    const cls = value === 'WAITING_CUSTOMER' ? 'waiting' : value === 'CLOSED' ? 'closed' : record.slaBreached ? 'overdue' : 'processing'
+                                    return <span className={`ticket-status-tag ${cls}`}>{statusLabel(value)}</span>
+                                  },
+                                },
+                                {
+                                  title: 'SLA',
+                                  dataIndex: 'slaBreached',
+                                  width: 92,
+                                  render: (value: boolean) => <Tag color={value ? 'red' : 'green'}>{value ? '已超时' : '正常'}</Tag>,
+                                },
+                                {
+                                  title: '创建时间',
+                                  dataIndex: 'createdAt',
+                                  width: 140,
+                                  render: (value: string) => formatCustomerDate(value),
+                                },
+                              ]}
+                            />
+                          </>
+                        )}
+                      </Card>
+                    </Col>
+                  </Row>
+                </>
+              )}
+            </section>
+          ) : activeMenu === '分配规则' ? (
+            <section className="app-content" aria-label="分配规则">
+              <div className="content-title">
+                <div>
+                  <h1>分配规则</h1>
+                  <p>按优先级自动匹配新工单，命中后分配给指定处理人；保存后仅影响后续新建工单。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={assignmentRulesLoading} onClick={fetchAssignmentRules} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  <button className="primary-action" onClick={openCreateAssignmentRule} type="button">
+                    <Plus size={16} />
+                    新建规则
+                  </button>
+                </div>
+              </div>
+
+              {!isAdmin ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无分配规则管理权限</strong>
+                  <p>非管理员不可新建、编辑、启停、排序或删除自动分配规则。</p>
+                </div>
+              ) : (
+                <>
+                  <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">规则总数</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{assignmentSummary?.totalCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">启用 {assignmentSummary?.enabledCount ?? '--'} 条，停用 {assignmentSummary?.disabledCount ?? '--'} 条</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">默认兜底</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{assignmentSummary?.defaultCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">仅允许一个 DEFAULT 规则</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">当前命中测试</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{assignmentMatchResult?.matched ? '已命中' : '--'}</Typography.Title>
+                        <Typography.Text type="secondary">{assignmentMatchResult?.ruleName || '输入邮件信息后测试'}</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">未保存修改</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{assignmentRuleDirty ? '1' : '0'}</Typography.Title>
+                        <Typography.Text type="secondary">保存前不会影响自动建单</Typography.Text>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  <Alert
+                    showIcon
+                    type="info"
+                    style={{ marginBottom: 16 }}
+                    message="优先级数字越小越先匹配；排序、启停和规则保存只影响后续自动建单，历史工单不会回写。"
+                  />
+
+                  {assignmentRulesError && (
+                    <Alert
+                      showIcon
+                      type="error"
+                      style={{ marginBottom: 16 }}
+                      message={assignmentRulesError}
+                      action={<Button size="small" onClick={fetchAssignmentRules}>重试</Button>}
+                    />
+                  )}
+
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} xl={12}>
+                      <Card
+                        title="规则列表"
+                        extra={<Tag color="blue">共 {assignmentSummary?.totalCount ?? 0} 条</Tag>}
+                      >
+                        <Space wrap style={{ width: '100%', marginBottom: 16 }}>
+                          <Input
+                            allowClear
+                            prefix={<SearchOutlined />}
+                            placeholder="规则名 / 匹配值"
+                            style={{ width: 220 }}
+                            value={assignmentKeyword}
+                            onChange={(event) => setAssignmentKeyword(event.target.value)}
+                            onPressEnter={() => void fetchAssignmentRules()}
+                          />
+                          <Select
+                            style={{ width: 130 }}
+                            value={assignmentEnabledFilter}
+                            onChange={setAssignmentEnabledFilter}
+                            options={[
+                              { value: 'ALL', label: '全部状态' },
+                              { value: 'true', label: '启用' },
+                              { value: 'false', label: '停用' },
+                            ]}
+                          />
+                          <Select
+                            style={{ width: 150 }}
+                            value={assignmentMatchTypeFilter}
+                            onChange={setAssignmentMatchTypeFilter}
+                            options={[
+                              { value: 'ALL', label: '全部类型' },
+                              { value: 'DEFAULT', label: '默认兜底' },
+                              { value: 'SUBJECT_KEYWORD', label: '主题关键词' },
+                              { value: 'MAILBOX', label: '来源邮箱' },
+                              { value: 'FROM_EMAIL', label: '客户邮箱' },
+                            ]}
+                          />
+                          <Button onClick={resetAssignmentFilters}>清空筛选</Button>
+                        </Space>
+
+                        <Table<AssignmentRule>
+                          rowKey="id"
+                          size="middle"
+                          loading={assignmentRulesLoading}
+                          dataSource={sortedAssignmentRecords}
+                          pagination={false}
+                          locale={{
+                            emptyText: (
+                              <Empty
+                                description="还没有分配规则"
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                              >
+                                <Button type="primary" onClick={openCreateAssignmentRule}>新建规则</Button>
+                              </Empty>
+                            ),
+                          }}
+                          rowClassName={(record) => record.id === assignmentForm.id ? 'ant-table-row-selected' : ''}
+                          onRow={(record) => ({
+                            onClick: () => selectAssignmentRule(record),
+                          })}
+                          columns={[
+                            {
+                              title: '优先级',
+                              dataIndex: 'priorityOrder',
+                              width: 82,
+                              render: (value: number) => <Tag color="blue">{value}</Tag>,
+                            },
+                            {
+                              title: '规则',
+                              dataIndex: 'ruleName',
+                              render: (_value: string, record: AssignmentRule) => (
+                                <Space direction="vertical" size={2}>
+                                  <Space wrap>
+                                    <Typography.Text strong>{record.ruleName}</Typography.Text>
+                                    {record.defaultRule && <Tag color="gold">默认</Tag>}
+                                    <Tag color={record.enabled ? 'green' : 'default'}>{record.enabled ? '启用' : '停用'}</Tag>
+                                  </Space>
+                                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                    {assignmentRuleText(record)} · 分配给 {record.assigneeName || record.assigneeId}
+                                  </Typography.Text>
+                                </Space>
+                              ),
+                            },
+                            {
+                              title: '操作',
+                              width: 188,
+                              render: (_value: unknown, record: AssignmentRule, index: number) => (
+                                <Space onClick={(event) => event.stopPropagation()}>
+                                  <Button
+                                    size="small"
+                                    disabled={index === 0 || assignmentActionLoading}
+                                    onClick={() => void moveAssignmentRule(record, -1)}
+                                  >
+                                    上移
+                                  </Button>
+                                  <Button
+                                    size="small"
+                                    disabled={index >= sortedAssignmentRecords.length - 1 || assignmentActionLoading}
+                                    onClick={() => void moveAssignmentRule(record, 1)}
+                                  >
+                                    下移
+                                  </Button>
+                                  <Switch
+                                    size="small"
+                                    checked={record.enabled}
+                                    loading={assignmentActionLoading && assignmentForm.id === record.id}
+                                    onChange={(checked) => void toggleAssignmentRule(record, checked)}
+                                  />
+                                </Space>
+                              ),
+                            },
+                          ]}
+                        />
+
+                      </Card>
+                    </Col>
+
+                    <Col xs={24} xl={12}>
+                      <Row gutter={[16, 16]}>
+                        <Col span={24}>
+                          <Card
+                            title="规则编辑"
+                            extra={
+                              assignmentRuleDirty
+                                ? <Tag color="orange">有未保存修改</Tag>
+                                : selectedAssignmentRule
+                                  ? <Tag color="green">已保存</Tag>
+                                  : <Tag>新建草稿</Tag>
+                            }
+                          >
+                            <Row gutter={[12, 12]}>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>规则名称</Typography.Text>
+                                <Input
+                                  value={assignmentForm.ruleName}
+                                  onChange={(event) => updateAssignmentForm({ ruleName: event.target.value })}
+                                  placeholder="VIP 售后优先"
+                                  style={{ marginTop: 8 }}
+                                />
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>优先级</Typography.Text>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={9999}
+                                  value={assignmentForm.priorityOrder}
+                                  onChange={(event) => updateAssignmentForm({ priorityOrder: Number(event.target.value || 1) })}
+                                  style={{ marginTop: 8 }}
+                                />
+                              </Col>
+                              <Col span={24}>
+                                <Typography.Text strong>匹配类型</Typography.Text>
+                                <Segmented
+                                  block
+                                  style={{ marginTop: 8 }}
+                                  value={assignmentForm.matchType}
+                                  onChange={(value) => updateAssignmentForm({ matchType: value as AssignmentRuleMatchType })}
+                                  options={[
+                                    { value: 'DEFAULT', label: '默认' },
+                                    { value: 'SUBJECT_KEYWORD', label: '主题关键词' },
+                                    { value: 'MAILBOX', label: '来源邮箱' },
+                                    { value: 'FROM_EMAIL', label: '客户邮箱' },
+                                  ]}
+                                />
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>匹配值</Typography.Text>
+                                <Input
+                                  disabled={assignmentForm.matchType === 'DEFAULT'}
+                                  value={assignmentForm.matchValue}
+                                  onChange={(event) => updateAssignmentForm({ matchValue: event.target.value })}
+                                  placeholder={assignmentForm.matchType === 'DEFAULT' ? '默认规则不需要匹配值' : 'VIP / support@example.com'}
+                                  status={assignmentForm.matchType !== 'DEFAULT' && !assignmentForm.matchValue.trim() ? 'error' : undefined}
+                                  style={{ marginTop: 8 }}
+                                />
+                                {assignmentForm.matchType !== 'DEFAULT' && !assignmentForm.matchValue.trim() && (
+                                  <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                                    匹配类型不是 DEFAULT 时，匹配值不能为空。
+                                  </Typography.Text>
+                                )}
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>分配处理人</Typography.Text>
+                                <Select
+                                  showSearch
+                                  value={assignmentForm.assigneeId || undefined}
+                                  placeholder="选择处理人"
+                                  optionFilterProp="label"
+                                  options={assignmentAssigneeOptions}
+                                  onChange={(value) => updateAssignmentForm({ assigneeId: value })}
+                                  style={{ width: '100%', marginTop: 8 }}
+                                />
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>启用状态</Typography.Text>
+                                <Select
+                                  value={String(assignmentForm.enabled)}
+                                  onChange={(value) => updateAssignmentForm({ enabled: value === 'true' })}
+                                  options={[
+                                    { value: 'true', label: '启用' },
+                                    { value: 'false', label: '停用' },
+                                  ]}
+                                  style={{ width: '100%', marginTop: 8 }}
+                                />
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>分配通知</Typography.Text>
+                                <Select
+                                  value={String(assignmentForm.notifyEnabled)}
+                                  onChange={(value) => updateAssignmentForm({ notifyEnabled: value === 'true' })}
+                                  options={[
+                                    { value: 'true', label: '通知处理人' },
+                                    { value: 'false', label: '不发送通知' },
+                                  ]}
+                                  style={{ width: '100%', marginTop: 8 }}
+                                />
+                              </Col>
+                              <Col span={24}>
+                                <Alert
+                                  type="info"
+                                  showIcon
+                                  message="规则预览"
+                                  description={`IF ${assignmentMatchTypeLabel(assignmentForm.matchType)} ${assignmentForm.matchType === 'DEFAULT' ? '兜底命中' : `= ${assignmentForm.matchValue || '未填写'}`} THEN 分配给 ${assignmentAssignees.find((agent) => String(agent.id) === assignmentForm.assigneeId)?.displayName || '未选择处理人'}`}
+                                />
+                              </Col>
+                            </Row>
+                            <Space style={{ marginTop: 16 }}>
+                              <Button onClick={openCreateAssignmentRule}>新建草稿</Button>
+                              <Button
+                                type="primary"
+                                loading={assignmentSaving}
+                                disabled={!assignmentForm.ruleName.trim() || !assignmentForm.assigneeId || (assignmentForm.matchType !== 'DEFAULT' && !assignmentForm.matchValue.trim())}
+                                onClick={() => void saveAssignmentRule()}
+                              >
+                                保存规则
+                              </Button>
+                              <Button
+                                danger
+                                disabled={!selectedAssignmentRule}
+                                icon={<DeleteOutlined />}
+                                onClick={() => selectedAssignmentRule && setAssignmentConfirmAction({ type: 'delete', rule: selectedAssignmentRule })}
+                              >
+                                删除
+                              </Button>
+                            </Space>
+                          </Card>
+                        </Col>
+
+                        <Col span={24}>
+                          <Card title="测试匹配" extra={assignmentMatchResult?.matched ? <Tag color="green">已命中</Tag> : <Tag>未测试</Tag>}>
+                            <Row gutter={[12, 12]}>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>来源邮箱</Typography.Text>
+                                <Select
+                                  showSearch
+                                  value={assignmentTestForm.mailboxId || undefined}
+                                  placeholder="选择来源邮箱"
+                                  optionFilterProp="label"
+                                  options={assignmentMailboxOptions}
+                                  onChange={(value) => setAssignmentTestForm((form) => ({ ...form, mailboxId: value }))}
+                                  style={{ width: '100%', marginTop: 8 }}
+                                />
+                              </Col>
+                              <Col xs={24} md={12}>
+                                <Typography.Text strong>客户邮箱</Typography.Text>
+                                <Input
+                                  value={assignmentTestForm.fromEmail}
+                                  onChange={(event) => setAssignmentTestForm((form) => ({ ...form, fromEmail: event.target.value }))}
+                                  placeholder="buyer@acme.com"
+                                  style={{ marginTop: 8 }}
+                                />
+                              </Col>
+                              <Col span={24}>
+                                <Typography.Text strong>邮件主题</Typography.Text>
+                                <Input
+                                  value={assignmentTestForm.subject}
+                                  onChange={(event) => setAssignmentTestForm((form) => ({ ...form, subject: event.target.value }))}
+                                  placeholder="VIP 客户反馈：无法登录后台"
+                                  style={{ marginTop: 8 }}
+                                />
+                              </Col>
+                            </Row>
+                            <Button
+                              block
+                              type="primary"
+                              loading={assignmentTesting}
+                              disabled={!assignmentTestForm.mailboxId}
+                              onClick={() => void runAssignmentRuleTest()}
+                              style={{ marginTop: 16 }}
+                            >
+                              运行测试匹配
+                            </Button>
+                            {assignmentMatchResult ? (
+                              <Alert
+                                showIcon
+                                type={assignmentMatchResult.matched ? 'success' : 'warning'}
+                                style={{ marginTop: 16 }}
+                                message={assignmentMatchResult.matched ? `命中 ${assignmentMatchResult.ruleName}` : '未命中分配规则'}
+                                description={assignmentMatchResult.matched
+                                  ? `${assignmentMatchTypeLabel(assignmentMatchResult.matchType)} = ${assignmentMatchResult.matchValue || '-'}，分配给 ${assignmentMatchResult.assigneeName || assignmentMatchResult.assigneeId}，${assignmentMatchResult.notifyEnabled ? '通知处理人' : '不发送通知'}。`
+                                  : '当前输入未命中任何启用规则，自动建单会继续走默认规则或邮箱默认处理人。'}
+                              />
+                            ) : (
+                              <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="输入来源邮箱、客户邮箱和主题后测试命中结果"
+                                style={{ marginTop: 16 }}
+                              />
+                            )}
+                          </Card>
+                        </Col>
+                      </Row>
+                    </Col>
+                  </Row>
+                </>
+              )}
+            </section>
+          ) : activeMenu === 'SLA策略' ? (
+            <section className="app-content" aria-label="SLA策略">
+              <div className="content-title">
+                <div>
+                  <h1>SLA策略</h1>
+                  <p>维护首次响应、解决时限、预警阈值和升级阈值，绑定工作日历后按工作时间计算截止时间。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={slaPoliciesLoading} onClick={fetchSlaPolicies} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  <button className="primary-action" onClick={openCreateSlaPolicy} type="button">
+                    <Plus size={16} />
+                    新建策略
+                  </button>
+                </div>
+              </div>
+
+              {!isAdmin ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无 SLA 策略管理权限</strong>
+                  <p>非管理员不可新建、编辑、启停、设置默认或删除 SLA 策略。</p>
+                </div>
+              ) : (
+                <>
+                  <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">策略总数</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{slaPolicySummary?.totalCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">启用 {slaPolicySummary?.enabledCount ?? '--'} 条，停用 {slaPolicySummary?.disabledCount ?? '--'} 条</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">启用策略</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{slaPolicySummary?.enabledCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">仅启用策略参与新工单 SLA 计算</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">默认策略</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{slaPolicySummary?.defaultCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">默认策略必须启用，不能停用或删除</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">绑定日历</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{slaCalendarCount || '--'}</Typography.Title>
+                        <Typography.Text type="secondary">策略保存时必须选择工作日历</Typography.Text>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  <Alert
+                    showIcon
+                    type="info"
+                    style={{ marginBottom: 16 }}
+                    message="默认策略只影响后续新建工单；历史工单已有的响应截止、解决截止不自动重算。"
+                  />
+
+                  {slaPoliciesError && (
+                    <Alert
+                      showIcon
+                      type="error"
+                      style={{ marginBottom: 16 }}
+                      message={slaPoliciesError}
+                      action={<Button size="small" onClick={fetchSlaPolicies}>重试</Button>}
+                    />
+                  )}
+
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} xl={10}>
+                      <Card title="策略列表">
+                        <Space wrap style={{ width: '100%', marginBottom: 16 }}>
+                          <Input
+                            allowClear
+                            prefix={<SearchOutlined />}
+                            placeholder="策略名称"
+                            style={{ width: 190 }}
+                            value={slaPolicyKeyword}
+                            onChange={(event) => setSlaPolicyKeyword(event.target.value)}
+                            onPressEnter={() => void fetchSlaPolicies()}
+                          />
+                          <Select
+                            style={{ width: 126 }}
+                            value={slaPolicyEnabledFilter}
+                            onChange={setSlaPolicyEnabledFilter}
+                            options={[
+                              { value: 'ALL', label: '全部状态' },
+                              { value: 'true', label: '启用' },
+                              { value: 'false', label: '停用' },
+                            ]}
+                          />
+                          <Select
+                            style={{ width: 126 }}
+                            value={slaPolicyDefaultFilter}
+                            onChange={setSlaPolicyDefaultFilter}
+                            options={[
+                              { value: 'ALL', label: '全部策略' },
+                              { value: 'true', label: '默认策略' },
+                              { value: 'false', label: '非默认' },
+                            ]}
+                          />
+                          <Button onClick={resetSlaPolicyFilters}>清空筛选</Button>
+                        </Space>
+
+                        <Table<SlaPolicy>
+                          rowKey="id"
+                          size="middle"
+                          loading={slaPoliciesLoading || workCalendarsLoading}
+                          dataSource={slaPolicyRecords}
+                          pagination={false}
+                          locale={{
+                            emptyText: (
+                              <Empty
+                                description="还没有 SLA 策略"
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                              >
+                                <Button type="primary" onClick={openCreateSlaPolicy}>新建策略</Button>
+                              </Empty>
+                            ),
+                          }}
+                          rowClassName={(record) => record.id === slaPolicyForm.id ? 'ant-table-row-selected' : ''}
+                          onRow={(record) => ({
+                            onClick: () => selectSlaPolicy(record),
+                          })}
+                          columns={[
+                            {
+                              title: '策略',
+                              dataIndex: 'policyName',
+                              render: (_value: string, record: SlaPolicy) => {
+                                const calendar = workCalendars.find((item) => item.id === record.calendarId)
+                                return (
+                                  <Space direction="vertical" size={4}>
+                                    <Space wrap>
+                                      <Typography.Text strong>{record.policyName}</Typography.Text>
+                                      {record.defaultPolicy && <Tag color="blue">默认</Tag>}
+                                      <Tag color={record.enabled ? 'green' : 'default'}>{record.enabled ? '启用' : '停用'}</Tag>
+                                    </Space>
+                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                      绑定日历：{calendar?.calendarName || `#${record.calendarId}`}
+                                      {calendar ? ` · ${workdayLabel(calendar.workdays)} ${calendar.workStartTime}-${calendar.workEndTime}` : ''}
+                                    </Typography.Text>
+                                    <Space wrap size={[4, 4]}>
+                                      <Tag>响应 {hoursLabel(record.responseHours)}</Tag>
+                                      <Tag>解决 {hoursLabel(record.resolveHours)}</Tag>
+                                      <Tag color="gold">预警 剩余 {hoursLabel(record.warningRemainHours)}</Tag>
+                                      <Tag color="orange">升级 {hoursLabel(record.escalateAfterBreachHours)}</Tag>
+                                    </Space>
+                                  </Space>
+                                )
+                              },
+                            },
+                            {
+                              title: '操作',
+                              width: 190,
+                              render: (_value: unknown, record: SlaPolicy) => (
+                                <Space onClick={(event) => event.stopPropagation()}>
+                                  <Button
+                                    size="small"
+                                    disabled={record.defaultPolicy || !record.enabled || slaPolicyActionLoading}
+                                    onClick={() => void setDefaultSlaPolicy(record)}
+                                  >
+                                    默认
+                                  </Button>
+                                  <Switch
+                                    size="small"
+                                    checked={record.enabled}
+                                    disabled={record.defaultPolicy}
+                                    loading={slaPolicyActionLoading && slaPolicyForm.id === record.id}
+                                    onChange={(checked) => void toggleSlaPolicy(record, checked)}
+                                  />
+                                </Space>
+                              ),
+                            },
+                          ]}
+                        />
+
+                      </Card>
+                    </Col>
+
+                    <Col xs={24} xl={9}>
+                      <Card
+                        title="新建/编辑策略"
+                        extra={
+                          slaPolicyDirty
+                            ? <Tag color="orange">有未保存修改</Tag>
+                            : selectedSlaPolicy
+                              ? <Tag color="green">已保存</Tag>
+                              : <Tag>新建草稿</Tag>
+                        }
+                      >
+                        <Row gutter={[12, 12]}>
+                          <Col span={24}>
+                            <Typography.Text strong>策略名称</Typography.Text>
+                            <Input
+                              value={slaPolicyForm.policyName}
+                              onChange={(event) => updateSlaPolicyForm({ policyName: event.target.value })}
+                              placeholder="VIP 客户 2 小时响应"
+                              style={{ marginTop: 8 }}
+                            />
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>policyName，最多 64 字。</Typography.Text>
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>启用策略</Typography.Text>
+                            <Select
+                              value={String(slaPolicyForm.enabled)}
+                              onChange={(value) => updateSlaPolicyForm({ enabled: value === 'true' })}
+                              options={[
+                                { value: 'true', label: '启用' },
+                                { value: 'false', label: '停用' },
+                              ]}
+                              style={{ width: '100%', marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>默认策略</Typography.Text>
+                            <Select
+                              value={String(slaPolicyForm.defaultPolicy)}
+                              onChange={(value) => updateSlaPolicyForm({ defaultPolicy: value === 'true' })}
+                              options={[
+                                { value: 'true', label: '设为默认' },
+                                { value: 'false', label: '非默认' },
+                              ]}
+                              style={{ width: '100%', marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>首次响应时限（工作小时）</Typography.Text>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              value={slaPolicyForm.responseHours}
+                              onChange={(event) => updateSlaPolicyForm({ responseHours: Number(event.target.value || 1) })}
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>解决时限（工作小时）</Typography.Text>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              status={slaResolveHoursInvalid ? 'error' : undefined}
+                              value={slaPolicyForm.resolveHours}
+                              onChange={(event) => updateSlaPolicyForm({ resolveHours: event.target.value })}
+                              placeholder="可空"
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>预警阈值（剩余工作小时）</Typography.Text>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              status={slaWarningInvalid ? 'error' : undefined}
+                              value={slaPolicyForm.warningRemainHours}
+                              onChange={(event) => updateSlaPolicyForm({ warningRemainHours: Number(event.target.value || 1) })}
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>升级阈值（超时后工作小时）</Typography.Text>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={9999}
+                              value={slaPolicyForm.escalateAfterBreachHours}
+                              onChange={(event) => updateSlaPolicyForm({ escalateAfterBreachHours: event.target.value })}
+                              placeholder="可空"
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col span={24}>
+                            <Typography.Text strong>绑定日历</Typography.Text>
+                            <Select
+                              showSearch
+                              loading={workCalendarsLoading}
+                              value={slaPolicyForm.calendarId || undefined}
+                              placeholder="请选择工作日历"
+                              optionFilterProp="label"
+                              options={slaCalendarOptions}
+                              onChange={(value) => updateSlaPolicyForm({ calendarId: value })}
+                              style={{ width: '100%', marginTop: 8 }}
+                            />
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>deadline 计算以所选工作日历为准。</Typography.Text>
+                          </Col>
+                          <Col span={24}>
+                            <Alert
+                              type={slaResolveHoursInvalid || slaWarningInvalid ? 'error' : 'info'}
+                              showIcon
+                              message={slaResolveHoursInvalid || slaWarningInvalid ? '策略校验未通过' : '策略校验'}
+                              description={
+                                slaResolveHoursInvalid
+                                  ? '解决时限不能小于首次响应时限。'
+                                  : slaWarningInvalid
+                                    ? '预警阈值必须小于首次响应时限。'
+                                    : slaPolicyForm.defaultPolicy
+                                      ? '默认策略必须保持启用，保存后其他策略会取消默认标记。'
+                                      : '保存后配置立即生效，仅影响后续新建工单。'
+                              }
+                            />
+                          </Col>
+                        </Row>
+
+                        <Space style={{ marginTop: 16 }} wrap>
+                          <Button onClick={openCreateSlaPolicy}>新建草稿</Button>
+                          <Button
+                            type="primary"
+                            loading={slaPolicySaving}
+                            disabled={
+                              !slaPolicyForm.policyName.trim()
+                              || !slaPolicyForm.calendarId
+                              || slaResolveHoursInvalid
+                              || slaWarningInvalid
+                            }
+                            onClick={() => void saveSlaPolicy()}
+                          >
+                            保存策略
+                          </Button>
+                          <Button
+                            danger
+                            disabled={!selectedSlaPolicy || selectedSlaPolicy.defaultPolicy}
+                            icon={<DeleteOutlined />}
+                            onClick={() => selectedSlaPolicy && setSlaPolicyConfirmAction({ type: 'delete', policy: selectedSlaPolicy })}
+                          >
+                            删除
+                          </Button>
+                        </Space>
+                      </Card>
+                    </Col>
+
+                    <Col xs={24} xl={5}>
+                      <Card title="SLA 预览" extra={<Tag color="blue">前端估算</Tag>}>
+                        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                          <Descriptions
+                            bordered
+                            column={1}
+                            size="small"
+                            items={[
+                              { key: 'calendar', label: '绑定日历', children: selectedWorkCalendar?.calendarName || '未选择' },
+                              { key: 'timezone', label: '时区', children: selectedWorkCalendar?.timezone || '-' },
+                              { key: 'workdays', label: '工作日', children: workdayLabel(selectedWorkCalendar?.workdays) },
+                              {
+                                key: 'workTime',
+                                label: '工作时段',
+                                children: selectedWorkCalendar ? `${selectedWorkCalendar.workStartTime}-${selectedWorkCalendar.workEndTime}` : '-',
+                              },
+                            ]}
+                          />
+                          <Descriptions
+                            bordered
+                            column={1}
+                            size="small"
+                            items={[
+                              { key: 'created', label: '建单时间', children: slaPreviewBaseTime.format('YYYY-MM-DD HH:mm') },
+                              { key: 'response', label: '首次响应截止', children: slaPreview.responseDeadline.format('YYYY-MM-DD HH:mm') },
+                              {
+                                key: 'resolve',
+                                label: '解决截止',
+                                children: slaPreview.resolveDeadline ? slaPreview.resolveDeadline.format('YYYY-MM-DD HH:mm') : '未配置',
+                              },
+                            ]}
+                          />
+                          <Timeline
+                            items={[
+                              {
+                                color: 'blue',
+                                children: (
+                                  <span>新建工单：写入策略 ID 与截止时间</span>
+                                ),
+                              },
+                              {
+                                color: 'orange',
+                                children: (
+                                  <span>即将超时：{slaPreview.warningAt.format('YYYY-MM-DD HH:mm')}</span>
+                                ),
+                              },
+                              {
+                                color: 'red',
+                                children: (
+                                  <span>升级提醒：{slaPreview.escalateAt ? slaPreview.escalateAt.format('YYYY-MM-DD HH:mm') : '未配置'}</span>
+                                ),
+                              },
+                            ]}
+                          />
+                        </Space>
+                      </Card>
+                    </Col>
+                  </Row>
+                </>
+              )}
+            </section>
+          ) : activeMenu === '工作日历' ? (
+            <section className="app-content" aria-label="工作日历">
+              <div className="content-title">
+                <div>
+                  <h1>工作日历</h1>
+                  <p>维护 SLA 计算使用的工作日、工作时段和节假日；策略绑定后按该日历计算响应与解决截止时间。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={workCalendarsLoading || holidaysLoading} onClick={() => { void fetchWorkCalendarsPage(); void fetchHolidays(); void fetchCalendarSlaPolicies() }} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  <button className="primary-action" onClick={openCreateWorkCalendar} type="button">
+                    <Plus size={16} />
+                    新建日历
+                  </button>
+                  <button onClick={openCreateHoliday} type="button">
+                    <Plus size={16} />
+                    新增节假日
+                  </button>
+                </div>
+              </div>
+
+              {!isAdmin ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无工作日历管理权限</strong>
+                  <p>非管理员不可新建、编辑、设置默认、删除工作日历或维护节假日。</p>
+                </div>
+              ) : (
+                <>
+                  <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">日历总数</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{workCalendarSummary?.totalCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">工作日历可被 SLA 策略绑定</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">默认日历</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{workCalendarSummary?.defaultCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">默认日历不可直接删除</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">本月节假日</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{holidaysData?.summary.totalCount ?? '--'}</Typography.Title>
+                        <Typography.Text type="secondary">按所选日历和月份统计</Typography.Text>
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12} xl={6}>
+                      <Card>
+                        <Typography.Text type="secondary">绑定策略</Typography.Text>
+                        <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{totalCalendarPolicyCount || '--'}</Typography.Title>
+                        <Typography.Text type="secondary">由 SLA 策略列表按日历派生</Typography.Text>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  <Alert
+                    showIcon
+                    type="info"
+                    style={{ marginBottom: 16 }}
+                    message="工作日历和节假日保存后只影响后续 SLA 计算；历史工单已有响应截止和解决截止不自动重算。"
+                  />
+
+                  {workCalendarError && (
+                    <Alert
+                      showIcon
+                      type="error"
+                      style={{ marginBottom: 16 }}
+                      message={workCalendarError}
+                      action={<Button size="small" onClick={fetchWorkCalendarsPage}>重试</Button>}
+                    />
+                  )}
+
+                  {holidaysError && (
+                    <Alert
+                      showIcon
+                      type="error"
+                      style={{ marginBottom: 16 }}
+                      message={holidaysError}
+                      action={<Button size="small" onClick={fetchHolidays}>重试</Button>}
+                    />
+                  )}
+
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} xl={8}>
+                      <Card title="日历列表">
+                        <Space wrap style={{ width: '100%', marginBottom: 16 }}>
+                          <Input
+                            allowClear
+                            prefix={<SearchOutlined />}
+                            placeholder="日历名称"
+                            style={{ width: 180 }}
+                            value={workCalendarKeyword}
+                            onChange={(event) => setWorkCalendarKeyword(event.target.value)}
+                            onPressEnter={() => void fetchWorkCalendarsPage()}
+                          />
+                          <Select
+                            style={{ width: 126 }}
+                            value={workCalendarDefaultFilter}
+                            onChange={setWorkCalendarDefaultFilter}
+                            options={[
+                              { value: 'ALL', label: '全部日历' },
+                              { value: 'true', label: '默认日历' },
+                              { value: 'false', label: '非默认' },
+                            ]}
+                          />
+                          <Button onClick={resetWorkCalendarFilters}>清空筛选</Button>
+                        </Space>
+
+                        <Table<WorkCalendar>
+                          rowKey="id"
+                          size="middle"
+                          loading={workCalendarsLoading}
+                          dataSource={workCalendarRecords}
+                          pagination={false}
+                          locale={{
+                            emptyText: (
+                              <Empty description="还没有工作日历" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                                <Button type="primary" onClick={openCreateWorkCalendar}>新建日历</Button>
+                              </Empty>
+                            ),
+                          }}
+                          rowClassName={(record) => record.id === workCalendarForm.id ? 'ant-table-row-selected' : ''}
+                          onRow={(record) => ({
+                            onClick: () => selectWorkCalendar(record),
+                          })}
+                          columns={[
+                            {
+                              title: '日历',
+                              dataIndex: 'calendarName',
+                              render: (_value: string, record: WorkCalendar) => {
+                                const policyCount = calendarSlaPolicies.filter((policy) => policy.calendarId === record.id).length
+                                return (
+                                  <Space direction="vertical" size={4}>
+                                    <Space wrap>
+                                      <Typography.Text strong>{record.calendarName}</Typography.Text>
+                                      {record.defaultCalendar && <Tag color="blue">默认</Tag>}
+                                      {policyCount > 0 && <Tag color="gold">绑定 {policyCount} 条策略</Tag>}
+                                    </Space>
+                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                      {record.timezone} · {workdayLabel(record.workdays)} · {record.workStartTime}-{record.workEndTime}
+                                    </Typography.Text>
+                                    <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                      更新：{record.updatedAt ? dayjs(record.updatedAt).format('YYYY-MM-DD HH:mm') : '-'}
+                                    </Typography.Text>
+                                  </Space>
+                                )
+                              },
+                            },
+                            {
+                              title: '操作',
+                              width: 92,
+                              render: (_value: unknown, record: WorkCalendar) => (
+                                <Space onClick={(event) => event.stopPropagation()}>
+                                  <Button
+                                    size="small"
+                                    disabled={record.defaultCalendar || workCalendarActionLoading}
+                                    onClick={() => void setDefaultWorkCalendar(record)}
+                                  >
+                                    默认
+                                  </Button>
+                                </Space>
+                              ),
+                            },
+                          ]}
+                        />
+                      </Card>
+                    </Col>
+
+                    <Col xs={24} xl={8}>
+                      <Card
+                        title="日历编辑"
+                        extra={
+                          workCalendarDirty
+                            ? <Tag color="orange">有未保存修改</Tag>
+                            : selectedCalendarForPage
+                              ? <Tag color="green">已保存</Tag>
+                              : <Tag>新建草稿</Tag>
+                        }
+                      >
+                        <Row gutter={[12, 12]}>
+                          <Col span={24}>
+                            <Typography.Text strong>日历名称</Typography.Text>
+                            <Input
+                              value={workCalendarForm.calendarName}
+                              onChange={(event) => updateWorkCalendarForm({ calendarName: event.target.value })}
+                              placeholder="客服工作日历"
+                              style={{ marginTop: 8 }}
+                            />
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>calendarName，最多 64 字。</Typography.Text>
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>时区</Typography.Text>
+                            <Select
+                              showSearch
+                              value={workCalendarForm.timezone}
+                              onChange={(value) => updateWorkCalendarForm({ timezone: value })}
+                              options={[
+                                { value: 'Asia/Shanghai', label: 'Asia/Shanghai' },
+                                { value: 'Asia/Singapore', label: 'Asia/Singapore' },
+                                { value: 'UTC', label: 'UTC' },
+                              ]}
+                              style={{ width: '100%', marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>默认日历</Typography.Text>
+                            <Select
+                              value={String(workCalendarForm.defaultCalendar)}
+                              onChange={(value) => updateWorkCalendarForm({ defaultCalendar: value === 'true' })}
+                              options={[
+                                { value: 'true', label: '设为默认' },
+                                { value: 'false', label: '非默认' },
+                              ]}
+                              style={{ width: '100%', marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col span={24}>
+                            <Typography.Text strong>工作日</Typography.Text>
+                            <div style={{ marginTop: 8 }}>
+                              <Checkbox.Group
+                                value={workCalendarForm.workdays}
+                                options={weekdayNames.map((label, index) => ({ label, value: index + 1 }))}
+                                onChange={(values) => updateWorkCalendarForm({ workdays: values.map(Number).sort((a, b) => a - b) })}
+                              />
+                            </div>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>workdays，1=周一，7=周日，至少选择一天。</Typography.Text>
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>工作开始时间</Typography.Text>
+                            <Input
+                              type="time"
+                              value={workCalendarForm.workStartTime}
+                              onChange={(event) => updateWorkCalendarForm({ workStartTime: event.target.value })}
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>工作结束时间</Typography.Text>
+                            <Input
+                              type="time"
+                              status={workCalendarTimeInvalid ? 'error' : undefined}
+                              value={workCalendarForm.workEndTime}
+                              onChange={(event) => updateWorkCalendarForm({ workEndTime: event.target.value })}
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col span={24}>
+                            <Alert
+                              showIcon
+                              type={workCalendarTimeInvalid || workCalendarForm.workdays.length === 0 ? 'error' : 'info'}
+                              message={workCalendarTimeInvalid || workCalendarForm.workdays.length === 0 ? '日历校验未通过' : '保存影响范围'}
+                              description={
+                                workCalendarTimeInvalid
+                                  ? '工作开始时间必须早于工作结束时间。'
+                                  : workCalendarForm.workdays.length === 0
+                                    ? '至少选择一个工作日。'
+                                    : '保存后只影响后续 SLA 计算，历史工单已有截止时间保持不变。'
+                              }
+                            />
+                          </Col>
+                        </Row>
+
+                        <Space style={{ marginTop: 16 }} wrap>
+                          <Button onClick={openCreateWorkCalendar}>新建草稿</Button>
+                          <Button
+                            type="primary"
+                            loading={workCalendarSaving}
+                            disabled={!workCalendarForm.calendarName.trim() || workCalendarForm.workdays.length === 0 || workCalendarTimeInvalid}
+                            onClick={() => void saveWorkCalendar()}
+                          >
+                            保存日历
+                          </Button>
+                          <Button
+                            danger
+                            disabled={!selectedCalendarForPage || Boolean(workCalendarDeleteBlockedReason)}
+                            icon={<DeleteOutlined />}
+                            onClick={() => selectedCalendarForPage && setWorkCalendarConfirmAction({ type: 'delete-calendar', calendar: selectedCalendarForPage })}
+                          >
+                            删除日历
+                          </Button>
+                          {workCalendarDeleteBlockedReason && <Tag color="orange">{workCalendarDeleteBlockedReason}</Tag>}
+                        </Space>
+                      </Card>
+                    </Col>
+
+                    <Col xs={24} xl={8}>
+                      <Card
+                        title="节假日"
+                        extra={
+                          <Button
+                            size="small"
+                            loading={holidayImporting}
+                            disabled={!workCalendarForm.id || holidaysLoading}
+                            onClick={() => void importNationalHolidays()}
+                          >
+                            导入 {holidayImportYear} 法定节假日
+                          </Button>
+                        }
+                      >
+                        <Space wrap style={{ width: '100%', marginBottom: 16 }}>
+                          <DatePicker
+                            picker="month"
+                            value={holidayMonthValue}
+                            onChange={(value) => {
+                              if (value) setHolidayMonth(value.format('YYYY-MM'))
+                            }}
+                            allowClear={false}
+                          />
+                          <Input
+                            allowClear
+                            placeholder="节假日名称"
+                            style={{ width: 150 }}
+                            value={holidayKeyword}
+                            onChange={(event) => setHolidayKeyword(event.target.value)}
+                            onPressEnter={() => void fetchHolidays()}
+                          />
+                          <Button onClick={openCreateHoliday}>新增</Button>
+                        </Space>
+                        <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
+                          快捷导入从三方节假日接口获取所选年份放假日期；补班日当前不单独建模。
+                        </Typography.Text>
+
+                        <Table<Holiday>
+                          rowKey="id"
+                          size="small"
+                          loading={holidaysLoading}
+                          dataSource={holidayRecords}
+                          pagination={false}
+                          locale={{
+                            emptyText: (
+                              <Empty description="当前月份暂无节假日" image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                                <Button type="primary" onClick={openCreateHoliday}>新增节假日</Button>
+                              </Empty>
+                            ),
+                          }}
+                          onRow={(record) => ({
+                            onClick: () => selectHoliday(record),
+                          })}
+                          columns={[
+                            { title: '日期', dataIndex: 'holidayDate', width: 112 },
+                            { title: '名称', dataIndex: 'holidayName' },
+                            {
+                              title: '操作',
+                              width: 120,
+                              render: (_value: unknown, record: Holiday) => (
+                                <Space onClick={(event) => event.stopPropagation()}>
+                                  <Button size="small" onClick={() => selectHoliday(record)}>编辑</Button>
+                                  <Button
+                                    size="small"
+                                    danger
+                                    disabled={workCalendarActionLoading}
+                                    onClick={() => setWorkCalendarConfirmAction({ type: 'delete-holiday', holiday: record })}
+                                  >
+                                    删除
+                                  </Button>
+                                </Space>
+                              ),
+                            },
+                          ]}
+                        />
+
+                        <Card size="small" title="新增/编辑节假日" style={{ marginTop: 16 }}>
+                          <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                            <DatePicker
+                              value={holidayDateValue}
+                              onChange={(value) => updateHolidayForm({ holidayDate: value ? value.format('YYYY-MM-DD') : '' })}
+                              style={{ width: '100%' }}
+                              allowClear={false}
+                            />
+                            <Input
+                              value={holidayForm.holidayName}
+                              onChange={(event) => updateHolidayForm({ holidayName: event.target.value })}
+                              placeholder="国庆节"
+                            />
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>字段按当前后端：holidayDate + holidayName。</Typography.Text>
+                            <Space wrap>
+                              <Button onClick={openCreateHoliday}>新建草稿</Button>
+                              <Button
+                                type="primary"
+                                loading={holidaySaving}
+                                disabled={!holidayForm.calendarId || !holidayForm.holidayDate || !holidayForm.holidayName.trim()}
+                                onClick={() => void saveHoliday()}
+                              >
+                                保存节假日
+                              </Button>
+                              {holidayDirty && <Tag color="orange">有未保存修改</Tag>}
+                            </Space>
+                          </Space>
+                        </Card>
+                      </Card>
+                    </Col>
+                  </Row>
+
+                  <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+                    <Col xs={24} xl={14}>
+                      <Card
+                        title="月历预览"
+                        extra={
+                          <DatePicker
+                            picker="month"
+                            size="small"
+                            value={holidayMonthValue}
+                            onChange={(value) => {
+                              if (value) setHolidayMonth(value.format('YYYY-MM'))
+                            }}
+                            allowClear={false}
+                            style={{ width: 128 }}
+                          />
+                        }
+                      >
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 8 }}>
+                          {weekdayNames.map((name) => (
+                            <Typography.Text key={name} type="secondary" style={{ textAlign: 'center', fontSize: 12, fontWeight: 700 }}>
+                              {name}
+                            </Typography.Text>
+                          ))}
+                          {monthCells.map((cell) => (
+                            <div
+                              key={cell.dateKey}
+                              style={{
+                                minHeight: 58,
+                                border: cell.isToday ? '2px solid #2563eb' : cell.isWorkday ? '1px solid #bfdbfe' : '1px solid #e5e7eb',
+                                borderRadius: 8,
+                                padding: 8,
+                                background: !cell.inMonth ? '#f8fafc' : cell.holidayName ? '#fff7ed' : cell.isWorkday ? '#dbeafe' : '#fff',
+                                color: !cell.inMonth ? '#94a3b8' : '#111827',
+                              }}
+                            >
+                              <Typography.Text strong>{cell.date.date()}</Typography.Text>
+                              <div style={{ marginTop: 4 }}>
+                                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                  {cell.holidayName || (cell.isWorkday && selectedCalendarForPage ? `${selectedCalendarForPage.workStartTime}-${selectedCalendarForPage.workEndTime}` : weekdayNames[calendarDayNumber(cell.date) - 1])}
+                                </Typography.Text>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    </Col>
+                    <Col xs={24} xl={10}>
+                      <Card
+                        title="SLA 计算示例"
+                        extra={(
+                          <Space size={8}>
+                            <Tag color="green">工作小时</Tag>
+                            <Button
+                              size="small"
+                              onClick={() => {
+                                setCalendarPreviewCreatedAt(calendarPreviewBaseTime.format('YYYY-MM-DDTHH:mm:ss'))
+                                setCalendarPreviewResponseHours('2')
+                                setCalendarPreviewResolveHours('16')
+                              }}
+                            >
+                              重置
+                            </Button>
+                          </Space>
+                        )}
+                      >
+                        <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
+                          <Col xs={24} md={12}>
+                            <Typography.Text strong>建单时间</Typography.Text>
+                            <DatePicker
+                              showTime={{ format: 'HH:mm' }}
+                              value={calendarPreviewCreatedAtValue}
+                              onChange={(value) => {
+                                setCalendarPreviewCreatedAt((value || calendarPreviewBaseTime).format('YYYY-MM-DDTHH:mm:ss'))
+                              }}
+                              format="YYYY-MM-DD HH:mm"
+                              allowClear={false}
+                              style={{ width: '100%', marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={12} md={6}>
+                            <Typography.Text strong>响应小时</Typography.Text>
+                            <Input
+                              type="number"
+                              min={1}
+                              step={0.5}
+                              value={calendarPreviewResponseHours}
+                              onChange={(event) => setCalendarPreviewResponseHours(event.target.value)}
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                          <Col xs={12} md={6}>
+                            <Typography.Text strong>解决小时</Typography.Text>
+                            <Input
+                              type="number"
+                              min={1}
+                              step={0.5}
+                              value={calendarPreviewResolveHours}
+                              onChange={(event) => setCalendarPreviewResolveHours(event.target.value)}
+                              style={{ marginTop: 8 }}
+                            />
+                          </Col>
+                        </Row>
+                        <Descriptions
+                          bordered
+                          size="small"
+                          column={1}
+                          items={[
+                            { key: 'calendar', label: '工作日历', children: selectedCalendarForPage?.calendarName || '未选择' },
+                            { key: 'created', label: '建单时间', children: calendarPreviewCreatedAtValue.format('YYYY-MM-DD HH:mm') },
+                            { key: 'start', label: '起算时间', children: calendarSlaExample.startAt.format('YYYY-MM-DD HH:mm') },
+                            { key: 'response', label: `${calendarPreviewResponseHoursValue} 工作小时响应截止`, children: calendarSlaExample.responseDeadline.format('YYYY-MM-DD HH:mm') },
+                            { key: 'resolve', label: `${calendarPreviewResolveHoursValue} 工作小时解决截止`, children: calendarSlaExample.resolveDeadline.format('YYYY-MM-DD HH:mm') },
+                          ]}
+                        />
+                        <Alert
+                          showIcon
+                          type="success"
+                          style={{ marginTop: 16 }}
+                          message="实际截止时间以后端 SlaDeadlineService 写入结果为准。"
+                        />
+                      </Card>
+                    </Col>
+                  </Row>
+                </>
+              )}
+            </section>
           ) : activeMenu === '用户管理' ? (
             <section className="app-content user-page" aria-label="用户管理">
               <div className="content-title">
@@ -4876,6 +8448,86 @@ function App() {
                 </button>
                 <button className="primary-action" disabled={mailboxActionLoading} onClick={submitMailboxConfirm} type="button">
                   {mailboxActionLoading ? '处理中...' : mailboxConfirmAction.actionLabel}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {assignmentConfirmAction && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="assignment-confirm-title">
+            <div className="confirm-modal">
+              <h3 id="assignment-confirm-title">删除分配规则</h3>
+              <p>删除后该规则不再参与新工单自动匹配，历史工单已分配的处理人保持不变。</p>
+              <div className="confirm-target">
+                <strong>{assignmentConfirmAction.rule.ruleName}</strong>
+                <span>{assignmentRuleText(assignmentConfirmAction.rule)}</span>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={assignmentActionLoading} onClick={() => setAssignmentConfirmAction(null)} type="button">
+                  取消
+                </button>
+                <button className="primary-action" disabled={assignmentActionLoading} onClick={submitAssignmentConfirm} type="button">
+                  {assignmentActionLoading ? '删除中...' : '确认删除'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {slaPolicyConfirmAction && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="sla-policy-confirm-title">
+            <div className="confirm-modal">
+              <h3 id="sla-policy-confirm-title">删除 SLA 策略</h3>
+              <p>删除后该策略不再用于后续新工单 SLA 计算，历史工单已有的 SLA 字段保持不变。</p>
+              <div className="confirm-target">
+                <strong>{slaPolicyConfirmAction.policy.policyName}</strong>
+                <span>
+                  响应 {hoursLabel(slaPolicyConfirmAction.policy.responseHours)}
+                  ，解决 {hoursLabel(slaPolicyConfirmAction.policy.resolveHours)}
+                </span>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={slaPolicyActionLoading} onClick={() => setSlaPolicyConfirmAction(null)} type="button">
+                  取消
+                </button>
+                <button className="primary-action" disabled={slaPolicyActionLoading} onClick={submitSlaPolicyConfirm} type="button">
+                  {slaPolicyActionLoading ? '删除中...' : '确认删除'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {workCalendarConfirmAction && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="work-calendar-confirm-title">
+            <div className="confirm-modal">
+              <h3 id="work-calendar-confirm-title">
+                {workCalendarConfirmAction.type === 'delete-calendar' ? '删除工作日历' : '删除节假日'}
+              </h3>
+              <p>
+                {workCalendarConfirmAction.type === 'delete-calendar'
+                  ? '删除后该日历不再用于后续 SLA 计算，历史工单已有截止时间保持不变。'
+                  : '删除后该日期不再作为后续 SLA 计算的节假日，历史工单已有截止时间保持不变。'}
+              </p>
+              <div className="confirm-target">
+                <strong>
+                  {workCalendarConfirmAction.type === 'delete-calendar'
+                    ? workCalendarConfirmAction.calendar.calendarName
+                    : workCalendarConfirmAction.holiday.holidayName}
+                </strong>
+                <span>
+                  {workCalendarConfirmAction.type === 'delete-calendar'
+                    ? `${workdayLabel(workCalendarConfirmAction.calendar.workdays)} · ${workCalendarConfirmAction.calendar.workStartTime}-${workCalendarConfirmAction.calendar.workEndTime}`
+                    : workCalendarConfirmAction.holiday.holidayDate}
+                </span>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={workCalendarActionLoading} onClick={() => setWorkCalendarConfirmAction(null)} type="button">
+                  取消
+                </button>
+                <button className="primary-action" disabled={workCalendarActionLoading} onClick={submitWorkCalendarConfirm} type="button">
+                  {workCalendarActionLoading ? '删除中...' : '确认删除'}
                 </button>
               </div>
             </div>

@@ -41,6 +41,7 @@ public class TicketController {
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) Boolean slaBreached,
             @RequestParam(required = false) Long assigneeId,
             @RequestParam(required = false) Long mailboxId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdFrom,
@@ -48,7 +49,7 @@ public class TicketController {
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         return BasicResult.ok(ticketBizService.pageTickets(
-                principal, keyword, status, assigneeId, mailboxId, createdFrom, createdTo, page, size));
+                principal, keyword, status, slaBreached, assigneeId, mailboxId, createdFrom, createdTo, page, size));
     }
 
     @Operation(summary = "工单详情")

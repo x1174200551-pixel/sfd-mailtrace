@@ -7,6 +7,8 @@ import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleM
 import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleService;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
+import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
@@ -102,6 +104,7 @@ public class TicketBizService {
     private final MailSendService mailSendService;
     private final TicketAttachmentMapper ticketAttachmentMapper;
     private final AssignmentRuleService assignmentRuleService;
+    private final SlaDeadlineService slaDeadlineService;
 
     // ==================== 创建工单（系统内部调用） ====================
 
@@ -129,7 +132,7 @@ public class TicketBizService {
         String ticketNo = ticketNumberRuleService.generateNextTicketNo();
         log.info("生成工单号 ticketNo={} mailboxId={} customer={} subject={}", ticketNo, mailboxId, customerEmail, subject);
 
-        // 2、创建工单
+        // 2、创建工单，并在入库前计算首次响应/解决 SLA 截止时间。
         TicketEntity ticket = new TicketEntity();
         ticket.setTicketNo(ticketNo);
         ticket.setSubject(subject);
@@ -141,6 +144,7 @@ public class TicketBizService {
         ticket.setSlaBreached(false);
         ticket.setSlaWarningSent(false);
         ticket.setSlaBreachNotified(false);
+        applySlaDeadlines(ticket, mailSentAt);
         ticket.setCreatedBy(OPERATOR_SYSTEM);
         ticket.setUpdatedBy(OPERATOR_SYSTEM);
         ticketMapper.insert(ticket);
@@ -236,9 +240,10 @@ public class TicketBizService {
         msg.setUpdatedBy(OPERATOR_SYSTEM);
         ticketMessageMapper.insert(msg);
 
-        // 2、更新 lastCustomerMailAt
+        // 2、更新客户最后来信时间；状态事件仍记录为系统处理时间。
+        LocalDateTime customerMailAt = msg.getSentAt();
         LocalDateTime now = LocalDateTime.now();
-        updateTicket(ticket.getId(), Map.of("last_customer_mail_at", now));
+        updateTicket(ticket.getId(), Map.of("last_customer_mail_at", customerMailAt));
 
         // 3、状态流转
         String oldStatus = ticket.getStatus();
@@ -270,14 +275,14 @@ public class TicketBizService {
      * 工单分页查询，ADMIN/AGENT 均可查看。
      */
     public TicketPageResponse pageTickets(CurrentUserPrincipal principal, String keyword, String status,
-                                          Long assigneeId, Long mailboxId,
+                                          Boolean slaBreached, Long assigneeId, Long mailboxId,
                                           LocalDateTime createdFrom, LocalDateTime createdTo,
                                           Integer page, Integer size) {
         assertAgentOrAdmin(principal);
 
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
-        LambdaQueryWrapper<TicketEntity> wrapper = buildPageQuery(keyword, status, assigneeId, mailboxId, createdFrom, createdTo)
+        LambdaQueryWrapper<TicketEntity> wrapper = buildPageQuery(keyword, status, slaBreached, assigneeId, mailboxId, createdFrom, createdTo)
                 .orderByDesc(TicketEntity::getCreatedAt)
                 .orderByDesc(TicketEntity::getId);
 
@@ -357,7 +362,7 @@ public class TicketBizService {
 
     public TicketStats stats() {
         return new TicketStats(
-                ticketMapper.selectCount(null),
+                ticketMapper.countActiveTotal(),
                 ticketMapper.countByStatus("PENDING_ASSIGN"),
                 ticketMapper.countByStatus("PROCESSING"),
                 ticketMapper.countByStatus("WAITING_CUSTOMER"),
@@ -591,6 +596,23 @@ public class TicketBizService {
         autoAssignByMailboxDefault(ticket, mailbox, mailboxId);
     }
 
+    private void applySlaDeadlines(TicketEntity ticket, LocalDateTime mailSentAt) {
+        // 1、以客户来信时间作为 SLA 起算时间；缺失时使用当前建单时间兜底。
+        LocalDateTime startAt = mailSentAt != null ? mailSentAt : LocalDateTime.now();
+        ticket.setLastCustomerMailAt(startAt);
+        try {
+            // 2、调用 SLA 计算服务，写入命中策略和首次响应/解决截止时间。
+            SlaDeadlineResult deadline = slaDeadlineService.calculateForNewTicket(startAt);
+            ticket.setSlaPolicyId(deadline.policyId());
+            ticket.setSlaResponseDeadline(deadline.responseDeadline());
+            ticket.setSlaResolveDeadline(deadline.resolveDeadline());
+        } catch (Exception exception) {
+            // 3、SLA 配置异常不阻断收信建单，后续可由配置检查或提醒任务补偿处理。
+            log.warn("SLA 截止时间计算失败，跳过本次 SLA 写入 ticketNo={} startAt={}",
+                    ticket.getTicketNo(), startAt, exception);
+        }
+    }
+
     private void autoAssignByMailboxDefault(TicketEntity ticket, MailboxEntity mailbox, Long mailboxId) {
         // 1、邮箱不存在或未配置默认处理人时，工单保持待分配。
         if (mailbox == null || mailbox.getDefaultAssigneeId() == null) {
@@ -686,6 +708,9 @@ public class TicketBizService {
         if (fields.containsKey("last_agent_reply_at")) {
             update.setLastAgentReplyAt((LocalDateTime) fields.get("last_agent_reply_at"));
         }
+        if (fields.containsKey("last_customer_mail_at")) {
+            update.setLastCustomerMailAt((LocalDateTime) fields.get("last_customer_mail_at"));
+        }
         if (fields.containsKey("closed_at")) {
             update.setClosedAt((LocalDateTime) fields.get("closed_at"));
         }
@@ -693,7 +718,7 @@ public class TicketBizService {
         ticketMapper.updateById(update);
     }
 
-    private LambdaQueryWrapper<TicketEntity> buildPageQuery(String keyword, String status,
+    private LambdaQueryWrapper<TicketEntity> buildPageQuery(String keyword, String status, Boolean slaBreached,
                                                             Long assigneeId, Long mailboxId,
                                                             LocalDateTime createdFrom, LocalDateTime createdTo) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<>();
@@ -709,6 +734,9 @@ public class TicketBizService {
         String normalizedStatus = normalize(status).toUpperCase();
         if (VALID_STATUSES.contains(normalizedStatus)) {
             wrapper.eq(TicketEntity::getStatus, normalizedStatus);
+        }
+        if (slaBreached != null) {
+            wrapper.eq(TicketEntity::getSlaBreached, slaBreached);
         }
         if (assigneeId != null) {
             wrapper.eq(TicketEntity::getAssigneeId, assigneeId);

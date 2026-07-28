@@ -8,6 +8,9 @@ import org.apache.ibatis.annotations.Select;
 @Mapper
 public interface TicketMapper extends BaseMapper<TicketEntity> {
 
+    @Select("SELECT COUNT(1) FROM mt_ticket WHERE is_deleted = 0")
+    long countActiveTotal();
+
     @Select("SELECT COUNT(1) FROM mt_ticket WHERE is_deleted = 0 AND status = #{status}")
     long countByStatus(String status);
 

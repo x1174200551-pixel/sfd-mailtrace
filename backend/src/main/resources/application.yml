@@ -49,6 +49,9 @@ mailtrace:
       expires-in-seconds: 7200
   mail:
     fetch-fixed-delay-ms: 60000
+  holiday:
+    national-api-url-template: https://api.jiejiariapi.com/v1/holidays/{year}
+    national-api-timeout-ms: 5000
   storage:
     endpoint: http://127.0.0.1:9000
     access-key: minioadmin

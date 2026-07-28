@@ -6,6 +6,12 @@ server:
 spring:
   application:
     name: mailtrace-backend
+  jackson:
+    time-zone: Asia/Shanghai
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/mailtrace?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
     username: root
@@ -43,3 +49,11 @@ mailtrace:
       expires-in-seconds: 7200
   mail:
     fetch-fixed-delay-ms: 60000
+  holiday:
+    national-api-url-template: https://api.jiejiariapi.com/v1/holidays/{year}
+    national-api-timeout-ms: 5000
+  storage:
+    endpoint: http://127.0.0.1:9000
+    access-key: minioadmin
+    secret-key: minioadmin123
+    bucket: mailtrace-attachments
