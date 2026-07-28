@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapStoreSupport;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
@@ -38,10 +39,8 @@ import java.util.Properties;
 public class MailboxService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
     private static final int CODE_CONFLICT = 40901;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String STATUS_UNKNOWN = "UNKNOWN";
     private static final String STATUS_OK = "OK";
     private static final String STATUS_ERROR = "ERROR";
@@ -53,6 +52,7 @@ public class MailboxService {
     private final UserMapper userMapper;
     private final OperationLogMapper operationLogMapper;
     private final MailPasswordCipher mailPasswordCipher;
+    private final PermissionService permissionService;
 
     /**
      * 分页查询邮箱配置列表。
@@ -60,7 +60,7 @@ public class MailboxService {
     public MailboxPageResponse pageMailboxes(CurrentUserPrincipal principal, String keyword, String status,
                                              Boolean enabled, Integer page, Integer size) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "mailbox:read", "无权查看邮箱配置");
         // 2、规范化分页参数并按关键字、启用状态、连接状态构建查询条件
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
@@ -86,7 +86,7 @@ public class MailboxService {
     @Transactional
     public MailboxVO createMailbox(CurrentUserPrincipal principal, MailboxSaveRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "mailbox:create", "无权新建邮箱配置");
         // 2、校验邮箱地址唯一性和默认处理人合法性
         String emailAddress = normalizeLower(request.getEmailAddress());
         ensureEmailUnique(emailAddress, null);
@@ -112,7 +112,7 @@ public class MailboxService {
     @Transactional
     public MailboxVO updateMailbox(CurrentUserPrincipal principal, Long id, MailboxSaveRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "mailbox:update", "无权编辑邮箱配置");
         // 2、查询目标邮箱并校验邮箱地址唯一性
         MailboxEntity existing = requireMailbox(id);
         String emailAddress = normalizeLower(request.getEmailAddress());
@@ -137,7 +137,7 @@ public class MailboxService {
     @Transactional
     public MailboxVO updateEnabled(CurrentUserPrincipal principal, Long id, MailboxEnabledRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "mailbox:enable", "无权启停邮箱配置");
         // 2、查询目标邮箱是否存在
         MailboxEntity existing = requireMailbox(id);
         // 3、更新启用状态和更新人
@@ -157,7 +157,7 @@ public class MailboxService {
     @Transactional
     public void deleteMailbox(CurrentUserPrincipal principal, Long id) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "mailbox:delete", "无权删除邮箱配置");
         // 2、查询目标邮箱是否存在
         MailboxEntity existing = requireMailbox(id);
         // 3、执行逻辑删除，保留历史引用数据
@@ -173,7 +173,7 @@ public class MailboxService {
     public MailboxConnectionTestResponse testSavedMailbox(CurrentUserPrincipal principal, Long id, String testType) {
         long start = System.currentTimeMillis();
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "mailbox:test_connection", "无权测试邮箱连接");
         // 2、读取已保存邮箱并解密 IMAP/SMTP 密码
         MailboxEntity mailbox = requireMailbox(id);
         log.info("开始已保存邮箱连接测试 mailboxId={} email={} testType={} operator={}",
@@ -204,7 +204,7 @@ public class MailboxService {
     public MailboxConnectionTestResponse testDraftMailbox(CurrentUserPrincipal principal, MailboxConnectionTestRequest request) {
         long start = System.currentTimeMillis();
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "mailbox:test_connection", "无权测试邮箱连接");
         // 2、规范化连接测试类型
         String testType = normalizeTestType(request.getTestType());
         log.info("开始草稿邮箱连接测试 testType={} imap={}:{} smtp={}:{} operator={}",
@@ -461,12 +461,6 @@ public class MailboxService {
         UserEntity user = userMapper.selectById(assigneeId);
         if (user == null) {
             throw new BusinessException(CODE_BAD_REQUEST, "默认处理人不存在");
-        }
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作邮箱配置");
         }
     }
 

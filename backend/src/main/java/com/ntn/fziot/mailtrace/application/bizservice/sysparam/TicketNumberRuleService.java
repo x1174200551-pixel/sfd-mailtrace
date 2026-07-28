@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.sysparam;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.sysparam.TicketNumberRuleRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sysparam.TicketNumberRuleVO;
@@ -28,8 +29,6 @@ import java.util.Map;
 public class TicketNumberRuleService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String PARAM_ENABLED = "ticket.no.enabled";
     private static final String PARAM_PREFIX = "ticket.no.prefix";
     private static final String PARAM_DATE_FORMAT = "ticket.no.date_format";
@@ -42,13 +41,14 @@ public class TicketNumberRuleService {
     private final SysParamMapper sysParamMapper;
     private final TicketSeqMapper ticketSeqMapper;
     private final OperationLogMapper operationLogMapper;
+    private final PermissionService permissionService;
 
     /**
      * 查询当前工单编号规则，并计算下一工单号预览。
      */
     public TicketNumberRuleVO getRule(CurrentUserPrincipal principal) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "ticket_number_rule:read", "无权查看编号规则");
         // 2、读取系统参数表中的编号规则配置
         TicketNumberRuleConfig config = loadConfig();
         // 3、按当前日期维度查询已使用流水并组装预览
@@ -60,7 +60,7 @@ public class TicketNumberRuleService {
      */
     public TicketNumberRuleVO previewRule(CurrentUserPrincipal principal, TicketNumberRuleRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "ticket_number_rule:preview", "无权预览编号规则");
         // 2、规范化并校验页面传入的编号规则
         TicketNumberRuleConfig config = toConfig(request);
         // 3、按规则日期维度查询已使用流水并返回预览结果
@@ -73,7 +73,7 @@ public class TicketNumberRuleService {
     @Transactional
     public TicketNumberRuleVO updateRule(CurrentUserPrincipal principal, TicketNumberRuleRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "ticket_number_rule:update", "无权编辑编号规则");
         // 2、规范化并校验页面传入的编号规则
         TicketNumberRuleConfig config = toConfig(request);
         // 3、逐项写入系统参数表，业务页面不暴露内部参数键
@@ -212,12 +212,6 @@ public class TicketNumberRuleService {
                     .set(TicketSeqEntity::getUpdatedBy, OPERATOR_SYSTEM));
         }
         return config.composeTicketNo(dateKey, formatSeq(nextValue, config.seqLength()));
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作编号规则");
-        }
     }
 
     private void recordLog(CurrentUserPrincipal principal, String actionCode, String bizId, String content) {

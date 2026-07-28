@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.calendar;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarDefaultRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarListResponse;
@@ -37,10 +38,8 @@ import java.util.stream.Collectors;
 public class WorkCalendarService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
     private static final int CODE_CONFLICT = 40901;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String MODULE_WORK_CALENDAR = "WORK_CALENDAR";
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -48,13 +47,14 @@ public class WorkCalendarService {
     private final SlaPolicyMapper slaPolicyMapper;
     private final HolidayMapper holidayMapper;
     private final OperationLogMapper operationLogMapper;
+    private final PermissionService permissionService;
 
     /**
      * 查询工作日历列表。
      */
     public WorkCalendarListResponse listCalendars(CurrentUserPrincipal principal, String keyword, Boolean defaultCalendar) {
         // 1、仅管理员可进入工作日历配置。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "work_calendar:read", "无权查看工作日历");
 
         // 2、按名称和默认标识筛选，默认日历优先展示。
         LambdaQueryWrapper<WorkCalendarEntity> wrapper = buildQuery(keyword, defaultCalendar)
@@ -74,7 +74,7 @@ public class WorkCalendarService {
     @Transactional
     public WorkCalendarVO createCalendar(CurrentUserPrincipal principal, WorkCalendarSaveRequest request) {
         // 1、校验管理员权限、工作日、时区和工作时段。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "work_calendar:create", "无权新建工作日历");
         CalendarConfig config = validateCalendar(request);
         boolean defaultCalendar = Boolean.TRUE.equals(request.getDefaultCalendar());
         ensureDefaultCalendarUnique(defaultCalendar, null);
@@ -97,7 +97,7 @@ public class WorkCalendarService {
     @Transactional
     public WorkCalendarVO updateCalendar(CurrentUserPrincipal principal, Long id, WorkCalendarSaveRequest request) {
         // 1、校验权限、日历存在性和字段组合。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "work_calendar:update", "无权编辑工作日历");
         WorkCalendarEntity existing = requireCalendar(id);
         CalendarConfig config = validateCalendar(request);
         boolean defaultCalendar = Boolean.TRUE.equals(request.getDefaultCalendar());
@@ -120,7 +120,7 @@ public class WorkCalendarService {
     @Transactional
     public WorkCalendarVO updateDefault(CurrentUserPrincipal principal, Long id, WorkCalendarDefaultRequest request) {
         // 1、校验权限和日历存在性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "work_calendar:default", "无权设置默认工作日历");
         WorkCalendarEntity existing = requireCalendar(id);
 
         // 2、该接口只允许设置新的默认日历，不允许把系统置为无默认日历。
@@ -150,7 +150,7 @@ public class WorkCalendarService {
     @Transactional
     public void deleteCalendar(CurrentUserPrincipal principal, Long id) {
         // 1、校验权限和日历存在性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "work_calendar:delete", "无权删除工作日历");
         WorkCalendarEntity existing = requireCalendar(id);
 
         // 2、默认日历不能删除；已被 SLA 策略或节假日引用的日历也不能删除。
@@ -312,12 +312,6 @@ public class WorkCalendarService {
 
     private String formatTime(LocalTime time) {
         return time == null ? null : time.format(TIME_FORMATTER);
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作工作日历");
-        }
     }
 
     private String normalize(String value) {

@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.holiday;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.HolidaySaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.HolidayVO;
@@ -42,6 +43,8 @@ class HolidayServiceTest {
     private WorkCalendarMapper workCalendarMapper;
     @Mock
     private OperationLogMapper operationLogMapper;
+    @Mock
+    private PermissionService permissionService;
 
     @InjectMocks
     private HolidayService holidayService;
@@ -59,8 +62,32 @@ class HolidayServiceTest {
 
     @BeforeEach
     void setUp() {
+        allowAdminAndAgentOperationalPermissions();
         lenient().when(holidayMapper.selectCount(any())).thenReturn(0L);
         lenient().when(workCalendarMapper.selectById(10L)).thenReturn(calendar(10L));
+    }
+
+    private void allowAdminAndAgentOperationalPermissions() {
+        lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String permissionCode = invocation.getArgument(1);
+            String message = invocation.getArgument(2);
+            if (principal == null) {
+                throw new BusinessException(40302, "未登录");
+            }
+            if ("ADMIN".equals(principal.roleCode()) || isAgentOperationalPermission(principal, permissionCode)) {
+                return null;
+            }
+            throw new BusinessException(40302, message);
+        }).when(permissionService).assertPermission(any(), any(), any());
+    }
+
+    private boolean isAgentOperationalPermission(CurrentUserPrincipal principal, String permissionCode) {
+        return "AGENT".equals(principal.roleCode())
+                && (permissionCode.startsWith("ticket:")
+                || permissionCode.startsWith("ticket_attachment:")
+                || "customer:read".equals(permissionCode)
+                || "dashboard:read".equals(permissionCode));
     }
 
     @Test
@@ -145,7 +172,7 @@ class HolidayServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> holidayService.listHolidays(agent, null, null, null, null));
 
-        assertTrue(ex.getMessage().contains("仅管理员"));
+        assertTrue(ex.getMessage().contains("无权查看节假日"));
     }
 
     @Test

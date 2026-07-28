@@ -2,6 +2,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.holiday;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +12,9 @@ import java.net.URI;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 
 class NationalHolidayPresetServiceTest {
 
@@ -65,13 +69,13 @@ class NationalHolidayPresetServiceTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.getPreset(agent, 2026));
 
-        assertTrue(ex.getMessage().contains("仅管理员"));
+        assertTrue(ex.getMessage().contains("无权导入法定节假日模板"));
     }
 
     @Test
     void getPreset_whenProviderUnavailable_shouldReturnBusinessError() {
         NationalHolidayPresetService service = new NationalHolidayPresetService(
-                new ObjectMapper(), "https://provider.test/holidays/{year}", 1000) {
+                new ObjectMapper(), permissionService(), "https://provider.test/holidays/{year}", 1000) {
             @Override
             String fetchProviderJson(URI providerUri) throws IOException {
                 throw new IOException("provider down");
@@ -84,11 +88,27 @@ class NationalHolidayPresetServiceTest {
     }
 
     private NationalHolidayPresetService serviceWithJson(String json) {
-        return new NationalHolidayPresetService(new ObjectMapper(), "https://provider.test/holidays/{year}", 1000) {
+        return new NationalHolidayPresetService(new ObjectMapper(), permissionService(), "https://provider.test/holidays/{year}", 1000) {
             @Override
             String fetchProviderJson(URI providerUri) {
                 return json;
             }
         };
+    }
+
+    private PermissionService permissionService() {
+        PermissionService permissionService = mock(PermissionService.class);
+        lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String message = invocation.getArgument(2);
+            if (principal == null) {
+                throw new BusinessException(40302, "未登录");
+            }
+            if ("ADMIN".equals(principal.roleCode())) {
+                return null;
+            }
+            throw new BusinessException(40302, message);
+        }).when(permissionService).assertPermission(any(), any(), any());
+        return permissionService;
     }
 }

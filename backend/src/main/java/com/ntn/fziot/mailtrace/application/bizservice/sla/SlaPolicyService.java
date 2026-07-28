@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.sla;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyDefaultRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyEnabledRequest;
@@ -26,15 +27,14 @@ import java.util.List;
 public class SlaPolicyService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
     private static final int CODE_CONFLICT = 40901;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String MODULE_SLA_POLICY = "SLA_POLICY";
 
     private final SlaPolicyMapper slaPolicyMapper;
     private final WorkCalendarMapper workCalendarMapper;
     private final OperationLogMapper operationLogMapper;
+    private final PermissionService permissionService;
 
     /**
      * 查询 SLA 策略列表。
@@ -42,7 +42,7 @@ public class SlaPolicyService {
     public SlaPolicyListResponse listPolicies(CurrentUserPrincipal principal, String keyword,
                                               Boolean enabled, Boolean defaultPolicy) {
         // 1、仅管理员可进入 SLA 策略配置。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "sla_policy:read", "无权查看 SLA 策略");
 
         // 2、按筛选条件查询策略，并保持默认策略、启用策略优先展示。
         LambdaQueryWrapper<SlaPolicyEntity> wrapper = buildQuery(keyword, enabled, defaultPolicy)
@@ -63,7 +63,7 @@ public class SlaPolicyService {
     @Transactional
     public SlaPolicyVO createPolicy(CurrentUserPrincipal principal, SlaPolicySaveRequest request) {
         // 1、校验管理员权限和策略字段组合。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "sla_policy:create", "无权新建 SLA 策略");
         validatePolicy(request);
         boolean defaultPolicy = Boolean.TRUE.equals(request.getDefaultPolicy());
         ensureDefaultPolicyUnique(defaultPolicy, null);
@@ -86,7 +86,7 @@ public class SlaPolicyService {
     @Transactional
     public SlaPolicyVO updatePolicy(CurrentUserPrincipal principal, Long id, SlaPolicySaveRequest request) {
         // 1、校验权限、策略存在性和字段组合。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "sla_policy:update", "无权编辑 SLA 策略");
         SlaPolicyEntity existing = requirePolicy(id);
         validatePolicy(request);
         boolean defaultPolicy = Boolean.TRUE.equals(request.getDefaultPolicy());
@@ -109,7 +109,7 @@ public class SlaPolicyService {
     @Transactional
     public SlaPolicyVO updateEnabled(CurrentUserPrincipal principal, Long id, SlaPolicyEnabledRequest request) {
         // 1、校验权限和策略存在性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "sla_policy:enable", "无权启停 SLA 策略");
         SlaPolicyEntity existing = requirePolicy(id);
 
         // 2、停用默认策略前阻断，避免系统没有可用默认 SLA。
@@ -136,7 +136,7 @@ public class SlaPolicyService {
     @Transactional
     public SlaPolicyVO updateDefault(CurrentUserPrincipal principal, Long id, SlaPolicyDefaultRequest request) {
         // 1、校验权限和策略存在性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "sla_policy:default", "无权设置默认 SLA 策略");
         SlaPolicyEntity existing = requirePolicy(id);
 
         // 2、该接口只允许设置新的默认策略，不允许把系统置为无默认策略。
@@ -171,7 +171,7 @@ public class SlaPolicyService {
     @Transactional
     public void deletePolicy(CurrentUserPrincipal principal, Long id) {
         // 1、校验权限和策略存在性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "sla_policy:delete", "无权删除 SLA 策略");
         SlaPolicyEntity existing = requirePolicy(id);
 
         // 2、默认策略不允许删除，避免新建工单没有默认 SLA 策略。
@@ -290,12 +290,6 @@ public class SlaPolicyService {
                 policy.getCreatedAt(),
                 policy.getUpdatedAt()
         );
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作 SLA 策略");
-        }
     }
 
     private String normalize(String value) {

@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.assignment;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleListResponse;
@@ -40,10 +41,8 @@ public class AssignmentRuleService {
     public static final String MATCH_FROM_EMAIL = "FROM_EMAIL";
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
     private static final int CODE_CONFLICT = 40901;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String ROLE_AGENT = "AGENT";
     private static final String MODULE_ASSIGNMENT_RULE = "ASSIGNMENT_RULE";
     private static final Set<String> VALID_MATCH_TYPES = Set.of(
@@ -53,13 +52,14 @@ public class AssignmentRuleService {
     private final AssignmentRuleMapper assignmentRuleMapper;
     private final UserMapper userMapper;
     private final OperationLogMapper operationLogMapper;
+    private final PermissionService permissionService;
 
     /**
      * 管理端测试规则匹配结果，不修改工单。
      */
     public AssignmentRuleMatchResponse testMatch(CurrentUserPrincipal principal, AssignmentRuleTestRequest request) {
         // 1、仅管理员允许模拟规则命中，避免处理人枚举规则配置。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "assignment_rule:test_match", "无权测试分配规则");
 
         // 2、复用建单规则引擎，保持页面测试与自动建单逻辑一致。
         AssignmentRuleMatchResult result = matchForTicket(
@@ -129,7 +129,7 @@ public class AssignmentRuleService {
      */
     public AssignmentRuleListResponse listRules(CurrentUserPrincipal principal, String keyword,
                                                 Boolean enabled, String matchType) {
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "assignment_rule:read", "无权查看分配规则");
         LambdaQueryWrapper<AssignmentRuleEntity> wrapper = buildQuery(keyword, enabled, matchType)
                 .orderByAsc(AssignmentRuleEntity::getPriorityOrder)
                 .orderByAsc(AssignmentRuleEntity::getId);
@@ -144,7 +144,7 @@ public class AssignmentRuleService {
      */
     @Transactional
     public AssignmentRuleVO createRule(CurrentUserPrincipal principal, AssignmentRuleSaveRequest request) {
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "assignment_rule:create", "无权新建分配规则");
         String matchType = normalizeMatchType(request.getMatchType());
         String matchValue = normalizeMatchValue(matchType, request.getMatchValue());
         boolean defaultRule = normalizeDefaultRule(request.getDefaultRule(), matchType);
@@ -166,7 +166,7 @@ public class AssignmentRuleService {
      */
     @Transactional
     public AssignmentRuleVO updateRule(CurrentUserPrincipal principal, Long id, AssignmentRuleSaveRequest request) {
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "assignment_rule:update", "无权编辑分配规则");
         AssignmentRuleEntity existing = requireRule(id);
         String matchType = normalizeMatchType(request.getMatchType());
         String matchValue = normalizeMatchValue(matchType, request.getMatchValue());
@@ -188,7 +188,7 @@ public class AssignmentRuleService {
      */
     @Transactional
     public AssignmentRuleVO updateEnabled(CurrentUserPrincipal principal, Long id, AssignmentRuleEnabledRequest request) {
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "assignment_rule:enable", "无权启停分配规则");
         AssignmentRuleEntity existing = requireRule(id);
         assignmentRuleMapper.update(null, new LambdaUpdateWrapper<AssignmentRuleEntity>()
                 .eq(AssignmentRuleEntity::getId, id)
@@ -205,7 +205,7 @@ public class AssignmentRuleService {
      */
     @Transactional
     public List<AssignmentRuleVO> sortRules(CurrentUserPrincipal principal, AssignmentRuleSortRequest request) {
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "assignment_rule:sort", "无权排序分配规则");
         Set<Long> ids = new HashSet<>();
         for (AssignmentRuleSortItem item : request.rules()) {
             if (!ids.add(item.id())) {
@@ -234,7 +234,7 @@ public class AssignmentRuleService {
      */
     @Transactional
     public void deleteRule(CurrentUserPrincipal principal, Long id) {
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "assignment_rule:delete", "无权删除分配规则");
         AssignmentRuleEntity existing = requireRule(id);
         assignmentRuleMapper.deleteById(id);
         recordLog(principal, "DELETE", id, "删除分配规则：" + existing.getRuleName());
@@ -396,12 +396,6 @@ public class AssignmentRuleService {
         return assignee != null
                 && ROLE_AGENT.equals(assignee.getRoleCode())
                 && Boolean.TRUE.equals(assignee.getEnabled());
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作分配规则");
-        }
     }
 
     private void recordLog(CurrentUserPrincipal principal, String actionCode, Long bizId, String content) {

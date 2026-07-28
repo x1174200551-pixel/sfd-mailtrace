@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.template;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.NotificationTemplateCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.NotificationTemplateListResponse;
@@ -31,22 +32,21 @@ import java.util.regex.Pattern;
 public class NotificationTemplateService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\{[a-zA-Z0-9_]+}");
 
     private static final Map<String, TemplateVariableVO> VARIABLES = buildVariables();
 
     private final NotificationTemplateMapper notificationTemplateMapper;
     private final OperationLogMapper operationLogMapper;
+    private final PermissionService permissionService;
 
     /**
      * 查询通知模板列表，并返回页面统计与可用变量。
      */
     public NotificationTemplateListResponse listTemplates(CurrentUserPrincipal principal, String keyword, Boolean enabled) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "notification_template:read", "无权查看通知模板");
         // 2、按关键字和启用状态拼装查询条件
         LambdaQueryWrapper<NotificationTemplateEntity> wrapper = buildQuery(keyword, enabled)
                 .orderByAsc(NotificationTemplateEntity::getTemplateCode);
@@ -64,7 +64,7 @@ public class NotificationTemplateService {
     @Transactional
     public NotificationTemplateVO createTemplate(CurrentUserPrincipal principal, NotificationTemplateCreateRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "notification_template:create", "无权新建通知模板");
         // 2、规范化模板编码，并校验编码唯一性
         String templateCode = normalize(request.getTemplateCode()).toUpperCase();
         ensureTemplateCodeUnique(templateCode);
@@ -95,7 +95,7 @@ public class NotificationTemplateService {
     public NotificationTemplateVO updateTemplate(CurrentUserPrincipal principal, Long id,
                                                  NotificationTemplateUpdateRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "notification_template:update", "无权编辑通知模板");
         // 2、查询模板是否存在，防止保存无效 ID
         NotificationTemplateEntity existing = requireTemplate(id);
         // 3、校验主题和正文中的变量都在白名单内
@@ -121,7 +121,7 @@ public class NotificationTemplateService {
      */
     public TemplatePreviewResponse preview(CurrentUserPrincipal principal, TemplatePreviewRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "notification_template:preview", "无权预览通知模板");
         // 2、校验主题和正文中的变量都在白名单内
         validateVariables(request.getSubjectTpl());
         validateVariables(request.getContentTpl());
@@ -212,12 +212,6 @@ public class NotificationTemplateService {
             rendered = rendered.replace("{" + entry.getKey() + "}", entry.getValue());
         }
         return rendered;
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作通知模板");
-        }
     }
 
     private void recordLog(CurrentUserPrincipal principal, String actionCode, Long bizId, String content) {

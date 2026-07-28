@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邮件工单系统 - 角色配置管理原型</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #eff6ff;
+            --bg-main: #f5f6f8;
+            --border: #e5e7eb;
+            --border-soft: #f3f4f6;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+            --success-light: #ecfdf5;
+            --warning: #f59e0b;
+            --warning-light: #fffbeb;
+            --danger: #ef4444;
+            --danger-light: #fef2f2;
+        }
+
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            margin: 0;
+            color: var(--text-main);
+            background: var(--bg-main);
+            font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+        }
+        button, input, select { font: inherit; }
+        button { cursor: pointer; }
+
+        .shell {
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            overflow: hidden;
+        }
+        .sidebar {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            background: #fff;
+        }
+        .logo {
+            height: 64px;
+            padding: 0 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            white-space: nowrap;
+        }
+        .logo-mark {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--primary);
+        }
+        .logo strong { font-size: 16px; font-weight: 800; }
+        .nav {
+            flex: 1;
+            overflow: auto;
+            padding: 12px;
+        }
+        .nav-group { margin-bottom: 16px; }
+        .nav-title {
+            padding: 8px 12px;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .nav-item {
+            min-height: 40px;
+            border-radius: 8px;
+            padding: 0 12px;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-sub);
+            text-decoration: none;
+            font-weight: 700;
+        }
+        .nav-item.active {
+            color: var(--primary);
+            background: var(--primary-light);
+        }
+        .nav-item i {
+            width: 18px;
+            text-align: center;
+        }
+        .collapse {
+            height: 48px;
+            border-top: 1px solid var(--border);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-sub);
+            font-weight: 700;
+        }
+
+        .main {
+            min-width: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .topbar {
+            height: 64px;
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: minmax(190px, 280px) minmax(280px, 560px) auto;
+            align-items: center;
+            gap: 24px;
+            background: #fff;
+        }
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-sub);
+            font-weight: 600;
+        }
+        .breadcrumb strong { color: var(--text-main); }
+        .search {
+            height: 40px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-muted);
+            background: #f9fafb;
+        }
+        .search input {
+            width: 100%;
+            border: 0;
+            outline: 0;
+            color: var(--text-main);
+            background: transparent;
+        }
+        .shortcut {
+            min-width: 22px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: #fff;
+            color: var(--text-muted);
+            font-size: 12px;
+            text-align: center;
+        }
+        .tools {
+            justify-self: end;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-sub);
+            background: #fff;
+        }
+        .profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 10px;
+        }
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: #10b981;
+            font-weight: 900;
+        }
+        .profile strong,
+        .profile small { display: block; }
+        .profile small { color: var(--text-sub); font-size: 12px; }
+
+        .content {
+            flex: 1;
+            overflow: auto;
+            padding: 28px 24px 44px;
+        }
+        .content-title {
+            margin-bottom: 22px;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+        }
+        .content-title h1 {
+            margin: 0 0 8px;
+            color: #111827;
+            font-size: 28px;
+            line-height: 1.2;
+            font-weight: 900;
+        }
+        .content-title p {
+            margin: 0;
+            color: var(--text-sub);
+            font-weight: 600;
+        }
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            min-height: 38px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #374151;
+            background: #fff;
+            font-weight: 800;
+        }
+        .btn.primary {
+            border-color: var(--primary);
+            color: #fff;
+            background: var(--primary);
+        }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 16px;
+            margin-bottom: 18px;
+        }
+        .metric {
+            min-height: 108px;
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            padding: 18px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        }
+        .metric span,
+        .metric small {
+            display: block;
+            color: var(--text-sub);
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .metric strong {
+            display: block;
+            margin: 8px 0 6px;
+            color: #1f2937;
+            font-size: 28px;
+            line-height: 1.1;
+            font-weight: 900;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: minmax(430px, 0.95fr) minmax(520px, 1.25fr);
+            gap: 18px;
+            align-items: start;
+        }
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+        }
+        .panel-head {
+            min-height: 58px;
+            border-bottom: 1px solid var(--border-soft);
+            padding: 0 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .panel-head h2 {
+            margin: 0;
+            color: #111827;
+            font-size: 16px;
+            font-weight: 900;
+        }
+        .panel-head p {
+            margin: 3px 0 0;
+            color: var(--text-sub);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .toolbar {
+            min-height: 58px;
+            border-bottom: 1px solid var(--border-soft);
+            padding: 10px 12px;
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) 132px 132px;
+            gap: 10px;
+        }
+        .control {
+            min-width: 0;
+            height: 38px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+            background: #fff;
+        }
+        .control input,
+        .control select {
+            width: 100%;
+            min-width: 0;
+            border: 0;
+            outline: 0;
+            color: var(--text-main);
+            background: transparent;
+            font-weight: 600;
+        }
+
+        .role-list {
+            padding: 10px;
+            display: grid;
+            gap: 10px;
+        }
+        .role-row {
+            border: 1px solid var(--border-soft);
+            border-left: 3px solid transparent;
+            border-radius: 8px;
+            padding: 14px;
+            display: grid;
+            gap: 12px;
+            background: #fff;
+        }
+        .role-row.active {
+            border-color: #bfdbfe;
+            border-left-color: var(--primary);
+            background: #f8fbff;
+        }
+        .role-row.disabled {
+            opacity: .72;
+            background: #f9fafb;
+        }
+        .role-row-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .role-name strong {
+            display: block;
+            color: #111827;
+            font-size: 15px;
+            font-weight: 900;
+        }
+        .role-name small {
+            display: block;
+            margin-top: 4px;
+            color: var(--text-sub);
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .tag {
+            min-height: 24px;
+            border-radius: 999px;
+            padding: 4px 9px;
+            display: inline-flex;
+            align-items: center;
+            color: #1d4ed8;
+            background: var(--primary-light);
+            font-size: 12px;
+            font-weight: 900;
+        }
+        .tag.system {
+            color: #92400e;
+            background: var(--warning-light);
+        }
+        .tag.success {
+            color: #047857;
+            background: var(--success-light);
+        }
+        .tag.gray {
+            color: #6b7280;
+            background: #f3f4f6;
+        }
+        .tag.danger {
+            color: #b91c1c;
+            background: var(--danger-light);
+        }
+        .role-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .role-stats div {
+            border-radius: 8px;
+            padding: 9px 10px;
+            background: #f9fafb;
+        }
+        .role-stats span {
+            display: block;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .role-stats strong {
+            display: block;
+            margin-top: 4px;
+            color: #111827;
+            font-size: 16px;
+            font-weight: 900;
+        }
+        .row-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .small-btn {
+            min-height: 30px;
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            padding: 0 9px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #4b5563;
+            background: #fff;
+            font-size: 12px;
+            font-weight: 900;
+        }
+        .small-btn.disabled {
+            cursor: not-allowed;
+            opacity: .55;
+        }
+
+        .editor {
+            padding: 18px;
+            display: grid;
+            gap: 16px;
+        }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+        .field {
+            min-width: 0;
+        }
+        .field.wide { grid-column: 1 / -1; }
+        .field label {
+            display: block;
+            margin-bottom: 8px;
+            color: #374151;
+            font-size: 13px;
+            font-weight: 900;
+        }
+        .input,
+        .select,
+        .textarea {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: #111827;
+            background: #fff;
+            font-weight: 700;
+        }
+        .input,
+        .select { height: 40px; padding: 0 12px; }
+        .textarea {
+            min-height: 74px;
+            resize: none;
+            padding: 11px 12px;
+            line-height: 1.6;
+        }
+
+        .section-title {
+            margin: 4px 0 -2px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .section-title strong {
+            color: #111827;
+            font-size: 15px;
+            font-weight: 900;
+        }
+        .section-title span {
+            color: var(--text-sub);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .permission-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .perm-group {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        .perm-group-head {
+            min-height: 44px;
+            padding: 0 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f9fafb;
+            font-weight: 900;
+        }
+        .perm-group-head small {
+            color: var(--text-sub);
+            font-weight: 800;
+        }
+        .check-list {
+            padding: 10px 12px 12px;
+            display: grid;
+            gap: 9px;
+        }
+        .check {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            color: #374151;
+            font-weight: 700;
+        }
+        .box {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: #fff;
+            font-size: 10px;
+            flex: 0 0 auto;
+        }
+        .box.checked {
+            border-color: var(--primary);
+            background: var(--primary);
+        }
+        .box.partial {
+            border-color: var(--warning);
+            background: var(--warning);
+        }
+
+        .scope-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .scope-card {
+            min-height: 112px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            background: #fff;
+        }
+        .scope-card.active {
+            border-color: #bfdbfe;
+            background: #eff6ff;
+        }
+        .scope-card span {
+            display: block;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 900;
+        }
+        .scope-card strong {
+            display: block;
+            margin: 8px 0 6px;
+            color: #111827;
+            font-weight: 900;
+        }
+        .scope-card small {
+            display: block;
+            color: var(--text-sub);
+            line-height: 1.5;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .preview-strip {
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+            background: #eff6ff;
+        }
+        .preview-strip span {
+            display: block;
+            color: #1d4ed8;
+            font-size: 12px;
+            font-weight: 900;
+        }
+        .preview-strip strong {
+            display: block;
+            margin-top: 5px;
+            color: #111827;
+            font-size: 15px;
+            font-weight: 900;
+        }
+
+        .users {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .user-row {
+            min-height: 48px;
+            border-bottom: 1px solid var(--border-soft);
+            padding: 10px 12px;
+            display: grid;
+            grid-template-columns: 34px minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+        }
+        .user-row:last-child { border-bottom: 0; }
+        .user-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            background: var(--primary);
+            font-weight: 900;
+        }
+        .user-row strong,
+        .user-row small {
+            display: block;
+        }
+        .user-row small {
+            margin-top: 3px;
+            color: var(--text-sub);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .notice {
+            border: 1px solid #fed7aa;
+            border-radius: 8px;
+            padding: 12px 14px;
+            display: flex;
+            gap: 10px;
+            color: #92400e;
+            background: #fff7ed;
+            line-height: 1.6;
+            font-weight: 700;
+        }
+
+        @media (max-width: 1180px) {
+            .layout { grid-template-columns: 1fr; }
+            .permission-grid, .scope-grid { grid-template-columns: 1fr; }
+            .preview-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-mark"><i class="fa-solid fa-envelope"></i></span>
+                <strong>邮件工单系统</strong>
+            </div>
+            <nav class="nav">
+                <div class="nav-group">
+                    <div class="nav-title">工作空间</div>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-house"></i><span>工作台</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">工单中心</div>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-layer-group"></i><span>全部工单</span></a>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-users"></i><span>客户管理</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">邮件管理</div>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-gear"></i><span>邮箱配置</span></a>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-inbox"></i><span>收件记录</span></a>
+                    <a class="nav-item" href="#"><i class="fa-regular fa-paper-plane"></i><span>发件记录</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">SLA管理</div>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-shield-halved"></i><span>分配规则</span></a>
+                    <a class="nav-item" href="#"><i class="fa-regular fa-clock"></i><span>SLA策略</span></a>
+                    <a class="nav-item" href="#"><i class="fa-regular fa-calendar-days"></i><span>工作日历</span></a>
+                </div>
+                <div class="nav-group">
+                    <div class="nav-title">系统管理</div>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-user-gear"></i><span>用户管理</span></a>
+                    <a class="nav-item active" href="#"><i class="fa-solid fa-id-badge"></i><span>角色管理</span></a>
+                    <a class="nav-item" href="#"><i class="fa-solid fa-sliders"></i><span>编号规则</span></a>
+                    <a class="nav-item" href="#"><i class="fa-regular fa-bell"></i><span>通知模板</span></a>
+                </div>
+            </nav>
+            <div class="collapse"><i class="fa-regular fa-square-caret-left"></i><span>收起菜单</span></div>
+        </aside>
+
+        <main class="main">
+            <header class="topbar">
+                <div class="breadcrumb">
+                    <i class="fa-solid fa-bars"></i>
+                    <span>邮件工单</span>
+                    <span>/</span>
+                    <strong>角色管理</strong>
+                </div>
+                <label class="search">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input value="" placeholder="搜索角色、权限或用户">
+                    <span class="shortcut">⌘</span>
+                    <span class="shortcut">K</span>
+                </label>
+                <div class="tools">
+                    <button class="icon-btn" aria-label="帮助"><i class="fa-regular fa-circle-question"></i></button>
+                    <button class="icon-btn" aria-label="通知"><i class="fa-regular fa-bell"></i></button>
+                    <div class="profile">
+                        <span class="avatar">系</span>
+                        <span><strong>系统管理员</strong><small>管理员</small></span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </div>
+                </div>
+            </header>
+
+            <section class="content">
+                <div class="content-title">
+                    <div>
+                        <h1>角色管理</h1>
+                        <p>创建业务角色，配置菜单权限、操作权限和默认数据范围；用户分配入口仍在用户管理。</p>
+                    </div>
+                    <div class="actions">
+                        <button class="btn"><i class="fa-solid fa-rotate-right"></i>刷新</button>
+                        <button class="btn"><i class="fa-regular fa-copy"></i>复制角色</button>
+                        <button class="btn primary"><i class="fa-solid fa-plus"></i>新建角色</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric"><span>角色总数</span><strong>5</strong><small>2 个内置，3 个自定义</small></div>
+                    <div class="metric"><span>启用角色</span><strong>4</strong><small>可被分配给用户</small></div>
+                    <div class="metric"><span>权限项</span><strong>77</strong><small>菜单与操作统一清单</small></div>
+                    <div class="metric"><span>关联用户</span><strong>4</strong><small>当前已分配角色用户</small></div>
+                </div>
+
+                <div class="layout">
+                    <section class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2>角色列表</h2>
+                                <p>内置角色受保护，自定义角色可编辑和启停</p>
+                            </div>
+                            <span class="tag success">已启用 4</span>
+                        </div>
+                        <div class="toolbar">
+                            <label class="control"><i class="fa-solid fa-magnifying-glass"></i><input value="工单" aria-label="搜索角色"></label>
+                            <label class="control"><select aria-label="角色类型"><option>全部类型</option><option>内置角色</option><option>自定义角色</option></select></label>
+                            <label class="control"><select aria-label="状态"><option>全部状态</option><option>启用</option><option>停用</option></select></label>
+                        </div>
+                        <div class="role-list">
+                            <article class="role-row">
+                                <div class="role-row-head">
+                                    <div class="role-name"><strong>管理员</strong><small>拥有全部后台配置、工单处理和系统维护能力</small></div>
+                                    <div class="tags"><span class="tag system">内置</span><span class="tag success">启用</span></div>
+                                </div>
+                                <div class="role-stats">
+                                    <div><span>菜单</span><strong>全部</strong></div>
+                                    <div><span>操作</span><strong>全部</strong></div>
+                                    <div><span>用户</span><strong>1</strong></div>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="small-btn"><i class="fa-regular fa-eye"></i>查看</button>
+                                    <button class="small-btn disabled"><i class="fa-solid fa-lock"></i>内置保护</button>
+                                </div>
+                            </article>
+                            <article class="role-row">
+                                <div class="role-row-head">
+                                    <div class="role-name"><strong>客服处理人</strong><small>处理自己负责和未分配池内的工单，查看相关客户</small></div>
+                                    <div class="tags"><span class="tag system">内置</span><span class="tag success">启用</span></div>
+                                </div>
+                                <div class="role-stats">
+                                    <div><span>菜单</span><strong>3</strong></div>
+                                    <div><span>操作</span><strong>17</strong></div>
+                                    <div><span>用户</span><strong>3</strong></div>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="small-btn"><i class="fa-regular fa-eye"></i>查看</button>
+                                    <button class="small-btn disabled"><i class="fa-solid fa-lock"></i>内置保护</button>
+                                </div>
+                            </article>
+                            <article class="role-row active">
+                                <div class="role-row-head">
+                                    <div class="role-name"><strong>工单质检</strong><small>查看工单和客户，不能回复客户，适合质检抽查</small></div>
+                                    <div class="tags"><span class="tag">自定义</span><span class="tag success">启用</span></div>
+                                </div>
+                                <div class="role-stats">
+                                    <div><span>菜单</span><strong>3</strong></div>
+                                    <div><span>操作</span><strong>6</strong></div>
+                                    <div><span>用户</span><strong>0</strong></div>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="small-btn"><i class="fa-regular fa-pen-to-square"></i>编辑</button>
+                                    <button class="small-btn"><i class="fa-regular fa-copy"></i>复制</button>
+                                    <button class="small-btn"><i class="fa-solid fa-power-off"></i>停用</button>
+                                </div>
+                            </article>
+                            <article class="role-row">
+                                <div class="role-row-head">
+                                    <div class="role-name"><strong>SLA 配置员</strong><small>维护分配规则、SLA 策略和工作日历</small></div>
+                                    <div class="tags"><span class="tag">自定义</span><span class="tag success">启用</span></div>
+                                </div>
+                                <div class="role-stats">
+                                    <div><span>菜单</span><strong>3</strong></div>
+                                    <div><span>操作</span><strong>18</strong></div>
+                                    <div><span>用户</span><strong>0</strong></div>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="small-btn"><i class="fa-regular fa-pen-to-square"></i>编辑</button>
+                                    <button class="small-btn"><i class="fa-regular fa-copy"></i>复制</button>
+                                    <button class="small-btn"><i class="fa-solid fa-power-off"></i>停用</button>
+                                </div>
+                            </article>
+                            <article class="role-row disabled">
+                                <div class="role-row-head">
+                                    <div class="role-name"><strong>只读观察员</strong><small>仅查看工作台、工单和客户，不允许任何处理动作</small></div>
+                                    <div class="tags"><span class="tag">自定义</span><span class="tag gray">停用</span></div>
+                                </div>
+                                <div class="role-stats">
+                                    <div><span>菜单</span><strong>3</strong></div>
+                                    <div><span>操作</span><strong>3</strong></div>
+                                    <div><span>用户</span><strong>0</strong></div>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="small-btn"><i class="fa-regular fa-pen-to-square"></i>编辑</button>
+                                    <button class="small-btn"><i class="fa-solid fa-power-off"></i>启用</button>
+                                </div>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="panel">
+                        <div class="panel-head">
+                            <div>
+                                <h2>编辑角色</h2>
+                                <p>保存后，已分配该角色的用户重新获取当前用户信息后生效</p>
+                            </div>
+                            <div class="actions">
+                                <button class="btn"><i class="fa-regular fa-circle-xmark"></i>取消</button>
+                                <button class="btn primary"><i class="fa-regular fa-circle-check"></i>保存角色</button>
+                            </div>
+                        </div>
+                        <div class="editor">
+                            <div class="notice">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <span>当前阶段只开放自定义角色配置；管理员、客服处理人等内置角色可查看，不允许删除或改成不可用。</span>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="field">
+                                    <label>角色名称</label>
+                                    <input class="input" value="工单质检">
+                                </div>
+                                <div class="field">
+                                    <label>角色状态</label>
+                                    <select class="select"><option>启用</option><option>停用</option></select>
+                                </div>
+                                <div class="field wide">
+                                    <label>角色说明</label>
+                                    <textarea class="textarea">查看工单、客户和附件，用于服务质量抽查；不能对外回复、关闭或转派工单。</textarea>
+                                </div>
+                            </div>
+
+                            <div class="section-title">
+                                <strong>菜单与操作权限</strong>
+                                <span>已选 3 个菜单、6 个操作</span>
+                            </div>
+                            <div class="permission-grid">
+                                <div class="perm-group">
+                                    <div class="perm-group-head"><span>工作空间</span><small>1 / 1</small></div>
+                                    <div class="check-list">
+                                        <label class="check"><span class="box checked"><i class="fa-solid fa-check"></i></span>工作台</label>
+                                        <label class="check"><span class="box checked"><i class="fa-solid fa-check"></i></span>查看工作台统计</label>
+                                    </div>
+                                </div>
+                                <div class="perm-group">
+                                    <div class="perm-group-head"><span>工单中心</span><small>2 / 2</small></div>
+                                    <div class="check-list">
+                                        <label class="check"><span class="box checked"><i class="fa-solid fa-check"></i></span>全部工单</label>
+                                        <label class="check"><span class="box checked"><i class="fa-solid fa-check"></i></span>客户管理</label>
+                                        <label class="check"><span class="box checked"><i class="fa-solid fa-check"></i></span>查看工单</label>
+                                        <label class="check"><span class="box checked"><i class="fa-solid fa-check"></i></span>查看附件</label>
+                                        <label class="check"><span class="box"></span>回复客户</label>
+                                        <label class="check"><span class="box"></span>关闭工单</label>
+                                        <label class="check"><span class="box"></span>转派工单</label>
+                                    </div>
+                                </div>
+                                <div class="perm-group">
+                                    <div class="perm-group-head"><span>邮件管理</span><small>0 / 3</small></div>
+                                    <div class="check-list">
+                                        <label class="check"><span class="box"></span>邮箱配置</label>
+                                        <label class="check"><span class="box"></span>收件记录</label>
+                                        <label class="check"><span class="box"></span>发件记录</label>
+                                    </div>
+                                </div>
+                                <div class="perm-group">
+                                    <div class="perm-group-head"><span>SLA 与系统</span><small>0 / 6</small></div>
+                                    <div class="check-list">
+                                        <label class="check"><span class="box"></span>分配规则</label>
+                                        <label class="check"><span class="box"></span>SLA 策略</label>
+                                        <label class="check"><span class="box"></span>工作日历</label>
+                                        <label class="check"><span class="box"></span>用户管理</label>
+                                        <label class="check"><span class="box partial"></span>角色管理查看</label>
+                                        <label class="check"><span class="box"></span>通知模板</label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="section-title">
+                                <strong>默认数据范围</strong>
+                                <span>当前阶段不支持指定邮箱和客户标签</span>
+                            </div>
+                            <div class="scope-grid">
+                                <div class="scope-card">
+                                    <span>工单数据</span>
+                                    <strong>自己范围</strong>
+                                    <small>自己负责的工单和未分配池；用于处理人类角色。</small>
+                                </div>
+                                <div class="scope-card active">
+                                    <span>工单数据</span>
+                                    <strong>全部范围</strong>
+                                    <small>可查看全部工单；适合质检、管理员和主管前置角色。</small>
+                                </div>
+                                <div class="scope-card">
+                                    <span>客户与工作台</span>
+                                    <strong>跟随工单范围</strong>
+                                    <small>客户聚合和工作台统计自动按工单范围收口。</small>
+                                </div>
+                            </div>
+
+                            <div class="section-title">
+                                <strong>生效预览</strong>
+                                <span>用于保存前检查菜单和数据范围</span>
+                            </div>
+                            <div class="preview-strip">
+                                <div><span>可见菜单</span><strong>工作台、全部工单、客户管理</strong></div>
+                                <div><span>禁止动作</span><strong>回复、关闭、转派</strong></div>
+                                <div><span>数据范围</span><strong>全部工单</strong></div>
+                                <div><span>保存影响</span><strong>0 个用户</strong></div>
+                            </div>
+
+                            <div class="section-title">
+                                <strong>关联用户</strong>
+                                <span>用户分配入口仍在用户管理</span>
+                            </div>
+                            <div class="users">
+                                <div class="user-row">
+                                    <span class="user-avatar">空</span>
+                                    <div><strong>暂未分配用户</strong><small>保存角色后，可到用户管理为用户分配该角色。</small></div>
+                                    <button class="small-btn"><i class="fa-solid fa-arrow-up-right-from-square"></i>去用户管理</button>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>

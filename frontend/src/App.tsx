@@ -77,6 +77,9 @@ type CurrentUser = {
   displayName: string
   email: string
   roleCode: string
+  roles?: string[]
+  permissions?: string[]
+  dataScopes?: Record<string, string[]>
 }
 
 type LoginResponse = {
@@ -109,15 +112,17 @@ type MenuItem = {
   badge?: string
   tone?: 'primary' | 'warning' | 'danger' | 'new'
   adminOnly?: boolean
+  permission?: string
 }
 
 type MenuGroup = {
   title: string
   items: MenuItem[]
   adminOnly?: boolean
+  permission?: string
 }
 
-type RoleCode = 'ADMIN' | 'AGENT'
+type RoleCode = string
 
 type ManagedUser = {
   id: number
@@ -125,6 +130,7 @@ type ManagedUser = {
   displayName: string
   email: string
   roleCode: RoleCode
+  roleCodes?: string[]
   enabled: boolean
   lastLoginAt: string | null
   createdAt: string | null
@@ -153,6 +159,7 @@ type UserFormState = {
   displayName: string
   email: string
   roleCode: RoleCode
+  roleCodes: string[]
   password: string
   enabled: boolean
 }
@@ -166,6 +173,55 @@ type UserConfirmAction = {
   user: ManagedUser
   type: 'enable' | 'disable' | 'reset'
 } | null
+
+type RoleDataScope = {
+  resourceType: string
+  scopeCode: string
+  scopeDesc: string | null
+}
+
+type ManagedRole = {
+  id: number
+  roleCode: string
+  roleName: string
+  roleDesc: string | null
+  systemRole: boolean
+  enabled: boolean
+  sortOrder: number | null
+  permissionCodes: string[]
+  dataScopes: RoleDataScope[]
+  userCount: number
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+type RoleListResponse = {
+  records: ManagedRole[]
+  total: number
+  enabledCount: number
+  systemCount: number
+  customCount: number
+  permissionTotal: number
+  userTotal: number
+}
+
+type PermissionTreeNode = {
+  id: number
+  permissionCode: string
+  permissionName: string
+  permissionType: string
+  moduleCode: string | null
+  parentId: number | null
+  children: PermissionTreeNode[]
+}
+
+type RoleFormState = {
+  roleName: string
+  roleDesc: string
+  enabled: boolean
+  permissionCodes: string[]
+  dataScopes: RoleDataScope[]
+}
 
 type TemplateVariable = {
   key: string
@@ -514,6 +570,34 @@ function priorityBadgeClass(s: string) {
   return ({ URGENT: 'p1', HIGH: 'p2', NORMAL: 'p3', LOW: 'p4' } as Record<string, string>)[s] || 'p3'
 }
 
+function dataResourceLabel(resourceType: string) {
+  return ({ TICKET: '工单数据', CUSTOMER: '客户数据', DASHBOARD: '工作台数据' } as Record<string, string>)[resourceType] || resourceType
+}
+
+function dataScopeLabel(scopeCode: string) {
+  return ({ ALL: '全部范围', SELF: '自己范围' } as Record<string, string>)[scopeCode] || scopeCode
+}
+
+function dataScopeDesc(resourceType: string, scopeCode: string) {
+  const scope = dataScopeLabel(scopeCode)
+  if (resourceType === 'TICKET') return scopeCode === 'ALL' ? '可查看全部工单' : '自己负责工单 + 未分配池'
+  if (resourceType === 'CUSTOMER') return scopeCode === 'ALL' ? '全部客户聚合数据' : '自己可见工单关联客户'
+  if (resourceType === 'DASHBOARD') return scopeCode === 'ALL' ? '全部工作台统计数据' : '自己负责工单 + 未分配池统计'
+  return scope
+}
+
+function normalizeRoleCodes(primaryRoleCode: string, roleCodes: string[]) {
+  const result = new Set<string>()
+  const primary = toRoleCode(primaryRoleCode)
+  if (primary) result.add(primary)
+  roleCodes.map(toRoleCode).filter(Boolean).forEach((code) => result.add(code))
+  return Array.from(result)
+}
+
+function collectPermissionNodes(nodes: PermissionTreeNode[]): PermissionTreeNode[] {
+  return nodes.flatMap((node) => [node, ...collectPermissionNodes(node.children || [])])
+}
+
 function formatTicketEventContent(content: string) {
   return Object.entries(statusLabels).reduce(
     (text, [status, label]) => text.replaceAll(status, label),
@@ -773,56 +857,101 @@ const REMEMBER_KEY = 'mailtrace_remember'
 const menuGroups: MenuGroup[] = [
   {
     title: '工作空间',
-    items: [{ title: '工作台', icon: Home }],
+    permission: 'menu:workspace',
+    items: [{ title: '工作台', icon: Home, permission: 'menu:dashboard' }],
   },
   {
     title: '工单中心',
+    permission: 'menu:ticket_center',
     items: [
-      { title: '全部工单', icon: Layers },
-      { title: '客户管理', icon: Users },
+      { title: '全部工单', icon: Layers, permission: 'menu:tickets' },
+      { title: '客户管理', icon: Users, permission: 'menu:customers' },
     ],
   },
   {
     title: '邮件管理',
     adminOnly: true,
+    permission: 'menu:mail_management',
     items: [
-      { title: '邮箱配置', icon: Settings },
-      { title: '收件记录', icon: Inbox },
-      { title: '发件记录', icon: Send, tone: 'primary' },
+      { title: '邮箱配置', icon: Settings, permission: 'menu:mailboxes' },
+      { title: '收件记录', icon: Inbox, permission: 'menu:mail_fetch_logs' },
+      { title: '发件记录', icon: Send, tone: 'primary', permission: 'menu:mail_send_logs' },
     ],
   },
   {
     title: 'SLA管理',
     adminOnly: true,
+    permission: 'menu:sla_management',
     items: [
-      { title: '分配规则', icon: ShieldCheck },
-      { title: 'SLA策略', icon: Timer },
-      { title: '工作日历', icon: CalendarDays },
+      { title: '分配规则', icon: ShieldCheck, permission: 'menu:assignment_rules' },
+      { title: 'SLA策略', icon: Timer, permission: 'menu:sla_policies' },
+      { title: '工作日历', icon: CalendarDays, permission: 'menu:work_calendars' },
     ],
   },
   {
     title: '系统管理',
     adminOnly: true,
+    permission: 'menu:system_management',
     items: [
-      { title: '用户管理', icon: UserCog, adminOnly: true },
-      { title: '编号规则', icon: SlidersHorizontal },
-      { title: '通知模板', icon: Bell },
+      { title: '用户管理', icon: UserCog, adminOnly: true, permission: 'menu:users' },
+      { title: '角色管理', icon: ShieldCheck, adminOnly: true, permission: 'menu:roles' },
+      { title: '编号规则', icon: SlidersHorizontal, permission: 'menu:ticket_number_rule' },
+      { title: '通知模板', icon: Bell, permission: 'menu:notification_templates' },
     ],
   },
 ]
 
-const roleOptions: Array<{ label: string; value: RoleCode }> = [
+const builtInRoleOptions: Array<{ label: string; value: RoleCode }> = [
   { label: '管理员', value: 'ADMIN' },
   { label: '客服处理人', value: 'AGENT' },
 ]
+
+const roleProfiles: Record<RoleCode, {
+  title: string
+  subtitle: string
+  menuScope: string
+  dataScope: string
+  permissionCount: number
+  actions: string[]
+}> = {
+  ADMIN: {
+    title: '管理员',
+    subtitle: '拥有全部后台配置、工单处理和系统维护权限',
+    menuScope: '全部菜单',
+    dataScope: '全部范围',
+    permissionCount: 83,
+    actions: ['用户管理', '邮箱配置', '分配规则', 'SLA 策略', '工单处理', '系统配置'],
+  },
+  AGENT: {
+    title: '客服处理人',
+    subtitle: '处理自己负责和未分配池内的工单，查看相关客户数据',
+    menuScope: '工作台、全部工单、客户管理',
+    dataScope: '自己范围',
+    permissionCount: 20,
+    actions: ['查看工单', '领取工单', '回复客户', '内部备注', '转派工单', '查看客户'],
+  },
+}
 
 const emptyUserForm: UserFormState = {
   account: '',
   displayName: '',
   email: '',
   roleCode: 'AGENT',
+  roleCodes: ['AGENT'],
   password: '',
   enabled: true,
+}
+
+const emptyRoleForm: RoleFormState = {
+  roleName: '',
+  roleDesc: '',
+  enabled: true,
+  permissionCodes: [],
+  dataScopes: [
+    { resourceType: 'TICKET', scopeCode: 'SELF', scopeDesc: '自己负责工单 + 未分配池' },
+    { resourceType: 'CUSTOMER', scopeCode: 'SELF', scopeDesc: '自己可见工单关联客户' },
+    { resourceType: 'DASHBOARD', scopeCode: 'SELF', scopeDesc: '自己负责工单 + 未分配池统计' },
+  ],
 }
 
 const emptyTemplateForm: TemplateFormState = {
@@ -1069,7 +1198,40 @@ function formatSyncTime(value: string | null) {
 }
 
 function roleLabel(roleCode: string) {
-  return roleCode === 'ADMIN' ? '管理员' : '客服处理人'
+  return roleProfiles[roleCode]?.title || roleCode || '-'
+}
+
+function getRoleProfile(roleCode: string) {
+  return roleProfiles[roleCode] || {
+    title: roleLabel(roleCode),
+    subtitle: '自定义业务角色',
+    menuScope: '按角色权限配置',
+    dataScope: '按默认数据范围',
+    permissionCount: 0,
+    actions: ['按权限清单生效'],
+  }
+}
+
+function normalizeCodeList(values?: string[]) {
+  return new Set((values ?? []).map((value) => value.trim()).filter(Boolean))
+}
+
+function userHasRole(currentUser: CurrentUser | null, roleCode: string) {
+  const normalized = roleCode.trim().toUpperCase()
+  if (!normalized || !currentUser) return false
+  return normalizeCodeList(currentUser.roles).has(normalized) || currentUser.roleCode === normalized
+}
+
+function userHasPermission(currentUser: CurrentUser | null, permissionCode: string) {
+  if (!currentUser || !permissionCode.trim()) return false
+  const permissions = normalizeCodeList(currentUser.permissions)
+  if (userHasRole(currentUser, 'ADMIN')) {
+    return permissions.size === 0 || permissions.has(permissionCode) || permissionCode.startsWith('role:')
+  }
+  if (permissions.size > 0) {
+    return permissions.has(permissionCode)
+  }
+  return currentUser.roleCode === 'ADMIN'
 }
 
 function templateSceneLabel(templateCode: string) {
@@ -1086,7 +1248,7 @@ function formatDuration(start: string, end: string) {
 }
 
 function toRoleCode(value: string): RoleCode {
-  return value === 'ADMIN' ? 'ADMIN' : 'AGENT'
+  return value.trim().toUpperCase()
 }
 
 function toTemplateForm(template: NotificationTemplate): TemplateFormState {
@@ -1412,6 +1574,18 @@ function App() {
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null)
   const [confirmAction, setConfirmAction] = useState<UserConfirmAction>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [roleKeyword, setRoleKeyword] = useState('')
+  const [roleEnabledFilter, setRoleEnabledFilter] = useState('ALL')
+  const [rolesData, setRolesData] = useState<RoleListResponse | null>(null)
+  const [rolesLoading, setRolesLoading] = useState(false)
+  const [rolesError, setRolesError] = useState('')
+  const [permissionTree, setPermissionTree] = useState<PermissionTreeNode[]>([])
+  const [permissionTreeLoading, setPermissionTreeLoading] = useState(false)
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null)
+  const [roleForm, setRoleForm] = useState<RoleFormState>(emptyRoleForm)
+  const [roleDraftMode, setRoleDraftMode] = useState<'create' | 'edit'>('edit')
+  const [roleSaving, setRoleSaving] = useState(false)
+  const [rolePermissionSaving, setRolePermissionSaving] = useState(false)
   const [templateKeyword, setTemplateKeyword] = useState('')
   const [templatesData, setTemplatesData] = useState<NotificationTemplateListResponse | null>(null)
   const [templatesLoading, setTemplatesLoading] = useState(false)
@@ -1455,6 +1629,7 @@ function App() {
   const [assignReason, setAssignReason] = useState('')
   const [assignNotifyAssignee, setAssignNotifyAssignee] = useState(true)
   const [assignSending, setAssignSending] = useState(false)
+  const [claimSending, setClaimSending] = useState(false)
   const [closeModalOpen, setCloseModalOpen] = useState(false)
   const [closeReason, setCloseReason] = useState('')
   const [closeConfirmed, setCloseConfirmed] = useState(false)
@@ -1593,20 +1768,68 @@ function App() {
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([])
   const searchInputRef = useRef<HTMLInputElement>(null)
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
-  const isAdmin = user?.roleCode === 'ADMIN'
-  const canReadCustomers = user?.roleCode === 'ADMIN' || user?.roleCode === 'AGENT'
+  const selectedRoleIdRef = useRef<number | null>(null)
+  const roleDraftModeRef = useRef<'create' | 'edit'>('edit')
+  const hasPermission = useCallback((permissionCode: string) => userHasPermission(user, permissionCode), [user])
+  const isAdmin = userHasRole(user, 'ADMIN')
+  const isAgent = userHasRole(user, 'AGENT')
+  const canReadCustomers = hasPermission('customer:read')
+  const canReadUsers = hasPermission('user:read')
+  const canCreateUsers = hasPermission('user:create')
+  const canUpdateUsers = hasPermission('user:update')
+  const canEnableUsers = hasPermission('user:enable')
+  const canResetUserPassword = hasPermission('user:reset_password')
+  const canReadRoles = hasPermission('role:read')
+  const canCreateRoles = hasPermission('role:create')
+  const canUpdateRoles = hasPermission('role:update')
+  const canEnableRoles = hasPermission('role:enable')
+  const canUpdateRolePermissions = hasPermission('role:permission_update')
+  const canAccessMenuNode = useCallback(
+    (adminOnly?: boolean, permission?: string) => {
+      if (permission) return hasPermission(permission)
+      return !adminOnly || isAdmin
+    },
+    [hasPermission, isAdmin],
+  )
+  const isCurrentTicketUnassigned = ticketDetail?.assigneeId == null
+  const isCurrentTicketTerminal = ticketDetail ? isTerminalTicket(ticketDetail.status) : false
+  const canOperateCurrentTicket = !!ticketDetail && !isCurrentTicketTerminal
+    && (isAdmin || ticketDetail.assigneeId === user?.id)
+  const canClaimCurrentTicket = !!ticketDetail && !isCurrentTicketTerminal
+    && isCurrentTicketUnassigned && (isAdmin || isAgent)
   const activeSystemGroupConfig = systemGroups.find((group) => group.key === activeSystemGroup) || systemGroups[0]
   const visibleMenuGroups = useMemo(
     () =>
       menuGroups
-        .filter((group) => !group.adminOnly || isAdmin)
+        .filter((group) => canAccessMenuNode(group.adminOnly, group.permission))
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) => !item.adminOnly || isAdmin),
+          items: group.items.filter((item) => canAccessMenuNode(item.adminOnly, item.permission)),
         }))
         .filter((group) => group.items.length > 0),
-    [isAdmin],
+    [canAccessMenuNode],
   )
+  const roleSelectOptions = useMemo(
+    () => {
+      const options = rolesData?.records.map((role) => ({ label: role.roleName, value: role.roleCode })) ?? []
+      return options.length > 0 ? options : builtInRoleOptions
+    },
+    [rolesData],
+  )
+  const selectedRole = useMemo(
+    () => rolesData?.records.find((role) => role.id === selectedRoleId) ?? null,
+    [rolesData, selectedRoleId],
+  )
+  const selectedRoleReadonly = roleDraftMode === 'edit' && Boolean(selectedRole?.systemRole)
+  const flatPermissionNodes = useMemo(() => collectPermissionNodes(permissionTree), [permissionTree])
+  const checkedPermissionSet = useMemo(() => new Set(roleForm.permissionCodes), [roleForm.permissionCodes])
+
+  useEffect(() => {
+    if (!user || visibleMenuGroups.length === 0) return
+    const visibleItems = visibleMenuGroups.flatMap((group) => group.items)
+    if (visibleItems.some((item) => item.title === activeMenu)) return
+    setActiveMenu(visibleItems[0]?.title ?? '工作台')
+  }, [activeMenu, user, visibleMenuGroups])
 
   const handleAuthExpired = useCallback((error: unknown) => {
     if (!(error instanceof ApiError) || (error.status !== 401 && error.code !== 40102)) {
@@ -1671,9 +1894,99 @@ function App() {
     }
   }, [activeMenu, user, visibleMenuGroups])
 
+  const hydrateRoleForm = useCallback((role: ManagedRole) => {
+    setRoleForm({
+      roleName: role.roleName,
+      roleDesc: role.roleDesc || '',
+      enabled: role.enabled,
+      permissionCodes: role.permissionCodes || [],
+      dataScopes: role.dataScopes?.length ? role.dataScopes : emptyRoleForm.dataScopes,
+    })
+    roleDraftModeRef.current = 'edit'
+    selectedRoleIdRef.current = role.id
+    setRoleDraftMode('edit')
+    setSelectedRoleId(role.id)
+  }, [])
+
+  const fetchRoles = useCallback(async (preferredRoleId?: number) => {
+    if (!token || (activeMenu !== '角色管理' && activeMenu !== '用户管理')) return
+    if (!canReadRoles) {
+      if (activeMenu === '角色管理') {
+        setRolesData(null)
+        setRolesError('当前账号没有角色管理权限')
+      }
+      return
+    }
+    const params = new URLSearchParams()
+    if (roleKeyword.trim()) params.set('keyword', roleKeyword.trim())
+    if (roleEnabledFilter !== 'ALL') params.set('enabled', roleEnabledFilter)
+    setRolesLoading(true)
+    setRolesError('')
+    try {
+      const data = await requestApi<RoleListResponse>(`/api/v1/roles?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setRolesData(data)
+      const targetRoleId = preferredRoleId ?? selectedRoleIdRef.current
+      const current = data.records.find((role) => role.id === targetRoleId)
+      if (activeMenu === '角色管理') {
+        if (current) {
+          hydrateRoleForm(current)
+        } else if (!preferredRoleId && roleDraftModeRef.current !== 'create' && data.records[0]) {
+          hydrateRoleForm(data.records[0])
+        } else if (!preferredRoleId && roleDraftModeRef.current !== 'create') {
+          selectedRoleIdRef.current = null
+          setSelectedRoleId(null)
+          setRoleForm(emptyRoleForm)
+        }
+      }
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setRolesError(error instanceof Error ? error.message : '角色列表加载失败')
+    } finally {
+      setRolesLoading(false)
+    }
+  }, [
+    activeMenu,
+    canReadRoles,
+    handleAuthExpired,
+    hydrateRoleForm,
+    roleEnabledFilter,
+    roleKeyword,
+    token,
+  ])
+
+  const fetchPermissionTree = useCallback(async () => {
+    if (!token || activeMenu !== '角色管理' || !canReadRoles) return
+    setPermissionTreeLoading(true)
+    try {
+      const data = await requestApi<PermissionTreeNode[]>('/api/v1/roles/permissions', {
+        headers: authHeaders(token),
+      })
+      setPermissionTree(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setRolesError(error instanceof Error ? error.message : '权限树加载失败')
+    } finally {
+      setPermissionTreeLoading(false)
+    }
+  }, [activeMenu, canReadRoles, handleAuthExpired, token])
+
+  useEffect(() => {
+    if (activeMenu === '角色管理' || activeMenu === '用户管理') {
+      void fetchRoles()
+    }
+  }, [activeMenu, fetchRoles])
+
+  useEffect(() => {
+    if (activeMenu === '角色管理') {
+      void fetchPermissionTree()
+    }
+  }, [activeMenu, fetchPermissionTree])
+
   const fetchUsers = useCallback(async () => {
     if (!token || activeMenu !== '用户管理') return
-    if (!isAdmin) {
+    if (!canReadUsers) {
       setUsersData(null)
       setUsersError('当前账号没有用户管理权限')
       return
@@ -1700,7 +2013,7 @@ function App() {
     } finally {
       setUsersLoading(false)
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, token, userEnabledFilter, userKeyword, userPage, userPageSize, userRoleFilter])
+  }, [activeMenu, canReadUsers, handleAuthExpired, token, userEnabledFilter, userKeyword, userPage, userPageSize, userRoleFilter])
 
   useEffect(() => {
     void fetchUsers()
@@ -2452,7 +2765,7 @@ function App() {
   const handleReply = useCallback(async () => {
     const content = replyContent.trim()
     const html = replyHtml.trim()
-    if (!token || !ticketDetail || (!content && !html)) return
+    if (!token || !ticketDetail || !canOperateCurrentTicket || (!content && !html)) return
     setReplySending(true)
     try {
       const attInfos = uploadedFiles.map(f => ({ objectKey: f.objectKey, fileName: f.fileName, fileSize: f.fileSize, contentType: f.contentType }))
@@ -2473,11 +2786,11 @@ function App() {
     } finally {
       setReplySending(false)
     }
-  }, [token, ticketDetail, replyContent, replyHtml, uploadedFiles, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, canOperateCurrentTicket, replyContent, replyHtml, uploadedFiles, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   /** 转派 */
   const handleAssign = useCallback(async () => {
-    if (!token || !ticketDetail || !assignUserId) return
+    if (!token || !ticketDetail || !canOperateCurrentTicket || !assignUserId) return
     setAssignSending(true)
     try {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/assign`, {
@@ -2502,11 +2815,11 @@ function App() {
     } finally {
       setAssignSending(false)
     }
-  }, [token, ticketDetail, assignUserId, assignReason, assignNotifyAssignee, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, canOperateCurrentTicket, assignUserId, assignReason, assignNotifyAssignee, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   /** 关闭工单 */
   const handleClose = useCallback(async () => {
-    if (!token || !ticketDetail) return
+    if (!token || !ticketDetail || !canOperateCurrentTicket) return
     setCloseSending(true)
     try {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/close`, {
@@ -2526,7 +2839,7 @@ function App() {
     } finally {
       setCloseSending(false)
     }
-  }, [token, ticketDetail, closeReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, canOperateCurrentTicket, closeReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   /** 上传附件（通用上传，不关联工单） */
   const handleUploadFile = useCallback(async (file: File) => {
@@ -2558,7 +2871,7 @@ function App() {
 
   /** 删除附件 */
   const handleDeleteAttachment = useCallback(async (attachmentId: number) => {
-    if (!token || !ticketDetail) return
+    if (!token || !ticketDetail || !canOperateCurrentTicket) return
     try {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/attachments/${attachmentId}`, {
         method: 'DELETE',
@@ -2570,11 +2883,11 @@ function App() {
       message.error(error?.message || '附件删除失败')
       if (handleAuthExpired(error)) return
     }
-  }, [token, ticketDetail, handleAuthExpired])
+  }, [token, ticketDetail, canOperateCurrentTicket, handleAuthExpired])
 
   /** 修改优先级 */
   const handlePriority = useCallback(async () => {
-    if (!token || !ticketDetail) return
+    if (!token || !ticketDetail || !canOperateCurrentTicket) return
     setPrioritySending(true)
     try {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/priority`, {
@@ -2593,11 +2906,11 @@ function App() {
     } finally {
       setPrioritySending(false)
     }
-  }, [token, ticketDetail, priorityValue, priorityReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, canOperateCurrentTicket, priorityValue, priorityReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   /** 修改状态 */
   const handleStatusChange = useCallback(async () => {
-    if (!token || !ticketDetail) return
+    if (!token || !ticketDetail || !canOperateCurrentTicket) return
     setStatusSending(true)
     try {
       await requestApi(`/api/v1/tickets/${ticketDetail.id}/status`, {
@@ -2616,7 +2929,7 @@ function App() {
     } finally {
       setStatusSending(false)
     }
-  }, [token, ticketDetail, statusValue, statusReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
+  }, [token, ticketDetail, canOperateCurrentTicket, statusValue, statusReason, reloadTicketDetail, fetchTickets, handleAuthExpired])
 
   const fetchTicketStats = useCallback(async () => {
     if (!token) return
@@ -2625,6 +2938,27 @@ function App() {
       setTicketStats(data)
     } catch { /* stats failure is non-critical */ }
   }, [token])
+
+  /** 领取未分配工单 */
+  const handleClaimTicket = useCallback(async () => {
+    if (!token || !ticketDetail) return
+    setClaimSending(true)
+    try {
+      await requestApi(`/api/v1/tickets/${ticketDetail.id}/claim`, {
+        method: 'POST',
+        headers: authHeaders(token),
+      })
+      await reloadTicketDetail()
+      void fetchTickets()
+      void fetchTicketStats()
+      message.success('工单已领取')
+    } catch (error: any) {
+      message.error(error?.message || '领取失败')
+      if (handleAuthExpired(error)) return
+    } finally {
+      setClaimSending(false)
+    }
+  }, [token, ticketDetail, reloadTicketDetail, fetchTickets, fetchTicketStats, handleAuthExpired])
 
   useEffect(() => {
     if (activeMenu === '全部工单') { void fetchTickets(); void fetchTicketStats() }
@@ -3392,14 +3726,152 @@ function App() {
     setUserFormOpen(true)
   }
 
+  function openCreateRole() {
+    roleDraftModeRef.current = 'create'
+    selectedRoleIdRef.current = null
+    setRoleDraftMode('create')
+    setSelectedRoleId(null)
+    setRoleForm(emptyRoleForm)
+    setRolesError('')
+  }
+
+  function selectRole(role: ManagedRole) {
+    hydrateRoleForm(role)
+    setRolesError('')
+  }
+
+  function toggleRolePermission(permissionCode: string, checked: boolean) {
+    setRoleForm((value) => {
+      const next = new Set(value.permissionCodes)
+      if (checked) {
+        next.add(permissionCode)
+      } else {
+        next.delete(permissionCode)
+      }
+      return { ...value, permissionCodes: Array.from(next) }
+    })
+  }
+
+  function updateRoleScope(resourceType: string, scopeCode: string) {
+    setRoleForm((value) => ({
+      ...value,
+      dataScopes: ['TICKET', 'CUSTOMER', 'DASHBOARD'].map((resource) => {
+        const nextScope = resource === resourceType ? scopeCode : (value.dataScopes.find((scope) => scope.resourceType === resource)?.scopeCode || 'SELF')
+        return {
+          resourceType: resource,
+          scopeCode: nextScope,
+          scopeDesc: dataScopeDesc(resource, nextScope),
+        }
+      }),
+    }))
+  }
+
+  async function submitRoleBase() {
+    if (!token) return
+    setRoleSaving(true)
+    setRolesError('')
+    try {
+      let saved: ManagedRole
+      if (roleDraftMode === 'create') {
+        saved = await requestApi<ManagedRole>('/api/v1/roles', {
+          method: 'POST',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            roleName: roleForm.roleName,
+            roleDesc: roleForm.roleDesc,
+            enabled: roleForm.enabled,
+          }),
+        })
+        if (roleForm.permissionCodes.length > 0) {
+          saved = await requestApi<ManagedRole>(`/api/v1/roles/${saved.id}/permissions`, {
+            method: 'PUT',
+            headers: authHeaders(token),
+            body: JSON.stringify({
+              permissionCodes: roleForm.permissionCodes,
+              dataScopes: roleForm.dataScopes,
+            }),
+          })
+        }
+      } else if (selectedRole) {
+        saved = await requestApi<ManagedRole>(`/api/v1/roles/${selectedRole.id}`, {
+          method: 'PUT',
+          headers: authHeaders(token),
+          body: JSON.stringify({
+            roleName: roleForm.roleName,
+            roleDesc: roleForm.roleDesc,
+            enabled: roleForm.enabled,
+          }),
+        })
+      } else {
+        return
+      }
+      roleDraftModeRef.current = 'edit'
+      selectedRoleIdRef.current = saved.id
+      setRoleDraftMode('edit')
+      setSelectedRoleId(saved.id)
+      hydrateRoleForm(saved)
+      await fetchRoles(saved.id)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setRolesError(error instanceof Error ? error.message : '角色保存失败')
+    } finally {
+      setRoleSaving(false)
+    }
+  }
+
+  async function submitRolePermissions() {
+    if (!token || !selectedRole) return
+    setRolePermissionSaving(true)
+    setRolesError('')
+    try {
+      const saved = await requestApi<ManagedRole>(`/api/v1/roles/${selectedRole.id}/permissions`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify({
+          permissionCodes: roleForm.permissionCodes,
+          dataScopes: roleForm.dataScopes,
+        }),
+      })
+      hydrateRoleForm(saved)
+      await fetchRoles()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setRolesError(error instanceof Error ? error.message : '角色权限保存失败')
+    } finally {
+      setRolePermissionSaving(false)
+    }
+  }
+
+  async function toggleRoleEnabled(role: ManagedRole) {
+    if (!token || role.systemRole || !canEnableRoles) return
+    setRoleSaving(true)
+    setRolesError('')
+    try {
+      const saved = await requestApi<ManagedRole>(`/api/v1/roles/${role.id}/enabled`, {
+        method: 'PATCH',
+        headers: authHeaders(token),
+        body: JSON.stringify({ enabled: !role.enabled }),
+      })
+      hydrateRoleForm(saved)
+      await fetchRoles()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setRolesError(error instanceof Error ? error.message : '角色启停失败')
+    } finally {
+      setRoleSaving(false)
+    }
+  }
+
   function openEditUser(nextUser: ManagedUser) {
     setUserFormMode('edit')
     setEditingUser(nextUser)
+    const assignedRoleCodes = normalizeRoleCodes(nextUser.roleCode, nextUser.roleCodes || [])
     setUserForm({
       account: nextUser.account,
       displayName: nextUser.displayName,
       email: nextUser.email,
       roleCode: nextUser.roleCode,
+      roleCodes: assignedRoleCodes,
       password: '',
       enabled: nextUser.enabled,
     })
@@ -3428,6 +3900,7 @@ function App() {
             displayName: userForm.displayName,
             email: userForm.email,
             roleCode: userForm.roleCode,
+            roleCodes: normalizeRoleCodes(userForm.roleCode, userForm.roleCodes),
             enabled: userForm.enabled,
           }),
         })
@@ -3714,6 +4187,61 @@ function App() {
     }
   }
 
+  function renderPermissionTree(nodes: PermissionTreeNode[]) {
+    if (permissionTreeLoading) {
+      return <div className="role-permission-loading">权限清单加载中...</div>
+    }
+    if (nodes.length === 0) {
+      return <div className="role-permission-loading">暂无可配置权限</div>
+    }
+    return nodes.map((group) => (
+      <div className="role-permission-group" key={group.permissionCode}>
+        <div className="role-permission-group__head">
+          <label>
+            <input
+              checked={checkedPermissionSet.has(group.permissionCode)}
+              disabled={selectedRoleReadonly || roleSaving || rolePermissionSaving || !canUpdateRolePermissions}
+              onChange={(event) => toggleRolePermission(group.permissionCode, event.target.checked)}
+              type="checkbox"
+            />
+            <strong>{group.permissionName}</strong>
+          </label>
+          <span>{group.children.length} 项</span>
+        </div>
+        <div className="role-permission-children">
+          {group.children.map((child) => (
+            <div className="role-permission-child" key={child.permissionCode}>
+              <label>
+                <input
+                  checked={checkedPermissionSet.has(child.permissionCode)}
+                  disabled={selectedRoleReadonly || roleSaving || rolePermissionSaving || !canUpdateRolePermissions}
+                  onChange={(event) => toggleRolePermission(child.permissionCode, event.target.checked)}
+                  type="checkbox"
+                />
+                <span>{child.permissionName}</span>
+              </label>
+              {child.children.length > 0 && (
+                <div className="role-permission-actions">
+                  {child.children.map((action) => (
+                    <label key={action.permissionCode}>
+                      <input
+                        checked={checkedPermissionSet.has(action.permissionCode)}
+                        disabled={selectedRoleReadonly || roleSaving || rolePermissionSaving || !canUpdateRolePermissions}
+                        onChange={(event) => toggleRolePermission(action.permissionCode, event.target.checked)}
+                        type="checkbox"
+                      />
+                      {action.permissionName}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    ))
+  }
+
   if (checkingSession) {
     return (
       <main className="session-check">
@@ -3924,6 +4452,29 @@ function App() {
         onClick: () => navigateToTickets('WAITING_CUSTOMER'),
       },
     ]
+    const dashboardMailEntries = [
+      {
+        title: '邮箱配置',
+        detail: '查看连接状态',
+        icon: Settings,
+        permission: 'menu:mailboxes',
+        onClick: () => setActiveMenu('邮箱配置'),
+      },
+      {
+        title: '收件记录',
+        detail: '检查拉取结果',
+        icon: Inbox,
+        permission: 'menu:mail_fetch_logs',
+        onClick: () => setActiveMenu('收件记录'),
+      },
+      {
+        title: '发件记录',
+        detail: '处理失败记录',
+        icon: Send,
+        permission: 'menu:mail_send_logs',
+        onClick: () => setActiveMenu('发件记录'),
+      },
+    ].filter((entry) => hasPermission(entry.permission))
 
     return (
       <div className={sidebarCollapsed ? 'app-workspace shell-collapsed' : 'app-workspace'}>
@@ -4055,7 +4606,7 @@ function App() {
                   <span className="profile-avatar">{userInitial}</span>
                   <span className="profile-text">
                     <strong>{user.displayName}</strong>
-                    <small>{user.roleCode === 'ADMIN' ? '系统管理员' : '客服处理人员'}</small>
+                    <small>{roleLabel(user.roleCode)}</small>
                   </span>
                   <ChevronDown size={15} />
                 </button>
@@ -4186,26 +4737,27 @@ function App() {
                           </div>
                         </section>
 
-                        <section className="dashboard-panel">
-                          <div className="dashboard-panel__head">
-                            <div>
-                              <h2>邮箱运行入口</h2>
-                              <p>快捷进入邮箱配置、收件记录和发送日志</p>
+                        {dashboardMailEntries.length > 0 && (
+                          <section className="dashboard-panel">
+                            <div className="dashboard-panel__head">
+                              <div>
+                                <h2>邮箱运行入口</h2>
+                                <p>快捷进入当前账号可访问的邮件管理页面</p>
+                              </div>
+                              <Tag color="green">入口</Tag>
                             </div>
-                            <Tag color="green">入口</Tag>
-                          </div>
-                          <div className="dashboard-entry-grid">
-                            <button onClick={() => setActiveMenu('邮箱配置')} type="button">
-                              <Settings size={18} /><span>邮箱配置</span><small>查看连接状态</small>
-                            </button>
-                            <button onClick={() => setActiveMenu('收件记录')} type="button">
-                              <Inbox size={18} /><span>收件记录</span><small>检查拉取结果</small>
-                            </button>
-                            <button onClick={() => setActiveMenu('发件记录')} type="button">
-                              <Send size={18} /><span>发送日志</span><small>处理失败记录</small>
-                            </button>
-                          </div>
-                        </section>
+                            <div className="dashboard-entry-grid">
+                              {dashboardMailEntries.map((entry) => {
+                                const Icon = entry.icon
+                                return (
+                                  <button key={entry.title} onClick={entry.onClick} type="button">
+                                    <Icon size={18} /><span>{entry.title}</span><small>{entry.detail}</small>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </section>
+                        )}
 
                         <section className="dashboard-panel">
                           <div className="dashboard-panel__head">
@@ -4361,9 +4913,21 @@ function App() {
                           <span className="detail-ticket-no">{ticketDetail.ticketNo}</span>
                         </div>
                         <div className="detail-header-actions">
+                          {canClaimCurrentTicket && (
+                            <Button
+                              type="primary"
+                              size="small"
+                              icon={<UserPlus size={14} />}
+                              loading={claimSending}
+                              onClick={() => void handleClaimTicket()}
+                            >
+                              领取工单
+                            </Button>
+                          )}
                           <Button
                             size="small"
                             icon={<SwapOutlined />}
+                            disabled={!canOperateCurrentTicket}
                             onClick={() => {
                               setAssignUserId(ticketDetail.assigneeId)
                               setAssignReason('')
@@ -4375,7 +4939,7 @@ function App() {
                             转派
                           </Button>
                           <Button size="small" icon={<FlagOutlined />}
-                            disabled={isTerminalTicket(ticketDetail.status)}
+                            disabled={!canOperateCurrentTicket}
                             onClick={() => {
                               setPriorityValue(ticketDetail.priority)
                               setPriorityReason('')
@@ -4383,7 +4947,7 @@ function App() {
                             }}>修改优先级</Button>
                           <Button
                             size="small"
-                            disabled={isTerminalTicket(ticketDetail.status)}
+                            disabled={!canOperateCurrentTicket}
                             onClick={() => {
                               setStatusValue(ticketDetail.status === 'PROCESSING' ? 'CANCELLED' : 'PROCESSING')
                               setStatusReason('')
@@ -4395,7 +4959,7 @@ function App() {
                           <Button
                             size="small"
                             icon={<CloseCircleOutlined />}
-                            disabled={isTerminalTicket(ticketDetail.status)}
+                            disabled={!canOperateCurrentTicket}
                             onClick={() => {
                               setCloseReason('')
                               setCloseConfirmed(false)
@@ -4404,7 +4968,7 @@ function App() {
                           >
                             关闭工单
                           </Button>
-                          <Button size="small" icon={<EllipsisOutlined />}>更多</Button>
+                          <Button size="small" icon={<EllipsisOutlined />} disabled={!canOperateCurrentTicket}>更多</Button>
                         </div>
                       </div>
                       <h1 className="detail-subject">{ticketDetail.subject}</h1>
@@ -4534,8 +5098,17 @@ function App() {
                                 {/* 回复编辑器 */}
                                 <div className="detail-editor">
                                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2937', marginBottom: 8 }}>回复客户</div>
+                                  {!canOperateCurrentTicket && !isCurrentTicketTerminal && (
+                                    <Alert
+                                      type="info"
+                                      showIcon
+                                      message={isCurrentTicketUnassigned ? '领取后即可处理该工单' : '当前账号不可操作该工单'}
+                                      style={{ marginBottom: 10 }}
+                                    />
+                                  )}
                                   <TiptapRichEditor
                                     placeholder="请输入回复内容（将发送邮件给客户）..."
+                                    disabled={!canOperateCurrentTicket}
                                     onUpdate={(html, text) => { setReplyHtml(html); setReplyContent(text) }}
                                   />
                                   {uploadedFiles.length > 0 && (
@@ -4554,13 +5127,14 @@ function App() {
                                           onChange={(e) => { const f = e.target.files?.[0]; if (f) { void handleUploadFile(f); e.target.value = '' } }} />
                                       <Button type="text" icon={<PaperClipOutlined />}
                                         loading={uploadingFile}
+                                        disabled={!canOperateCurrentTicket}
                                         onClick={() => fileInputRef.current?.click()}>添加附件</Button>
                                       <Button type="text" icon={<FileTextOutlined />} disabled>插入模板</Button>
                                     </div>
                                     <Space>
                                       <Button disabled>保存草稿</Button>
                                       <Button type="primary" icon={<SendOutlined />} onClick={() => void handleReply()}
-                                        loading={replySending} disabled={!replyContent.trim() && !replyHtml.trim()}>
+                                        loading={replySending} disabled={!canOperateCurrentTicket || (!replyContent.trim() && !replyHtml.trim())}>
                                         发送邮件
                                       </Button>
                                     </Space>
@@ -4642,6 +5216,7 @@ function App() {
                                           <Button type="link" size="small" icon={<DownloadOutlined />}
                                             href={att.downloadUrl || undefined} target="_blank" />
                                           <Button type="link" size="small" danger icon={<DeleteOutlined />}
+                                            disabled={!canOperateCurrentTicket}
                                             onClick={() => { if (window.confirm('确认删除此附件？')) void handleDeleteAttachment(att.id) }} />
                                         </div>
                                       </div>
@@ -4674,8 +5249,10 @@ function App() {
                         <Descriptions.Item label="备注">
                           <Input.TextArea rows={2} size="small" value={remarkDraft}
                             onChange={e => setRemarkDraft(e.target.value)}
+                            disabled={!canOperateCurrentTicket}
                             placeholder="点击添加备注..." style={{ fontSize: 12 }}
                             onBlur={(e) => {
+                              if (!canOperateCurrentTicket) return
                               const val = e.target.value.trim()
                               if (val !== (ticketDetail.remark || '')) {
                                 requestApi(`/api/v1/tickets/${ticketDetail.id}/remark`, {
@@ -4736,7 +5313,10 @@ function App() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <h2>全部工单</h2>
-                      <div className="tickets-header-sub">当前筛选共 {ticketsData?.total ?? ticketStats?.totalCount ?? 0} 个工单，统计卡片展示全量口径</div>
+                      <div className="tickets-header-sub">
+                        当前筛选共 {ticketsData?.total ?? ticketStats?.totalCount ?? 0} 个工单，统计卡片展示当前权限范围口径
+                        {!isAdmin ? '；当前仅显示自己负责和未分配工单' : ''}
+                      </div>
                     </div>
                     <div className="tickets-header-actions">
                       <Button icon={<ReloadOutlined />} onClick={() => { void fetchTickets(); void fetchTicketStats() }} loading={ticketsLoading}>刷新</Button>
@@ -4904,6 +5484,7 @@ function App() {
                                   </div>
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
                                     {ticket.assigneeName && <div className="assignee-avatar">{ticket.assigneeName[0]}</div>}
+                                    {!ticket.assigneeName && <span style={{ fontSize: 12, color: '#9ca3af' }}>未分配</span>}
                                     <span className={`ticket-status-tag ${stClass}`}>{statusLabel(ticket.status)}</span>
                                   </div>
                                 </div>
@@ -6530,26 +7111,274 @@ function App() {
                 </>
               )}
             </section>
+          ) : activeMenu === '角色管理' ? (
+            <section className="app-content role-management-page" aria-label="角色管理">
+              <div className="content-title">
+                <div>
+                  <h1>角色管理</h1>
+                  <p>创建业务角色，配置菜单权限、操作权限和默认数据范围；用户分配入口仍在用户管理。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={rolesLoading} onClick={() => void fetchRoles()} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  <button className="primary-action" disabled={!canCreateRoles} onClick={openCreateRole} type="button">
+                    <Plus size={16} />
+                    新建角色
+                  </button>
+                </div>
+              </div>
+
+              {!canReadRoles ? (
+                <div className="permission-state">
+                  <ShieldCheck size={42} />
+                  <strong>无角色管理权限</strong>
+                  <p>角色配置仅对具备系统管理权限的账号开放。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="user-metrics">
+                    <div className="user-metric">
+                      <span>角色总数</span>
+                      <strong>{rolesData?.total ?? '--'}</strong>
+                      <small>{rolesData ? `${rolesData.systemCount} 个内置，${rolesData.customCount} 个自定义` : '后台角色总量'}</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>启用角色</span>
+                      <strong>{rolesData?.enabledCount ?? '--'}</strong>
+                      <small>可被分配给用户</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>权限项</span>
+                      <strong>{(rolesData?.permissionTotal ?? flatPermissionNodes.length) || '--'}</strong>
+                      <small>菜单与操作统一清单</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>关联用户</span>
+                      <strong>{rolesData?.userTotal ?? '--'}</strong>
+                      <small>当前已分配角色用户</small>
+                    </div>
+                  </div>
+
+                  <div className="role-management-grid">
+                    <section className="role-list-panel">
+                      <div className="role-panel-head">
+                        <div>
+                          <strong>角色列表</strong>
+                          <span>内置角色受保护，自定义角色可编辑和启停</span>
+                        </div>
+                        <em>启用 {rolesData?.enabledCount ?? 0}</em>
+                      </div>
+                      <div className="user-toolbar compact">
+                        <label className="user-search">
+                          <Search size={16} />
+                          <input
+                            onChange={(event) => setRoleKeyword(event.target.value)}
+                            placeholder="搜索角色"
+                            type="search"
+                            value={roleKeyword}
+                          />
+                        </label>
+                        <label>
+                          <span>状态</span>
+                          <select onChange={(event) => setRoleEnabledFilter(event.target.value)} value={roleEnabledFilter}>
+                            <option value="ALL">全部状态</option>
+                            <option value="true">启用</option>
+                            <option value="false">停用</option>
+                          </select>
+                        </label>
+                      </div>
+                      {rolesError && <div className="user-alert">{rolesError}</div>}
+                      <div className="role-list">
+                        {rolesLoading ? (
+                          <div className="user-loading">
+                            {[0, 1, 2].map((item) => <span key={item} />)}
+                          </div>
+                        ) : rolesData && rolesData.records.length > 0 ? (
+                          rolesData.records.map((role) => (
+                            <article
+                              className={selectedRoleId === role.id ? 'role-list-item active' : 'role-list-item'}
+                              key={role.id}
+                              onClick={() => selectRole(role)}
+                            >
+                              <div>
+                                <strong>{role.roleName}</strong>
+                                <p>{role.roleDesc || '暂无角色说明'}</p>
+                              </div>
+                              <div className="role-list-tags">
+                                <span className={role.systemRole ? 'role-pill admin' : 'role-pill'}>{role.systemRole ? '内置' : '自定义'}</span>
+                                <span className={role.enabled ? 'state-pill enabled' : 'state-pill disabled'}>{role.enabled ? '启用' : '停用'}</span>
+                              </div>
+                              <dl>
+                                <div><dt>菜单</dt><dd>{role.permissionCodes.filter((code) => code.startsWith('menu:')).length}</dd></div>
+                                <div><dt>操作</dt><dd>{role.permissionCodes.filter((code) => !code.startsWith('menu:')).length}</dd></div>
+                                <div><dt>用户</dt><dd>{role.userCount}</dd></div>
+                              </dl>
+                            </article>
+                          ))
+                        ) : (
+                          <div className="empty-state compact">
+                            <ShieldCheck size={36} />
+                            <strong>暂无角色</strong>
+                            <p>可新建自定义角色后配置权限。</p>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="role-editor-panel">
+                      <div className="role-panel-head editor">
+                        <div>
+                          <strong>{roleDraftMode === 'create' ? '新建角色' : '编辑角色'}</strong>
+                          <span>
+                            {selectedRoleReadonly
+                              ? '内置角色仅支持查看，不允许编辑或停用'
+                              : roleDraftMode === 'create'
+                                ? '可先勾选权限和数据范围，保存时一次创建并生效'
+                                : '保存后，已分配该角色的用户重新获取当前用户信息后生效'}
+                          </span>
+                        </div>
+                        <div className="role-editor-actions">
+                          {roleDraftMode === 'edit' && selectedRole && !selectedRole.systemRole && (
+                            <button disabled={!canEnableRoles || roleSaving} onClick={() => toggleRoleEnabled(selectedRole)} type="button">
+                              {selectedRole.enabled ? <PowerOff size={15} /> : <Power size={15} />}
+                              {selectedRole.enabled ? '停用' : '启用'}
+                            </button>
+                          )}
+                          <button
+                            className="primary-action"
+                            disabled={selectedRoleReadonly || roleSaving || !roleForm.roleName.trim() || (roleDraftMode === 'create' ? !canCreateRoles : !canUpdateRoles)}
+                            onClick={submitRoleBase}
+                            type="button"
+                          >
+                            {roleSaving ? <Loader size={15} className="spin-icon" /> : <Check size={15} />}
+                            {roleDraftMode === 'create' ? '创建角色' : '保存角色'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="role-protect-note">
+                        当前阶段只开放自定义角色配置；管理员、客服处理人等内置角色可查看，不允许删除或改成不可用。
+                      </div>
+
+                      <div className="role-editor-form">
+                        <label>
+                          <span>角色名称</span>
+                          <input
+                            disabled={selectedRoleReadonly || roleSaving}
+                            onChange={(event) => setRoleForm((value) => ({ ...value, roleName: event.target.value }))}
+                            placeholder="工单质检"
+                            value={roleForm.roleName}
+                          />
+                        </label>
+                        <label>
+                          <span>角色状态</span>
+                          <select
+                            disabled={selectedRoleReadonly || roleSaving}
+                            onChange={(event) => setRoleForm((value) => ({ ...value, enabled: event.target.value === 'true' }))}
+                            value={String(roleForm.enabled)}
+                          >
+                            <option value="true">启用</option>
+                            <option value="false">停用</option>
+                          </select>
+                        </label>
+                        <label className="wide">
+                          <span>角色说明</span>
+                          <textarea
+                            disabled={selectedRoleReadonly || roleSaving}
+                            onChange={(event) => setRoleForm((value) => ({ ...value, roleDesc: event.target.value }))}
+                            placeholder="查看工单、客户和附件，用于服务质量抽查"
+                            value={roleForm.roleDesc}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="role-section-title">
+                        <strong>菜单与操作权限</strong>
+                        <span>已选 {roleForm.permissionCodes.length} 项</span>
+                      </div>
+                      <div className="role-permission-layout">
+                        {renderPermissionTree(permissionTree)}
+                      </div>
+
+                      <div className="role-section-title">
+                        <strong>默认数据范围</strong>
+                        <span>当前阶段不支持指定邮箱和客户标签</span>
+                      </div>
+                      <div className="role-scope-grid">
+                        {['TICKET', 'CUSTOMER', 'DASHBOARD'].map((resourceType) => {
+                          const selectedScope = roleForm.dataScopes.find((scope) => scope.resourceType === resourceType)?.scopeCode || 'SELF'
+                          return (
+                            <div className="role-scope-card" key={resourceType}>
+                              <strong>{dataResourceLabel(resourceType)}</strong>
+                              <div>
+                                {['SELF', 'ALL'].map((scopeCode) => (
+                                  <button
+                                    className={selectedScope === scopeCode ? 'active' : ''}
+                                    disabled={selectedRoleReadonly || roleSaving || rolePermissionSaving || !canUpdateRolePermissions}
+                                    key={scopeCode}
+                                    onClick={() => updateRoleScope(resourceType, scopeCode)}
+                                    type="button"
+                                  >
+                                    {dataScopeLabel(scopeCode)}
+                                  </button>
+                                ))}
+                              </div>
+                              <p>{dataScopeDesc(resourceType, selectedScope)}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      <div className="role-effective-preview">
+                        <div><span>可见菜单</span><strong>{roleForm.permissionCodes.filter((code) => code.startsWith('menu:')).length} 项</strong></div>
+                        <div><span>操作权限</span><strong>{roleForm.permissionCodes.filter((code) => !code.startsWith('menu:')).length} 项</strong></div>
+                        <div><span>数据范围</span><strong>{roleForm.dataScopes.map((scope) => `${dataResourceLabel(scope.resourceType)} ${dataScopeLabel(scope.scopeCode)}`).join('、')}</strong></div>
+                        <div><span>保存影响</span><strong>{selectedRole?.userCount ?? 0} 个用户</strong></div>
+                      </div>
+
+                      <div className="role-editor-foot">
+                        <span>关联用户入口仍在用户管理</span>
+                        <button onClick={() => setActiveMenu('用户管理')} type="button">
+                          <UserCog size={15} />
+                          去用户管理
+                        </button>
+                        <button
+                          className="primary-action"
+                          disabled={selectedRoleReadonly || roleDraftMode === 'create' || !canUpdateRolePermissions || rolePermissionSaving}
+                          onClick={submitRolePermissions}
+                          type="button"
+                        >
+                          {rolePermissionSaving ? <Loader size={15} className="spin-icon" /> : <Check size={15} />}
+                          保存权限
+                        </button>
+                      </div>
+                    </section>
+                  </div>
+                </>
+              )}
+            </section>
           ) : activeMenu === '用户管理' ? (
             <section className="app-content user-page" aria-label="用户管理">
               <div className="content-title">
                 <div>
                   <h1>用户管理</h1>
-                  <p>维护后台账号、角色和启停状态；管理员可创建处理人并重置密码。</p>
+                  <p>维护后台账号、角色和启停状态；菜单、按钮和数据范围由权限清单统一生效。</p>
                 </div>
                 <div className="content-actions">
                   <button disabled={usersLoading} onClick={fetchUsers} type="button">
                     <RefreshCw size={16} />
                     刷新
                   </button>
-                  <button className="primary-action" onClick={openCreateUser} type="button">
+                  <button className="primary-action" disabled={!canCreateUsers} onClick={openCreateUser} type="button">
                     <Plus size={16} />
                     新建用户
                   </button>
                 </div>
               </div>
 
-              {!isAdmin ? (
+              {!canReadUsers ? (
                 <div className="permission-state">
                   <ShieldCheck size={42} />
                   <strong>无用户管理权限</strong>
@@ -6564,20 +7393,47 @@ function App() {
                       <small>后台账号总量</small>
                     </div>
                     <div className="user-metric">
-                      <span>启用账号</span>
-                      <strong>{usersData?.summary.enabledUsers ?? '--'}</strong>
-                      <small>可正常登录系统</small>
-                    </div>
-                    <div className="user-metric">
-                      <span>停用账号</span>
-                      <strong>{usersData?.summary.disabledUsers ?? '--'}</strong>
-                      <small>不可登录，保留历史归属</small>
-                    </div>
-                    <div className="user-metric">
                       <span>管理员</span>
                       <strong>{usersData?.summary.adminUsers ?? '--'}</strong>
-                      <small>拥有系统管理权限</small>
+                      <small>全部菜单和数据范围</small>
                     </div>
+                    <div className="user-metric">
+                      <span>处理人</span>
+                      <strong>{usersData?.summary.agentUsers ?? '--'}</strong>
+                      <small>自己负责和未分配池</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>权限项</span>
+                      <strong>{rolesData?.permissionTotal ?? roleProfiles.ADMIN.permissionCount}</strong>
+                      <small>当前内置权限清单</small>
+                    </div>
+                  </div>
+
+                  <div className="role-overview">
+                    {roleSelectOptions.slice(0, 4).map((role) => {
+                      const profile = getRoleProfile(role.value)
+                      return (
+                        <div className={role.value === 'ADMIN' ? 'role-card admin' : 'role-card'} key={role.value}>
+                          <div className="role-card__head">
+                            <span className={role.value === 'ADMIN' ? 'role-pill admin' : 'role-pill'}>
+                              {profile.title}
+                            </span>
+                            <strong>{profile.permissionCount} 项权限</strong>
+                          </div>
+                          <p>{profile.subtitle}</p>
+                          <dl>
+                            <div>
+                              <dt>菜单范围</dt>
+                              <dd>{profile.menuScope}</dd>
+                            </div>
+                            <div>
+                              <dt>数据范围</dt>
+                              <dd>{profile.dataScope}</dd>
+                            </div>
+                          </dl>
+                        </div>
+                      )
+                    })}
                   </div>
 
                   <div className="user-toolbar">
@@ -6603,7 +7459,7 @@ function App() {
                         value={userRoleFilter}
                       >
                         <option value="ALL">全部角色</option>
-                        {roleOptions.map((role) => (
+                        {roleSelectOptions.map((role) => (
                           <option key={role.value} value={role.value}>
                             {role.label}
                           </option>
@@ -6647,6 +7503,8 @@ function App() {
                             <th>姓名</th>
                             <th>邮箱</th>
                             <th>角色</th>
+                            <th>菜单范围</th>
+                            <th>数据范围</th>
                             <th>状态</th>
                             <th>最近登录</th>
                             <th>操作</th>
@@ -6662,10 +7520,16 @@ function App() {
                               <td>{managedUser.displayName}</td>
                               <td>{managedUser.email}</td>
                               <td>
-                                <span className={managedUser.roleCode === 'ADMIN' ? 'role-pill admin' : 'role-pill'}>
-                                  {roleLabel(managedUser.roleCode)}
-                                </span>
+                                <div className="role-pill-list">
+                                  {normalizeRoleCodes(managedUser.roleCode, managedUser.roleCodes || []).map((roleCode) => (
+                                    <span className={roleCode === 'ADMIN' ? 'role-pill admin' : 'role-pill'} key={roleCode}>
+                                      {roleSelectOptions.find((role) => role.value === roleCode)?.label || roleLabel(roleCode)}
+                                    </span>
+                                  ))}
+                                </div>
                               </td>
+                              <td>{(managedUser.roleCodes?.length || 0) > 1 ? '按多角色合并' : getRoleProfile(managedUser.roleCode).menuScope}</td>
+                              <td>{(managedUser.roleCodes?.length || 0) > 1 ? '按数据范围合并' : getRoleProfile(managedUser.roleCode).dataScope}</td>
                               <td>
                                 <span className={managedUser.enabled ? 'state-pill enabled' : 'state-pill disabled'}>
                                   {managedUser.enabled ? '启用' : '停用'}
@@ -6674,16 +7538,17 @@ function App() {
                               <td>{formatDateTime(managedUser.lastLoginAt)}</td>
                               <td>
                                 <div className="user-ops">
-                                  <button onClick={() => openEditUser(managedUser)} type="button">
+                                  <button disabled={!canUpdateUsers} onClick={() => openEditUser(managedUser)} type="button">
                                     <Edit3 size={14} />
-                                    编辑
+                                    编辑用户
                                   </button>
-                                  <button onClick={() => openResetConfirm(managedUser)} type="button">
+                                  <button disabled={!canResetUserPassword} onClick={() => openResetConfirm(managedUser)} type="button">
                                     <LockKeyhole size={14} />
                                     重置密码
                                   </button>
                                   <button
                                     className={managedUser.enabled ? 'danger' : 'success'}
+                                    disabled={!canEnableUsers}
                                     onClick={() => openEnabledConfirm(managedUser)}
                                     type="button"
                                   >
@@ -6703,7 +7568,7 @@ function App() {
                         <p>可清空筛选后重新查询，或直接新建用户。</p>
                         <div>
                           <button onClick={resetUserFilters} type="button">清空筛选</button>
-                          <button className="primary-action" onClick={openCreateUser} type="button">新建用户</button>
+                          <button className="primary-action" disabled={!canCreateUsers} onClick={openCreateUser} type="button">新建用户</button>
                         </div>
                       </div>
                     )}
@@ -8344,14 +9209,63 @@ function App() {
                   <span>角色</span>
                   <select
                     disabled={userFormSubmitting}
-                    onChange={(event) => setUserForm((value) => ({ ...value, roleCode: toRoleCode(event.target.value) }))}
+                    onChange={(event) => {
+                      const nextRole = toRoleCode(event.target.value)
+                      setUserForm((value) => ({
+                        ...value,
+                        roleCode: nextRole,
+                        roleCodes: normalizeRoleCodes(nextRole, value.roleCodes),
+                      }))
+                    }}
                     value={userForm.roleCode}
                   >
-                    {roleOptions.map((role) => (
+                    {roleSelectOptions.map((role) => (
                       <option key={role.value} value={role.value}>{role.label}</option>
                     ))}
                   </select>
                 </label>
+                <div className="user-role-checks">
+                  <span>附加角色</span>
+                  <div>
+                    {roleSelectOptions.map((role) => (
+                      <label key={role.value}>
+                        <input
+                          checked={normalizeRoleCodes(userForm.roleCode, userForm.roleCodes).includes(role.value)}
+                          disabled={userFormSubmitting || role.value === userForm.roleCode}
+                          onChange={(event) => {
+                            setUserForm((value) => {
+                              const next = new Set(normalizeRoleCodes(value.roleCode, value.roleCodes))
+                              if (event.target.checked) {
+                                next.add(role.value)
+                              } else {
+                                next.delete(role.value)
+                              }
+                              next.add(value.roleCode)
+                              return { ...value, roleCodes: Array.from(next) }
+                            })
+                          }}
+                          type="checkbox"
+                        />
+                        {role.label}
+                      </label>
+                    ))}
+                  </div>
+                  <small>主角色用于列表展示；实际菜单、按钮和数据范围按全部角色合并。</small>
+                </div>
+                <div className="role-preview">
+                  <span>角色生效预览</span>
+                  <strong>
+                    {normalizeRoleCodes(userForm.roleCode, userForm.roleCodes)
+                      .map((roleCode) => roleSelectOptions.find((role) => role.value === roleCode)?.label || roleLabel(roleCode))
+                      .join('、')}
+                  </strong>
+                  <small>{normalizeRoleCodes(userForm.roleCode, userForm.roleCodes).length > 1 ? '菜单、按钮和数据范围按多角色合并' : getRoleProfile(userForm.roleCode).dataScope}；保存后刷新当前用户信息即可按新权限生效。</small>
+                  <div>
+                    {normalizeRoleCodes(userForm.roleCode, userForm.roleCodes).slice(0, 4).map((roleCode) => (
+                      <em key={roleCode}>{roleSelectOptions.find((role) => role.value === roleCode)?.label || roleLabel(roleCode)}</em>
+                    ))}
+                  </div>
+                </div>
                 {userFormMode === 'create' && (
                   <label>
                     <span>初始密码</span>
@@ -8569,7 +9483,7 @@ function App() {
           confirmLoading={assignSending}
           okText="确认转派"
           cancelText="取消"
-          okButtonProps={{ disabled: !assignUserId }}
+          okButtonProps={{ disabled: !canOperateCurrentTicket || !assignUserId }}
         >
           <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
             <Alert
@@ -8585,6 +9499,7 @@ function App() {
               placeholder="请选择处理人"
               value={assignUserId}
               onChange={setAssignUserId}
+              disabled={!canOperateCurrentTicket}
               showSearch
               optionFilterProp="label"
               options={assignUsers
@@ -8600,6 +9515,7 @@ function App() {
               <Input.TextArea
                 value={assignReason}
                 onChange={(event) => setAssignReason(event.target.value)}
+                disabled={!canOperateCurrentTicket}
                 maxLength={200}
                 rows={3}
                 showCount
@@ -8611,7 +9527,7 @@ function App() {
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2937' }}>通知新处理人</div>
                 <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>开启后会发送分配通知邮件；关闭时仅更新工单。</div>
               </div>
-              <Switch checked={assignNotifyAssignee} onChange={setAssignNotifyAssignee} />
+              <Switch checked={assignNotifyAssignee} onChange={setAssignNotifyAssignee} disabled={!canOperateCurrentTicket} />
             </div>
           </div>
         </Modal>
@@ -8628,7 +9544,7 @@ function App() {
           confirmLoading={prioritySending}
           okText="确认修改"
           cancelText="取消"
-          okButtonProps={{ disabled: !ticketDetail || priorityValue === ticketDetail.priority }}
+          okButtonProps={{ disabled: !canOperateCurrentTicket || !ticketDetail || priorityValue === ticketDetail.priority }}
         >
           <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
             <Alert
@@ -8643,6 +9559,7 @@ function App() {
                 style={{ width: '100%' }}
                 value={priorityValue}
                 onChange={setPriorityValue}
+                disabled={!canOperateCurrentTicket}
                 options={[
                   { label: 'P1 - 紧急', value: 'URGENT' },
                   { label: 'P2 - 高', value: 'HIGH' },
@@ -8656,6 +9573,7 @@ function App() {
               <Input.TextArea
                 value={priorityReason}
                 onChange={(event) => setPriorityReason(event.target.value)}
+                disabled={!canOperateCurrentTicket}
                 maxLength={200}
                 rows={3}
                 showCount
@@ -8677,7 +9595,7 @@ function App() {
           confirmLoading={statusSending}
           okText="确认修改"
           cancelText="取消"
-          okButtonProps={{ disabled: !ticketDetail || statusValue === ticketDetail.status }}
+          okButtonProps={{ disabled: !canOperateCurrentTicket || !ticketDetail || statusValue === ticketDetail.status }}
         >
           <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
             <Alert
@@ -8692,6 +9610,7 @@ function App() {
                 style={{ width: '100%' }}
                 value={statusValue}
                 onChange={setStatusValue}
+                disabled={!canOperateCurrentTicket}
                 options={[
                   { label: '处理中', value: 'PROCESSING' },
                   { label: '已取消', value: 'CANCELLED' },
@@ -8703,6 +9622,7 @@ function App() {
               <Input.TextArea
                 value={statusReason}
                 onChange={(event) => setStatusReason(event.target.value)}
+                disabled={!canOperateCurrentTicket}
                 maxLength={200}
                 rows={3}
                 showCount
@@ -8725,7 +9645,7 @@ function App() {
           confirmLoading={closeSending}
           okText="确认关闭"
           cancelText="取消"
-          okButtonProps={{ danger: true, disabled: !closeConfirmed }}
+          okButtonProps={{ danger: true, disabled: !canOperateCurrentTicket || !closeConfirmed }}
         >
           <div style={{ padding: '12px 0', display: 'grid', gap: 14 }}>
             <Alert
@@ -8739,13 +9659,14 @@ function App() {
               <Input.TextArea
                 value={closeReason}
                 onChange={(event) => setCloseReason(event.target.value)}
+                disabled={!canOperateCurrentTicket}
                 maxLength={200}
                 rows={3}
                 showCount
                 placeholder="填写关闭原因或处理结论，保存后会写入工单日志"
               />
             </div>
-            <Checkbox checked={closeConfirmed} onChange={(event) => setCloseConfirmed(event.target.checked)}>
+            <Checkbox checked={closeConfirmed} disabled={!canOperateCurrentTicket} onChange={(event) => setCloseConfirmed(event.target.checked)}>
               我确认该工单已处理完成，可以关闭
             </Checkbox>
           </div>

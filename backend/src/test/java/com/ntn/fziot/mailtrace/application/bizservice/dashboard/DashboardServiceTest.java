@@ -1,8 +1,11 @@
 package com.ntn.fziot.mailtrace.application.bizservice.dashboard;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardTodoListResponse;
@@ -14,10 +17,13 @@ import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
@@ -39,6 +45,10 @@ class DashboardServiceTest {
     private UserMapper userMapper;
     @Mock
     private MailboxMapper mailboxMapper;
+    @Mock
+    private PermissionService permissionService;
+    @Spy
+    private DataScopeService dataScopeService = new DataScopeService();
 
     @InjectMocks
     private DashboardService dashboardService;
@@ -50,6 +60,11 @@ class DashboardServiceTest {
     private final CurrentUserPrincipal customer = new CurrentUserPrincipal(
             3L, "customer", "客户", "customer@example.com", "CUSTOMER");
 
+    @BeforeEach
+    void setUp() {
+        allowAdminAndAgentOperationalPermissions();
+    }
+
     @BeforeAll
     static void initMybatisPlusTableInfo() {
         MybatisConfiguration configuration = new MybatisConfiguration();
@@ -58,12 +73,7 @@ class DashboardServiceTest {
 
     @Test
     void summary_shouldReturnDashboardMetricsWithSameTicketStatsCounting() {
-        when(ticketMapper.countActiveTotal()).thenReturn(20L);
-        when(ticketMapper.countByStatus("PENDING_ASSIGN")).thenReturn(3L);
-        when(ticketMapper.countByStatus("PROCESSING")).thenReturn(7L);
-        when(ticketMapper.countByStatus("WAITING_CUSTOMER")).thenReturn(4L);
-        when(ticketMapper.countSlaOverdue()).thenReturn(2L);
-        when(ticketMapper.countClosedToday()).thenReturn(5L);
+        when(ticketMapper.selectCount(any())).thenReturn(20L, 3L, 7L, 4L, 2L, 5L);
 
         DashboardSummaryVO summary = dashboardService.summary(admin);
 
@@ -74,17 +84,12 @@ class DashboardServiceTest {
         assertEquals(2L, summary.slaOverdueCount());
         assertEquals(5L, summary.closedTodayCount());
         assertEquals(14L, summary.activeCount());
-        verify(ticketMapper).countActiveTotal();
+        verify(ticketMapper, org.mockito.Mockito.times(6)).selectCount(any());
     }
 
     @Test
     void summary_whenAgent_shouldAllow() {
-        when(ticketMapper.countActiveTotal()).thenReturn(0L);
-        when(ticketMapper.countByStatus("PENDING_ASSIGN")).thenReturn(0L);
-        when(ticketMapper.countByStatus("PROCESSING")).thenReturn(0L);
-        when(ticketMapper.countByStatus("WAITING_CUSTOMER")).thenReturn(0L);
-        when(ticketMapper.countSlaOverdue()).thenReturn(0L);
-        when(ticketMapper.countClosedToday()).thenReturn(0L);
+        when(ticketMapper.selectCount(any())).thenReturn(0L);
 
         DashboardSummaryVO summary = dashboardService.summary(agent);
 
@@ -92,11 +97,24 @@ class DashboardServiceTest {
     }
 
     @Test
+    void summary_whenAgent_shouldApplyOwnOrUnassignedScope() {
+        when(ticketMapper.selectCount(any())).thenReturn(0L);
+
+        dashboardService.summary(agent);
+
+        ArgumentCaptor<LambdaQueryWrapper<TicketEntity>> queryCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(ticketMapper, org.mockito.Mockito.times(6)).selectCount(queryCaptor.capture());
+        String sqlSegment = queryCaptor.getAllValues().get(0).getSqlSegment();
+        assertTrue(sqlSegment.contains("assignee_id"));
+        assertTrue(sqlSegment.contains("IS NULL"));
+    }
+
+    @Test
     void summary_whenNotAgentOrAdmin_shouldReject() {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> dashboardService.summary(customer));
 
-        assertTrue(ex.getMessage().contains("仅管理员和处理人"));
+        assertTrue(ex.getMessage().contains("无权查看工作台"));
     }
 
     @Test
@@ -163,7 +181,7 @@ class DashboardServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> dashboardService.myTodos(customer, 10));
 
-        assertTrue(ex.getMessage().contains("仅管理员和处理人"));
+        assertTrue(ex.getMessage().contains("无权查看工作台"));
     }
 
     private TicketEntity ticket(Long id, String status) {
@@ -200,5 +218,31 @@ class DashboardServiceTest {
     private static void initTableInfo(MybatisConfiguration configuration, String namespace, Class<?> entityClass) {
         MapperBuilderAssistant assistant = new MapperBuilderAssistant(configuration, namespace);
         TableInfoHelper.initTableInfo(assistant, entityClass);
+    }
+
+    private void allowAdminAndAgentOperationalPermissions() {
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String permissionCode = invocation.getArgument(1);
+            String message = invocation.getArgument(2);
+            if (principal == null) {
+                throw new BusinessException(40302, "未登录");
+            }
+            if ("ADMIN".equals(principal.roleCode()) || isAgentOperationalPermission(principal, permissionCode)) {
+                return null;
+            }
+            throw new BusinessException(40302, message);
+        }).when(permissionService).assertPermission(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    private boolean isAgentOperationalPermission(CurrentUserPrincipal principal, String permissionCode) {
+        return "AGENT".equals(principal.roleCode())
+                && (permissionCode.startsWith("ticket:")
+                || permissionCode.startsWith("ticket_attachment:")
+                || "customer:read".equals(permissionCode)
+                || "dashboard:read".equals(permissionCode));
     }
 }

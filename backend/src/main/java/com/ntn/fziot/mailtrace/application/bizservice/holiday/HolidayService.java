@@ -2,6 +2,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.holiday;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.HolidayListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.HolidaySaveRequest;
@@ -24,15 +25,14 @@ import java.util.List;
 public class HolidayService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
     private static final int CODE_CONFLICT = 40901;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String MODULE_HOLIDAY = "HOLIDAY";
 
     private final HolidayMapper holidayMapper;
     private final WorkCalendarMapper workCalendarMapper;
     private final OperationLogMapper operationLogMapper;
+    private final PermissionService permissionService;
 
     /**
      * 查询节假日列表。
@@ -40,7 +40,7 @@ public class HolidayService {
     public HolidayListResponse listHolidays(CurrentUserPrincipal principal, Long calendarId, String keyword,
                                             LocalDate dateFrom, LocalDate dateTo) {
         // 1、仅管理员可进入节假日配置。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "holiday:read", "无权查看节假日");
 
         // 2、校验日期范围，并按日历、名称、日期范围筛选。
         validateDateRange(dateFrom, dateTo);
@@ -62,7 +62,7 @@ public class HolidayService {
     @Transactional
     public HolidayVO createHoliday(CurrentUserPrincipal principal, HolidaySaveRequest request) {
         // 1、校验管理员权限、工作日历存在性和节假日日期唯一性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "holiday:create", "无权新建节假日");
         validateHoliday(request);
         ensureCalendarExists(request.getCalendarId());
         ensureHolidayDateUnique(request.getCalendarId(), request.getHolidayDate(), null);
@@ -85,7 +85,7 @@ public class HolidayService {
     @Transactional
     public HolidayVO updateHoliday(CurrentUserPrincipal principal, Long id, HolidaySaveRequest request) {
         // 1、校验权限、节假日存在性、工作日历存在性和日期唯一性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "holiday:update", "无权编辑节假日");
         HolidayEntity existing = requireHoliday(id);
         validateHoliday(request);
         ensureCalendarExists(request.getCalendarId());
@@ -108,7 +108,7 @@ public class HolidayService {
     @Transactional
     public void deleteHoliday(CurrentUserPrincipal principal, Long id) {
         // 1、校验权限和节假日存在性。
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "holiday:delete", "无权删除节假日");
         HolidayEntity existing = requireHoliday(id);
 
         // 2、逻辑删除节假日。
@@ -213,12 +213,6 @@ public class HolidayService {
                 holiday.getCreatedAt(),
                 holiday.getUpdatedAt()
         );
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作节假日");
-        }
     }
 
     private String normalize(String value) {

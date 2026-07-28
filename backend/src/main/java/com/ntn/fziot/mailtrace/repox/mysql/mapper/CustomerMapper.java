@@ -16,9 +16,17 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
             <script>
             SELECT COUNT(1)
             FROM (
-                SELECT email FROM mt_customer WHERE is_deleted = 0
-                UNION
-                SELECT customer_email AS email FROM mt_ticket WHERE is_deleted = 0
+                <if test="allAccess">
+                    SELECT email FROM mt_customer WHERE is_deleted = 0
+                    UNION
+                    SELECT customer_email AS email FROM mt_ticket WHERE is_deleted = 0
+                </if>
+                <if test="!allAccess">
+                    SELECT DISTINCT customer_email AS email
+                    FROM mt_ticket
+                    WHERE is_deleted = 0
+                      AND (assignee_id = #{currentUserId} OR assignee_id IS NULL)
+                </if>
             ) source
             <where>
                 <if test="keyword != null and keyword != ''">
@@ -27,7 +35,9 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
             </where>
             </script>
             """)
-    long countReadonlyCustomers(@Param("keyword") String keyword);
+    long countReadonlyCustomers(@Param("keyword") String keyword,
+                                @Param("allAccess") boolean allAccess,
+                                @Param("currentUserId") Long currentUserId);
 
     @Select("""
             <script>
@@ -44,12 +54,23 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
                 MAX(c.remark) AS remark,
                 MIN(COALESCE(c.created_at, t.created_at)) AS created_at
             FROM (
-                SELECT email FROM mt_customer WHERE is_deleted = 0
-                UNION
-                SELECT customer_email AS email FROM mt_ticket WHERE is_deleted = 0
+                <if test="allAccess">
+                    SELECT email FROM mt_customer WHERE is_deleted = 0
+                    UNION
+                    SELECT customer_email AS email FROM mt_ticket WHERE is_deleted = 0
+                </if>
+                <if test="!allAccess">
+                    SELECT DISTINCT customer_email AS email
+                    FROM mt_ticket
+                    WHERE is_deleted = 0
+                      AND (assignee_id = #{currentUserId} OR assignee_id IS NULL)
+                </if>
             ) source
             LEFT JOIN mt_customer c ON c.is_deleted = 0 AND c.email = source.email
             LEFT JOIN mt_ticket t ON t.is_deleted = 0 AND t.customer_email = source.email
+                <if test="!allAccess">
+                    AND (t.assignee_id = #{currentUserId} OR t.assignee_id IS NULL)
+                </if>
             <where>
                 <if test="keyword != null and keyword != ''">
                     AND source.email LIKE CONCAT('%', #{keyword}, '%')
@@ -62,9 +83,12 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
             """)
     List<CustomerReadonlyRow> selectReadonlyCustomers(@Param("keyword") String keyword,
                                                       @Param("offset") long offset,
-                                                      @Param("size") long size);
+                                                      @Param("size") long size,
+                                                      @Param("allAccess") boolean allAccess,
+                                                      @Param("currentUserId") Long currentUserId);
 
     @Select("""
+            <script>
             SELECT
                 MAX(c.id) AS id,
                 source.email AS email,
@@ -78,14 +102,29 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
                 MAX(c.remark) AS remark,
                 MIN(COALESCE(c.created_at, t.created_at)) AS created_at
             FROM (
-                SELECT email FROM mt_customer WHERE is_deleted = 0 AND email = #{email}
-                UNION
-                SELECT customer_email AS email FROM mt_ticket WHERE is_deleted = 0 AND customer_email = #{email}
+                <if test="allAccess">
+                    SELECT email FROM mt_customer WHERE is_deleted = 0 AND email = #{email}
+                    UNION
+                    SELECT customer_email AS email FROM mt_ticket WHERE is_deleted = 0 AND customer_email = #{email}
+                </if>
+                <if test="!allAccess">
+                    SELECT customer_email AS email
+                    FROM mt_ticket
+                    WHERE is_deleted = 0
+                      AND customer_email = #{email}
+                      AND (assignee_id = #{currentUserId} OR assignee_id IS NULL)
+                </if>
             ) source
             LEFT JOIN mt_customer c ON c.is_deleted = 0 AND c.email = source.email
             LEFT JOIN mt_ticket t ON t.is_deleted = 0 AND t.customer_email = source.email
+                <if test="!allAccess">
+                    AND (t.assignee_id = #{currentUserId} OR t.assignee_id IS NULL)
+                </if>
             GROUP BY source.email
             LIMIT 1
+            </script>
             """)
-    CustomerReadonlyRow selectReadonlyCustomerByEmail(@Param("email") String email);
+    CustomerReadonlyRow selectReadonlyCustomerByEmail(@Param("email") String email,
+                                                      @Param("allAccess") boolean allAccess,
+                                                      @Param("currentUserId") Long currentUserId);
 }

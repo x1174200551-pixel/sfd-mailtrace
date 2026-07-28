@@ -2,6 +2,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.mailfetch;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.log.MailFetchLogPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.log.MailFetchLogStatsVO;
@@ -24,11 +25,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MailFetchLogBizService {
 
-    private static final String ROLE_ADMIN = "ADMIN";
-    private static final String ROLE_AGENT = "AGENT";
-
     private final MailFetchLogMapper mailFetchLogMapper;
     private final MailboxMapper mailboxMapper;
+    private final PermissionService permissionService;
 
     /**
      * 拉取日志统计概览（总量，不受筛选条件影响）。
@@ -48,12 +47,7 @@ public class MailFetchLogBizService {
                                                   Long mailboxId, Boolean success,
                                                   LocalDateTime startFrom, LocalDateTime startTo,
                                                   String keyword, Integer page, Integer size) {
-        // principal 由 @AuthenticationPrincipal 保证非 null，Security 层已做鉴权
-        String role = principal.roleCode();
-        if (!ROLE_ADMIN.equals(role) && !ROLE_AGENT.equals(role)) {
-            throw new com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException(
-                    40302, "无权访问拉取日志");
-        }
+        permissionService.assertPermission(principal, "mail_fetch_log:read", "无权访问拉取日志");
 
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);

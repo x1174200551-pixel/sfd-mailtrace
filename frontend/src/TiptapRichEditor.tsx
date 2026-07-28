@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Underline from '@tiptap/extension-underline'
@@ -22,6 +22,7 @@ interface TiptapRichEditorProps {
   placeholder?: string
   onUpdate?: (html: string, text: string) => void
   initialContent?: string
+  disabled?: boolean
 }
 
 type ToolbarButton = {
@@ -38,7 +39,7 @@ type ToolbarDivider = {
 
 type ToolbarItem = ToolbarButton | ToolbarDivider
 
-function MenuBar({ editor }: { editor: any }) {
+function MenuBar({ editor, disabled }: { editor: any; disabled?: boolean }) {
   const addLink = useCallback(() => {
     const url = window.prompt('请输入链接地址：')
     if (url) {
@@ -76,6 +77,7 @@ function MenuBar({ editor }: { editor: any }) {
               type="text"
               size="small"
               className={`rich-editor-btn ${btn.active ? 'active' : ''}`}
+              disabled={disabled}
               onMouseDown={(e) => { e.preventDefault(); btn.action() }}
               icon={btn.icon}
             />
@@ -86,7 +88,7 @@ function MenuBar({ editor }: { editor: any }) {
   )
 }
 
-export default function TiptapRichEditor({ placeholder = '请输入内容...', onUpdate, initialContent }: TiptapRichEditorProps) {
+export default function TiptapRichEditor({ placeholder = '请输入内容...', onUpdate, initialContent, disabled = false }: TiptapRichEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -110,11 +112,16 @@ export default function TiptapRichEditor({ placeholder = '请输入内容...', o
         class: 'rich-editor-content',
       },
     },
+    editable: !disabled,
   })
 
+  useEffect(() => {
+    editor?.setEditable(!disabled)
+  }, [editor, disabled])
+
   return (
-    <div className="rich-editor-wrapper" onClick={() => editor?.chain().focus().run()}>
-      <MenuBar editor={editor} />
+    <div className={`rich-editor-wrapper ${disabled ? 'disabled' : ''}`} onClick={() => { if (!disabled) editor?.chain().focus().run() }}>
+      <MenuBar editor={editor} disabled={disabled} />
       <EditorContent editor={editor} />
     </div>
   )

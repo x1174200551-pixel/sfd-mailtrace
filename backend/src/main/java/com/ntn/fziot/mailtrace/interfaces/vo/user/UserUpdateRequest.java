@@ -6,6 +6,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @Schema(description = "编辑用户请求")
 public class UserUpdateRequest {
@@ -22,8 +25,11 @@ public class UserUpdateRequest {
     private String email;
 
     @NotBlank(message = "请选择角色")
-    @Schema(description = "角色编码：ADMIN/AGENT", example = "AGENT")
+    @Schema(description = "主角色编码", example = "AGENT")
     private String roleCode;
+
+    @Schema(description = "角色编码清单；为空时默认只分配主角色")
+    private List<String> roleCodes = new ArrayList<>();
 
     @Schema(description = "是否启用", example = "true")
     private Boolean enabled = true;

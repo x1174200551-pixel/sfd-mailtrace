@@ -62,8 +62,9 @@ public class TicketController {
 
     @Operation(summary = "工单统计概览")
     @GetMapping("/stats")
-    public BasicResult<TicketBizService.TicketStats> stats() {
-        return BasicResult.ok(ticketBizService.stats());
+    public BasicResult<TicketBizService.TicketStats> stats(
+            @AuthenticationPrincipal CurrentUserPrincipal principal) {
+        return BasicResult.ok(ticketBizService.stats(principal));
     }
 
     @Operation(summary = "分配处理人")
@@ -73,6 +74,14 @@ public class TicketController {
             @PathVariable Long id,
             @Valid @RequestBody TicketAssignRequest request) {
         return BasicResult.ok(ticketBizService.assignTicket(principal, id, request));
+    }
+
+    @Operation(summary = "领取未分配工单")
+    @PostMapping("/{id}/claim")
+    public BasicResult<TicketVO> claimTicket(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id) {
+        return BasicResult.ok(ticketBizService.claimTicket(principal, id));
     }
 
     @Operation(summary = "回复客户 / 内部备注（internal=true 为内部备注）")

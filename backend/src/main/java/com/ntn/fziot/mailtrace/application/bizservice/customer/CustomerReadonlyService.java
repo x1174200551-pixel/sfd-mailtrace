@@ -1,6 +1,8 @@
 package com.ntn.fziot.mailtrace.application.bizservice.customer;
 
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerVO;
@@ -16,12 +18,11 @@ import java.util.List;
 public class CustomerReadonlyService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
-    private static final String ROLE_ADMIN = "ADMIN";
-    private static final String ROLE_AGENT = "AGENT";
 
     private final CustomerMapper customerMapper;
+    private final DataScopeService dataScopeService;
+    private final PermissionService permissionService;
 
     /**
      * 客户只读分页查询。
@@ -29,18 +30,19 @@ public class CustomerReadonlyService {
     public CustomerPageResponse pageCustomers(CurrentUserPrincipal principal, String keyword,
                                               Integer page, Integer size) {
         // 1、客户只读页面仅允许管理员和处理人访问。
-        assertAgentOrAdmin(principal);
+        permissionService.assertPermission(principal, "customer:read", "无权查看客户");
 
         // 2、规范化分页和关键字，客户来源合并客户档案表与历史工单邮箱。
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
         String normalizedKeyword = normalize(keyword);
-        long total = customerMapper.countReadonlyCustomers(normalizedKeyword);
+        boolean allAccess = dataScopeService.isAdmin(principal);
+        long total = customerMapper.countReadonlyCustomers(normalizedKeyword, allAccess, principal.id());
         long pages = total == 0 ? 0 : (long) Math.ceil((double) total / pageSize);
         long offset = (currentPage - 1) * pageSize;
 
         // 3、查询最近来信、工单数等只读字段。
-        List<CustomerVO> records = customerMapper.selectReadonlyCustomers(normalizedKeyword, offset, pageSize)
+        List<CustomerVO> records = customerMapper.selectReadonlyCustomers(normalizedKeyword, offset, pageSize, allAccess, principal.id())
                 .stream()
                 .map(this::toVO)
                 .toList();
@@ -54,14 +56,15 @@ public class CustomerReadonlyService {
      */
     public CustomerVO getCustomer(CurrentUserPrincipal principal, String email) {
         // 1、校验权限和邮箱参数。
-        assertAgentOrAdmin(principal);
+        permissionService.assertPermission(principal, "customer:read", "无权查看客户");
         String normalizedEmail = normalize(email);
         if (normalizedEmail.isEmpty()) {
             throw new BusinessException(CODE_BAD_REQUEST, "客户邮箱不能为空");
         }
 
         // 2、按邮箱合并客户档案和历史工单聚合详情。
-        CustomerReadonlyRow row = customerMapper.selectReadonlyCustomerByEmail(normalizedEmail);
+        boolean allAccess = dataScopeService.isAdmin(principal);
+        CustomerReadonlyRow row = customerMapper.selectReadonlyCustomerByEmail(normalizedEmail, allAccess, principal.id());
         if (row == null) {
             throw new BusinessException(CODE_NOT_FOUND, "客户不存在");
         }
@@ -80,15 +83,6 @@ public class CustomerReadonlyService {
                 row.getRemark(),
                 row.getCreatedAt()
         );
-    }
-
-    private void assertAgentOrAdmin(CurrentUserPrincipal principal) {
-        if (principal == null) {
-            throw new BusinessException(CODE_FORBIDDEN, "未登录");
-        }
-        if (!ROLE_ADMIN.equals(principal.roleCode()) && !ROLE_AGENT.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员和处理人可查看客户");
-        }
     }
 
     private long normalizePage(Integer page) {

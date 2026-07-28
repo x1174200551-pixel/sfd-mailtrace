@@ -2,7 +2,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.mailsend;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.log.MailSendLogPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.log.MailSendLogVO;
@@ -20,10 +20,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MailSendLogBizService {
 
-    private static final String ROLE_ADMIN = "ADMIN";
-    private static final String ROLE_AGENT = "AGENT";
-
     private final MailSendLogMapper mailSendLogMapper;
+    private final PermissionService permissionService;
 
     /**
      * 发送日志统计概览（总量，不受筛选影响）。
@@ -49,10 +47,7 @@ public class MailSendLogBizService {
                                                 Long mailboxId, String sendType, String sendStatus,
                                                 LocalDateTime startFrom, LocalDateTime startTo,
                                                 Integer page, Integer size) {
-        String role = principal.roleCode();
-        if (!ROLE_ADMIN.equals(role) && !ROLE_AGENT.equals(role)) {
-            throw new BusinessException(40302, "无权访问发送日志");
-        }
+        permissionService.assertPermission(principal, "mail_send_log:read", "无权访问发送日志");
 
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);

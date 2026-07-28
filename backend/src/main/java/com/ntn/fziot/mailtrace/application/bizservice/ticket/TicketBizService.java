@@ -7,6 +7,8 @@ import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleM
 import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleService;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
@@ -40,6 +42,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -78,9 +81,7 @@ public class TicketBizService {
 
     // ---------- 权限常量 ----------
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String OPERATOR_SYSTEM = "system";
     private static final String MODULE_TICKET = "TICKET";
 
@@ -105,6 +106,8 @@ public class TicketBizService {
     private final TicketAttachmentMapper ticketAttachmentMapper;
     private final AssignmentRuleService assignmentRuleService;
     private final SlaDeadlineService slaDeadlineService;
+    private final DataScopeService dataScopeService;
+    private final PermissionService permissionService;
 
     // ==================== 创建工单（系统内部调用） ====================
 
@@ -278,12 +281,13 @@ public class TicketBizService {
                                           Boolean slaBreached, Long assigneeId, Long mailboxId,
                                           LocalDateTime createdFrom, LocalDateTime createdTo,
                                           Integer page, Integer size) {
-        assertAgentOrAdmin(principal);
+        permissionService.assertPermission(principal, "ticket:read", "无权查看工单");
 
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
-        LambdaQueryWrapper<TicketEntity> wrapper = buildPageQuery(keyword, status, slaBreached, assigneeId, mailboxId, createdFrom, createdTo)
-                .orderByDesc(TicketEntity::getCreatedAt)
+        LambdaQueryWrapper<TicketEntity> wrapper = buildPageQuery(keyword, status, slaBreached, assigneeId, mailboxId, createdFrom, createdTo);
+        dataScopeService.applyTicketScope(wrapper, principal);
+        wrapper.orderByDesc(TicketEntity::getCreatedAt)
                 .orderByDesc(TicketEntity::getId);
 
         Page<TicketEntity> result = ticketMapper.selectPage(Page.of(currentPage, pageSize), wrapper);
@@ -303,8 +307,9 @@ public class TicketBizService {
      * 工单详情，含邮件消息列表和生命周期事件。
      */
     public TicketVO getTicket(CurrentUserPrincipal principal, Long id) {
-        assertAgentOrAdmin(principal);
+        permissionService.assertPermission(principal, "ticket:read", "无权查看工单");
         TicketEntity ticket = requireTicket(id);
+        dataScopeService.assertTicketVisible(principal, ticket);
         return toDetailVO(ticket);
     }
 
@@ -312,8 +317,9 @@ public class TicketBizService {
 
     @Transactional
     public TicketVO assignTicket(CurrentUserPrincipal principal, Long id, TicketAssignRequest request) {
-        assertAgentOrAdmin(principal);
+        permissionService.assertPermission(principal, "ticket:assign", "无权转派工单");
         TicketEntity ticket = requireTicket(id);
+        dataScopeService.assertTicketOperable(principal, ticket);
         assertActive(ticket);
 
         if (request.assigneeId() == null) {
@@ -356,18 +362,57 @@ public class TicketBizService {
         return toDetailVO(ticketMapper.selectById(id));
     }
 
+    // ==================== 领取未分配工单 ====================
+
+    @Transactional
+    public TicketVO claimTicket(CurrentUserPrincipal principal, Long id) {
+        permissionService.assertPermission(principal, "ticket:claim", "无权领取工单");
+        TicketEntity ticket = requireTicket(id);
+        dataScopeService.assertTicketVisible(principal, ticket);
+        assertActive(ticket);
+        if (principal.id() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "当前用户缺少用户ID，无法领取工单");
+        }
+        if (ticket.getAssigneeId() != null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "工单已分配，不能领取");
+        }
+
+        LambdaUpdateWrapper<TicketEntity> updateWrapper = new LambdaUpdateWrapper<TicketEntity>()
+                .eq(TicketEntity::getId, ticket.getId())
+                .isNull(TicketEntity::getAssigneeId)
+                .set(TicketEntity::getAssigneeId, principal.id())
+                .set(TicketEntity::getUpdatedBy, principal.account());
+        if (STATUS_PENDING_ASSIGN.equals(ticket.getStatus())) {
+            updateWrapper.set(TicketEntity::getStatus, STATUS_PROCESSING);
+        }
+        int updated = ticketMapper.update(null, updateWrapper);
+        if (updated == 0) {
+            throw new BusinessException(CODE_BAD_REQUEST, "工单已被领取或已分配");
+        }
+
+        String operatorName = principal.displayName() == null || principal.displayName().isBlank()
+                ? principal.account()
+                : principal.displayName();
+        String content = "领取未分配工单：" + operatorName;
+        recordEvent(ticket.getId(), EVENT_ASSIGNED, content, principal.account(), LocalDateTime.now());
+        recordLog(principal, "CLAIM", ticket.getId(), content);
+
+        return toDetailVO(ticketMapper.selectById(id));
+    }
+
     // ==================== 工单统计 ====================
 
     public record TicketStats(long totalCount, long pendingAssignCount, long processingCount, long waitingCustomerCount, long slaOverdueCount, long closedTodayCount) {}
 
-    public TicketStats stats() {
+    public TicketStats stats(CurrentUserPrincipal principal) {
+        permissionService.assertPermission(principal, "ticket:read", "无权查看工单统计");
         return new TicketStats(
-                ticketMapper.countActiveTotal(),
-                ticketMapper.countByStatus("PENDING_ASSIGN"),
-                ticketMapper.countByStatus("PROCESSING"),
-                ticketMapper.countByStatus("WAITING_CUSTOMER"),
-                ticketMapper.countSlaOverdue(),
-                ticketMapper.countClosedToday()
+                countTickets(principal, null, null, false),
+                countTickets(principal, STATUS_PENDING_ASSIGN, null, false),
+                countTickets(principal, STATUS_PROCESSING, null, false),
+                countTickets(principal, STATUS_WAITING_CUSTOMER, null, false),
+                countTickets(principal, null, true, false),
+                countTickets(principal, STATUS_CLOSED, null, true)
         );
     }
 
@@ -375,8 +420,11 @@ public class TicketBizService {
 
     @Transactional
     public TicketVO replyTicket(CurrentUserPrincipal principal, Long id, TicketReplyRequest request) {
-        assertAgentOrAdmin(principal);
+        boolean isInternal = Boolean.TRUE.equals(request.internal());
+        permissionService.assertPermission(principal, isInternal ? "ticket:note" : "ticket:reply",
+                isInternal ? "无权添加内部备注" : "无权回复客户");
         TicketEntity ticket = requireTicket(id);
+        dataScopeService.assertTicketOperable(principal, ticket);
         assertActive(ticket);
 
         String content = normalize(request.content());
@@ -384,7 +432,6 @@ public class TicketBizService {
             throw new BusinessException(CODE_BAD_REQUEST, "回复内容不能为空");
         }
 
-        boolean isInternal = Boolean.TRUE.equals(request.internal());
         String direction = isInternal ? DIRECTION_INTERNAL : DIRECTION_OUTBOUND;
 
         // 记录消息
@@ -476,8 +523,14 @@ public class TicketBizService {
 
     @Transactional
     public TicketVO updateStatus(CurrentUserPrincipal principal, Long id, TicketStatusRequest request) {
-        assertAgentOrAdmin(principal);
+        return updateStatusInternal(principal, id, request, "ticket:update_status", "无权变更工单状态");
+    }
+
+    private TicketVO updateStatusInternal(CurrentUserPrincipal principal, Long id, TicketStatusRequest request,
+                                          String permissionCode, String forbiddenMessage) {
+        permissionService.assertPermission(principal, permissionCode, forbiddenMessage);
         TicketEntity ticket = requireTicket(id);
+        dataScopeService.assertTicketOperable(principal, ticket);
         assertActive(ticket);
 
         String newStatus = normalize(request.status()).toUpperCase();
@@ -515,8 +568,9 @@ public class TicketBizService {
 
     @Transactional
     public TicketVO updatePriority(CurrentUserPrincipal principal, Long id, TicketPriorityRequest request) {
-        assertAgentOrAdmin(principal);
+        permissionService.assertPermission(principal, "ticket:update_priority", "无权变更工单优先级");
         TicketEntity ticket = requireTicket(id);
+        dataScopeService.assertTicketOperable(principal, ticket);
         assertActive(ticket);
 
         String newPriority = normalize(request.priority()).toUpperCase();
@@ -546,8 +600,9 @@ public class TicketBizService {
 
     @Transactional
     public TicketVO updateRemark(CurrentUserPrincipal principal, Long id, TicketRemarkRequest request) {
-        assertAgentOrAdmin(principal);
+        permissionService.assertPermission(principal, "ticket:update_remark", "无权编辑工单备注");
         TicketEntity ticket = requireTicket(id);
+        dataScopeService.assertTicketOperable(principal, ticket);
         ticketMapper.update(null, new LambdaUpdateWrapper<TicketEntity>()
                 .eq(TicketEntity::getId, ticket.getId())
                 .set(TicketEntity::getRemark, request.remark())
@@ -560,7 +615,8 @@ public class TicketBizService {
     @Transactional
     public TicketVO closeTicket(CurrentUserPrincipal principal, Long id, TicketStatusRequest request) {
         String reason = request == null ? null : request.reason();
-        return updateStatus(principal, id, new TicketStatusRequest("CLOSED", reason));
+        return updateStatusInternal(principal, id, new TicketStatusRequest("CLOSED", reason),
+                "ticket:close", "无权关闭工单");
     }
 
     // ==================== 内部方法 ====================
@@ -753,6 +809,23 @@ public class TicketBizService {
         return wrapper;
     }
 
+    private long countTickets(CurrentUserPrincipal principal, String status, Boolean slaBreached, boolean closedToday) {
+        LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<>();
+        dataScopeService.applyTicketScope(wrapper, principal);
+        if (status != null) {
+            wrapper.eq(TicketEntity::getStatus, status);
+        }
+        if (slaBreached != null) {
+            wrapper.eq(TicketEntity::getSlaBreached, slaBreached);
+        }
+        if (closedToday) {
+            LocalDate today = LocalDate.now();
+            wrapper.ge(TicketEntity::getCreatedAt, today.atStartOfDay())
+                    .lt(TicketEntity::getCreatedAt, today.plusDays(1).atStartOfDay());
+        }
+        return ticketMapper.selectCount(wrapper);
+    }
+
     private TicketEntity requireTicket(Long id) {
         if (id == null) {
             throw new BusinessException(CODE_BAD_REQUEST, "工单ID不能为空");
@@ -767,15 +840,6 @@ public class TicketBizService {
     private void assertActive(TicketEntity ticket) {
         if (STATUS_CLOSED.equals(ticket.getStatus()) || STATUS_CANCELLED.equals(ticket.getStatus())) {
             throw new BusinessException(CODE_BAD_REQUEST, "工单已" + ("CLOSED".equals(ticket.getStatus()) ? "关闭" : "取消") + "，无法操作");
-        }
-    }
-
-    private void assertAgentOrAdmin(CurrentUserPrincipal principal) {
-        if (principal == null) {
-            throw new BusinessException(CODE_FORBIDDEN, "未登录");
-        }
-        if (!ROLE_ADMIN.equals(principal.roleCode()) && !"AGENT".equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员和处理人可操作工单");
         }
     }
 

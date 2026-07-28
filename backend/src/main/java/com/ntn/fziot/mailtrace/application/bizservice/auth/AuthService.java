@@ -2,6 +2,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.auth;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.infrastructure.security.JwtTokenService;
 import com.ntn.fziot.mailtrace.interfaces.vo.auth.CurrentUserVO;
@@ -27,6 +28,7 @@ public class AuthService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenService jwtTokenService;
+    private final PermissionService permissionService;
 
     @Transactional
     public LoginResponse login(LoginRequest request) {
@@ -56,22 +58,30 @@ public class AuthService {
     }
 
     public CurrentUserVO currentUser(CurrentUserPrincipal principal) {
+        PermissionService.PermissionContext permissions = permissionService.getCurrentPermissions(principal);
         return new CurrentUserVO(
                 principal.id(),
                 principal.account(),
                 principal.displayName(),
                 principal.email(),
-                principal.roleCode()
+                principal.roleCode(),
+                permissions.roles(),
+                permissions.permissions(),
+                permissions.dataScopes()
         );
     }
 
     private CurrentUserVO toCurrentUser(UserEntity user) {
+        PermissionService.PermissionContext permissions = permissionService.getUserPermissions(user.getId(), user.getRoleCode());
         return new CurrentUserVO(
                 user.getId(),
                 user.getAccount(),
                 user.getDisplayName(),
                 user.getEmail(),
-                user.getRoleCode()
+                user.getRoleCode(),
+                permissions.roles(),
+                permissions.permissions(),
+                permissions.dataScopes()
         );
     }
 

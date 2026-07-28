@@ -1,6 +1,8 @@
 package com.ntn.fziot.mailtrace.application.bizservice.mailsend;
 
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
+import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailSendLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailSendLogMapper;
@@ -31,6 +33,7 @@ public class MailSendService {
     private final MailboxMapper mailboxMapper;
     private final MailSendLogMapper mailSendLogMapper;
     private final MailPasswordCipher mailPasswordCipher;
+    private final PermissionService permissionService;
 
     /**
      * 发送一封指定内容的邮件（供自动回执、分配通知等内部调用）。
@@ -91,6 +94,11 @@ public class MailSendService {
                 getFromAddress(mailbox), "MailTrace 测试邮件",
                 "这是一封来自 MailTrace 邮件工单系统的测试邮件。\n\n如果您收到此邮件，说明 SMTP 配置正确，发信服务正常工作。",
                 "TEST");
+    }
+
+    public SendResult sendTestMail(CurrentUserPrincipal principal, Long mailboxId, String toAddress) {
+        permissionService.assertPermission(principal, "mail_send:test", "无权发送测试邮件");
+        return sendTestMail(mailboxId, toAddress);
     }
 
     /**
@@ -181,6 +189,11 @@ public class MailSendService {
         }
         // 4、执行发送
         return doRetrySend(mailbox, smtpPassword, logEntity);
+    }
+
+    public SendResult retrySend(CurrentUserPrincipal principal, Long sendLogId) {
+        permissionService.assertPermission(principal, "mail_send:retry", "无权重试发送邮件");
+        return retrySend(sendLogId);
     }
 
     private SendResult doRetrySend(MailboxEntity mailbox, String smtpPassword, MailSendLogEntity logEntity) {

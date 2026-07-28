@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.sla;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyDefaultRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyEnabledRequest;
@@ -44,6 +45,8 @@ class SlaPolicyServiceTest {
     private WorkCalendarMapper workCalendarMapper;
     @Mock
     private OperationLogMapper operationLogMapper;
+    @Mock
+    private PermissionService permissionService;
 
     @InjectMocks
     private SlaPolicyService slaPolicyService;
@@ -61,8 +64,32 @@ class SlaPolicyServiceTest {
 
     @BeforeEach
     void setUp() {
+        allowAdminAndAgentOperationalPermissions();
         lenient().when(slaPolicyMapper.selectCount(any())).thenReturn(0L);
         lenient().when(workCalendarMapper.selectById(1L)).thenReturn(workCalendar(1L));
+    }
+
+    private void allowAdminAndAgentOperationalPermissions() {
+        lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String permissionCode = invocation.getArgument(1);
+            String message = invocation.getArgument(2);
+            if (principal == null) {
+                throw new BusinessException(40302, "未登录");
+            }
+            if ("ADMIN".equals(principal.roleCode()) || isAgentOperationalPermission(principal, permissionCode)) {
+                return null;
+            }
+            throw new BusinessException(40302, message);
+        }).when(permissionService).assertPermission(any(), any(), any());
+    }
+
+    private boolean isAgentOperationalPermission(CurrentUserPrincipal principal, String permissionCode) {
+        return "AGENT".equals(principal.roleCode())
+                && (permissionCode.startsWith("ticket:")
+                || permissionCode.startsWith("ticket_attachment:")
+                || "customer:read".equals(permissionCode)
+                || "dashboard:read".equals(permissionCode));
     }
 
     @Test
@@ -185,7 +212,7 @@ class SlaPolicyServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> slaPolicyService.listPolicies(agent, null, null, null));
 
-        assertTrue(ex.getMessage().contains("仅管理员"));
+        assertTrue(ex.getMessage().contains("无权查看 SLA 策略"));
     }
 
     private SlaPolicySaveRequest saveRequest(String policyName, Boolean enabled, Boolean defaultPolicy,

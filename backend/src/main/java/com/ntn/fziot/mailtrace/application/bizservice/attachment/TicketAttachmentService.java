@@ -1,9 +1,15 @@
 package com.ntn.fziot.mailtrace.application.bizservice.attachment;
 
 import com.ntn.fziot.mailtrace.infrastructure.storage.FileStorageService;
+import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
+import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAttachmentVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketAttachmentEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketAttachmentMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,14 +27,24 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class TicketAttachmentService {
 
+    private static final int CODE_BAD_REQUEST = 40001;
+    private static final int CODE_NOT_FOUND = 40401;
+
     private final TicketAttachmentMapper attachmentMapper;
+    private final TicketMapper ticketMapper;
     private final FileStorageService fileStorageService;
+    private final DataScopeService dataScopeService;
+    private final PermissionService permissionService;
 
     /**
      * 上传附件。
      */
     @Transactional
-    public TicketAttachmentVO upload(Long ticketId, Long messageId, MultipartFile file, String operator) throws IOException {
+    public TicketAttachmentVO upload(Long ticketId, Long messageId, MultipartFile file, CurrentUserPrincipal principal) throws IOException {
+        TicketEntity ticket = requireTicket(ticketId);
+        permissionService.assertPermission(principal, "ticket_attachment:upload", "无权上传工单附件");
+        dataScopeService.assertTicketOperable(principal, ticket);
+
         // 1、上传到 MinIO
         String objectKey = fileStorageService.upload(
                 file.getOriginalFilename(),
@@ -45,7 +61,7 @@ public class TicketAttachmentService {
         entity.setFileSize(file.getSize());
         entity.setContentType(file.getContentType());
         entity.setObjectKey(objectKey);
-        entity.setUploadedBy(operator);
+        entity.setUploadedBy(principal.account());
         entity.setCreatedAt(LocalDateTime.now());
         attachmentMapper.insert(entity);
 
@@ -57,7 +73,10 @@ public class TicketAttachmentService {
     /**
      * 查询工单的所有附件。
      */
-    public List<TicketAttachmentVO> listByTicketId(Long ticketId) {
+    public List<TicketAttachmentVO> listByTicketId(Long ticketId, CurrentUserPrincipal principal) {
+        TicketEntity ticket = requireTicket(ticketId);
+        permissionService.assertPermission(principal, "ticket_attachment:read", "无权查看工单附件");
+        dataScopeService.assertTicketVisible(principal, ticket);
         return attachmentMapper.selectList(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TicketAttachmentEntity>()
                         .eq(TicketAttachmentEntity::getTicketId, ticketId)
@@ -69,9 +88,11 @@ public class TicketAttachmentService {
      * 删除附件。
      */
     @Transactional
-    public void delete(Long attachmentId) {
-        TicketAttachmentEntity entity = attachmentMapper.selectById(attachmentId);
-        if (entity == null) return;
+    public void delete(Long ticketId, Long attachmentId, CurrentUserPrincipal principal) {
+        TicketEntity ticket = requireTicket(ticketId);
+        permissionService.assertPermission(principal, "ticket_attachment:delete", "无权删除工单附件");
+        dataScopeService.assertTicketOperable(principal, ticket);
+        TicketAttachmentEntity entity = requireAttachment(ticketId, attachmentId);
         fileStorageService.delete(entity.getObjectKey());
         attachmentMapper.deleteById(attachmentId);
         log.info("附件删除成功 id={} fileName={}", attachmentId, entity.getFileName());
@@ -80,10 +101,34 @@ public class TicketAttachmentService {
     /**
      * 获取附件的原始输入流（用于下载代理）。
      */
-    public InputStream downloadRaw(Long attachmentId) {
-        TicketAttachmentEntity entity = attachmentMapper.selectById(attachmentId);
-        if (entity == null) return null;
+    public InputStream downloadRaw(Long ticketId, Long attachmentId, CurrentUserPrincipal principal) {
+        TicketEntity ticket = requireTicket(ticketId);
+        permissionService.assertPermission(principal, "ticket_attachment:download", "无权下载工单附件");
+        dataScopeService.assertTicketVisible(principal, ticket);
+        TicketAttachmentEntity entity = requireAttachment(ticketId, attachmentId);
         return fileStorageService.download(entity.getObjectKey());
+    }
+
+    private TicketEntity requireTicket(Long ticketId) {
+        if (ticketId == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "工单ID不能为空");
+        }
+        TicketEntity ticket = ticketMapper.selectById(ticketId);
+        if (ticket == null) {
+            throw new BusinessException(CODE_NOT_FOUND, "工单不存在");
+        }
+        return ticket;
+    }
+
+    private TicketAttachmentEntity requireAttachment(Long ticketId, Long attachmentId) {
+        if (attachmentId == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "附件ID不能为空");
+        }
+        TicketAttachmentEntity entity = attachmentMapper.selectById(attachmentId);
+        if (entity == null || !ticketId.equals(entity.getTicketId())) {
+            throw new BusinessException(CODE_NOT_FOUND, "附件不存在");
+        }
+        return entity;
     }
 
     private TicketAttachmentVO toVO(TicketAttachmentEntity e) {

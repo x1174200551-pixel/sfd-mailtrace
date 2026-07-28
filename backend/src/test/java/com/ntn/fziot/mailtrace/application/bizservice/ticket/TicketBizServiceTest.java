@@ -2,12 +2,15 @@ package com.ntn.fziot.mailtrace.application.bizservice.ticket;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleMatchResult;
 import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleService;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
@@ -36,6 +39,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
@@ -79,12 +83,18 @@ class TicketBizServiceTest {
     private AssignmentRuleService assignmentRuleService;
     @Mock
     private SlaDeadlineService slaDeadlineService;
+    @Mock
+    private PermissionService permissionService;
+    @Spy
+    private DataScopeService dataScopeService = new DataScopeService();
 
     @InjectMocks
     private TicketBizService ticketBizService;
 
     private final CurrentUserPrincipal admin = new CurrentUserPrincipal(
             1L, "admin", "系统管理员", "admin@example.com", "ADMIN");
+    private final CurrentUserPrincipal agent = new CurrentUserPrincipal(
+            2L, "agent", "处理人", "agent@example.com", "AGENT");
 
     @BeforeAll
     static void initMybatisPlusTableInfo() {
@@ -96,12 +106,36 @@ class TicketBizServiceTest {
 
     @BeforeEach
     void setUp() {
+        allowAdminAndAgentOperationalPermissions();
         lenient().when(ticketMessageMapper.selectList(any())).thenReturn(List.of());
         lenient().when(ticketEventMapper.selectList(any())).thenReturn(List.of());
         lenient().when(mailboxMapper.selectById(11L)).thenReturn(mailbox());
         lenient().when(userMapper.selectById(2L)).thenReturn(agent(2L, "张三", "agent@example.com"));
         lenient().when(assignmentRuleService.matchForTicket(any(), any(), any(), any())).thenReturn(null);
         lenient().when(slaDeadlineService.calculateForNewTicket(any())).thenReturn(SlaDeadlineResult.none());
+    }
+
+    private void allowAdminAndAgentOperationalPermissions() {
+        lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String permissionCode = invocation.getArgument(1);
+            String message = invocation.getArgument(2);
+            if (principal == null) {
+                throw new BusinessException(40302, "未登录");
+            }
+            if ("ADMIN".equals(principal.roleCode()) || isAgentOperationalPermission(principal, permissionCode)) {
+                return null;
+            }
+            throw new BusinessException(40302, message);
+        }).when(permissionService).assertPermission(any(), any(), any());
+    }
+
+    private boolean isAgentOperationalPermission(CurrentUserPrincipal principal, String permissionCode) {
+        return "AGENT".equals(principal.roleCode())
+                && (permissionCode.startsWith("ticket:")
+                || permissionCode.startsWith("ticket_attachment:")
+                || "customer:read".equals(permissionCode)
+                || "dashboard:read".equals(permissionCode));
     }
 
     @Test
@@ -153,6 +187,55 @@ class TicketBizServiceTest {
         verify(ticketEventMapper).insert(eventCaptor.capture());
         assertEquals(TicketBizService.EVENT_ASSIGNED, eventCaptor.getValue().getEventType());
         assertTrue(eventCaptor.getValue().getEventContent().contains("原因：专业组处理"));
+    }
+
+    @Test
+    void claimTicket_whenUnassigned_shouldAssignCurrentUserAndWriteEvent() {
+        TicketEntity ticket = ticket(111L, TicketBizService.STATUS_PENDING_ASSIGN);
+        TicketEntity claimed = ticket(111L, TicketBizService.STATUS_PROCESSING);
+        claimed.setAssigneeId(2L);
+        when(ticketMapper.selectById(111L)).thenReturn(ticket, claimed);
+        when(ticketMapper.update(eq(null), any())).thenReturn(1);
+
+        ticketBizService.claimTicket(agent, 111L);
+
+        ArgumentCaptor<LambdaUpdateWrapper<TicketEntity>> updateCaptor = ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
+        verify(ticketMapper).update(eq(null), updateCaptor.capture());
+        String sqlSet = updateCaptor.getValue().getSqlSet();
+        String sqlSegment = updateCaptor.getValue().getSqlSegment();
+        assertTrue(sqlSet.contains("assignee_id"));
+        assertTrue(sqlSet.contains("status"));
+        assertTrue(sqlSegment.contains("assignee_id IS NULL"));
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_ASSIGNED, eventCaptor.getValue().getEventType());
+        assertTrue(eventCaptor.getValue().getEventContent().contains("领取未分配工单"));
+    }
+
+    @Test
+    void claimTicket_whenAlreadyAssigned_shouldReject() {
+        TicketEntity ticket = ticket(112L, TicketBizService.STATUS_PROCESSING);
+        ticket.setAssigneeId(3L);
+        when(ticketMapper.selectById(112L)).thenReturn(ticket);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> ticketBizService.claimTicket(admin, 112L));
+
+        assertTrue(ex.getMessage().contains("工单已分配"));
+        verify(ticketMapper, never()).update(eq(null), any());
+    }
+
+    @Test
+    void claimTicket_whenConcurrentClaimed_shouldReject() {
+        TicketEntity ticket = ticket(113L, TicketBizService.STATUS_PENDING_ASSIGN);
+        when(ticketMapper.selectById(113L)).thenReturn(ticket);
+        when(ticketMapper.update(eq(null), any())).thenReturn(0);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> ticketBizService.claimTicket(agent, 113L));
+
+        assertTrue(ex.getMessage().contains("已被领取或已分配"));
     }
 
     @Test
@@ -244,6 +327,46 @@ class TicketBizServiceTest {
         ArgumentCaptor<LambdaQueryWrapper<TicketEntity>> queryCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
         verify(ticketMapper).selectPage(any(), queryCaptor.capture());
         assertTrue(queryCaptor.getValue().getSqlSegment().contains("sla_breached"));
+    }
+
+    @Test
+    void pageTickets_whenAgent_shouldLimitToOwnOrUnassignedTickets() {
+        Page<TicketEntity> pageResult = Page.of(1, 10);
+        pageResult.setRecords(List.of());
+        when(ticketMapper.selectPage(any(), any())).thenReturn(pageResult);
+
+        ticketBizService.pageTickets(agent, null, null, null,
+                null, null, null, null, 1, 10);
+
+        ArgumentCaptor<LambdaQueryWrapper<TicketEntity>> queryCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(ticketMapper).selectPage(any(), queryCaptor.capture());
+        String sqlSegment = queryCaptor.getValue().getSqlSegment();
+        assertTrue(sqlSegment.contains("assignee_id"));
+        assertTrue(sqlSegment.contains("IS NULL"));
+    }
+
+    @Test
+    void getTicket_whenAgentViewsOtherAssignedTicket_shouldReject() {
+        TicketEntity ticket = ticket(109L, TicketBizService.STATUS_PROCESSING);
+        ticket.setAssigneeId(3L);
+        when(ticketMapper.selectById(109L)).thenReturn(ticket);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> ticketBizService.getTicket(agent, 109L));
+
+        assertTrue(ex.getMessage().contains("无权查看"));
+    }
+
+    @Test
+    void replyTicket_whenAgentOperatesUnassignedTicket_shouldReject() {
+        TicketEntity ticket = ticket(110L, TicketBizService.STATUS_PENDING_ASSIGN);
+        when(ticketMapper.selectById(110L)).thenReturn(ticket);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> ticketBizService.replyTicket(agent, 110L,
+                        new TicketReplyRequest("处理", null, false, List.of())));
+
+        assertTrue(ex.getMessage().contains("无权操作"));
     }
 
     @Test
@@ -361,14 +484,9 @@ class TicketBizServiceTest {
 
     @Test
     void stats_shouldUseExplicitActiveTotalCount() {
-        when(ticketMapper.countActiveTotal()).thenReturn(20L);
-        when(ticketMapper.countByStatus("PENDING_ASSIGN")).thenReturn(3L);
-        when(ticketMapper.countByStatus("PROCESSING")).thenReturn(7L);
-        when(ticketMapper.countByStatus("WAITING_CUSTOMER")).thenReturn(4L);
-        when(ticketMapper.countSlaOverdue()).thenReturn(2L);
-        when(ticketMapper.countClosedToday()).thenReturn(5L);
+        when(ticketMapper.selectCount(any())).thenReturn(20L, 3L, 7L, 4L, 2L, 5L);
 
-        TicketBizService.TicketStats stats = ticketBizService.stats();
+        TicketBizService.TicketStats stats = ticketBizService.stats(admin);
 
         assertEquals(20L, stats.totalCount());
         assertEquals(3L, stats.pendingAssignCount());

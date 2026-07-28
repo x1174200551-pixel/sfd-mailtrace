@@ -7,6 +7,9 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Data
 @Schema(description = "新建用户请求")
 public class UserCreateRequest {
@@ -28,8 +31,11 @@ public class UserCreateRequest {
     private String email;
 
     @NotBlank(message = "请选择角色")
-    @Schema(description = "角色编码：ADMIN/AGENT", example = "AGENT")
+    @Schema(description = "主角色编码", example = "AGENT")
     private String roleCode;
+
+    @Schema(description = "角色编码清单；为空时默认只分配主角色")
+    private List<String> roleCodes = new ArrayList<>();
 
     @NotBlank(message = "请输入初始密码")
     @Size(min = 6, max = 128, message = "密码长度需为 6-128 个字符")

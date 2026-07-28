@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.holiday;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.NationalHolidayPresetItemVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.NationalHolidayPresetResponse;
@@ -26,22 +27,23 @@ import java.util.Map;
 public class NationalHolidayPresetService {
 
     private static final int CODE_BAD_REQUEST = 40001;
-    private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_PROVIDER_FAILED = 50201;
-    private static final String ROLE_ADMIN = "ADMIN";
     private static final String SOURCE_NAME = "节假日API";
 
     private final ObjectMapper objectMapper;
+    private final PermissionService permissionService;
     private final HttpClient httpClient;
     private final String apiUrlTemplate;
     private final Duration requestTimeout;
 
     public NationalHolidayPresetService(
             ObjectMapper objectMapper,
+            PermissionService permissionService,
             @Value("${mailtrace.holiday.national-api-url-template:https://api.jiejiariapi.com/v1/holidays/{year}}")
             String apiUrlTemplate,
             @Value("${mailtrace.holiday.national-api-timeout-ms:5000}") long timeoutMs) {
         this.objectMapper = objectMapper;
+        this.permissionService = permissionService;
         this.apiUrlTemplate = apiUrlTemplate;
         this.requestTimeout = Duration.ofMillis(timeoutMs);
         this.httpClient = HttpClient.newBuilder()
@@ -50,7 +52,7 @@ public class NationalHolidayPresetService {
     }
 
     public NationalHolidayPresetResponse getPreset(CurrentUserPrincipal principal, Integer year) {
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "holiday:import", "无权导入法定节假日模板");
         if (year == null || year < 2000 || year > 2100) {
             throw new BusinessException(CODE_BAD_REQUEST, "请选择有效年份");
         }
@@ -136,12 +138,6 @@ public class NationalHolidayPresetService {
             return apiUrlTemplate.replace("{year}", String.valueOf(year));
         }
         return String.format(apiUrlTemplate, year);
-    }
-
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可获取国家法定节假日模板");
-        }
     }
 
     private String normalize(String value) {

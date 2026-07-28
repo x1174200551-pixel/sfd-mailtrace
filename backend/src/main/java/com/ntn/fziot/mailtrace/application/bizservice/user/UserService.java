@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserEnabledRequest;
@@ -13,15 +14,24 @@ import com.ntn.fziot.mailtrace.interfaces.vo.user.UserSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserUpdateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -36,7 +46,10 @@ public class UserService {
 
     private final UserMapper userMapper;
     private final OperationLogMapper operationLogMapper;
+    private final RoleMapper roleMapper;
+    private final UserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
+    private final PermissionService permissionService;
 
     /**
      * 分页查询用户列表。
@@ -44,7 +57,7 @@ public class UserService {
     public UserPageResponse pageUsers(CurrentUserPrincipal principal, String keyword, String roleCode, Boolean enabled,
                                       Integer page, Integer size) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "user:read", "无权查看用户管理");
         // 2、规范化分页参数，并按搜索、角色、启用状态构建查询条件
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
@@ -84,10 +97,12 @@ public class UserService {
     @Transactional
     public UserVO createUser(CurrentUserPrincipal principal, UserCreateRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
-        // 2、校验角色合法性与账号唯一性
+        permissionService.assertPermission(principal, "user:create", "无权新建用户");
+        // 2、校验主角色、角色集合与账号唯一性
         String account = normalize(request.getAccount());
-        assertRole(request.getRoleCode());
+        String primaryRoleCode = normalizeRole(request.getRoleCode());
+        List<String> roleCodes = normalizeAssignedRoleCodes(primaryRoleCode, request.getRoleCodes());
+        List<RoleEntity> roles = requireRoles(roleCodes);
         ensureAccountUnique(account);
 
         // 3、使用 BCrypt 加密初始密码并写入用户表
@@ -96,11 +111,12 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(request.getPassword().trim()));
         user.setDisplayName(normalize(request.getDisplayName()));
         user.setEmail(normalize(request.getEmail()));
-        user.setRoleCode(normalizeRole(request.getRoleCode()));
+        user.setRoleCode(primaryRoleCode);
         user.setEnabled(request.getEnabled() == null || request.getEnabled());
         user.setCreatedBy(principal.account());
         user.setUpdatedBy(principal.account());
         userMapper.insert(user);
+        syncUserRoles(user.getId(), primaryRoleCode, roles, principal.account());
 
         // 4、写入用户创建操作日志
         recordLog(principal, "CREATE", user.getId(), "新建用户：" + user.getAccount());
@@ -114,23 +130,25 @@ public class UserService {
     @Transactional
     public UserVO updateUser(CurrentUserPrincipal principal, Long id, UserUpdateRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
-        // 2、查询目标用户并校验角色合法性
+        permissionService.assertPermission(principal, "user:update", "无权编辑用户");
+        // 2、查询目标用户并校验主角色和角色集合合法性
         UserEntity existing = requireUser(id);
-        String roleCode = normalizeRole(request.getRoleCode());
-        assertRole(roleCode);
+        String primaryRoleCode = normalizeRole(request.getRoleCode());
+        List<String> roleCodes = normalizeAssignedRoleCodes(primaryRoleCode, request.getRoleCodes());
+        List<RoleEntity> roles = requireRoles(roleCodes);
         Boolean enabled = request.getEnabled() == null || request.getEnabled();
         // 3、防止管理员把自己降级或停用
-        assertSelfGuard(principal, existing, roleCode, enabled);
+        assertSelfGuard(principal, existing, primaryRoleCode, enabled);
 
         // 4、更新姓名、邮箱、角色、启用状态和更新人
         userMapper.update(null, new LambdaUpdateWrapper<UserEntity>()
                 .eq(UserEntity::getId, id)
                 .set(UserEntity::getDisplayName, normalize(request.getDisplayName()))
                 .set(UserEntity::getEmail, normalize(request.getEmail()))
-                .set(UserEntity::getRoleCode, roleCode)
+                .set(UserEntity::getRoleCode, primaryRoleCode)
                 .set(UserEntity::getEnabled, enabled)
                 .set(UserEntity::getUpdatedBy, principal.account()));
+        syncUserRoles(id, primaryRoleCode, roles, principal.account());
 
         // 5、写入用户编辑操作日志并返回最新用户详情
         recordLog(principal, "UPDATE", id, "编辑用户：" + existing.getAccount());
@@ -143,7 +161,7 @@ public class UserService {
     @Transactional
     public UserVO updateEnabled(CurrentUserPrincipal principal, Long id, UserEnabledRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "user:enable", "无权启停用户");
         // 2、查询目标用户并校验不能停用当前登录账号
         UserEntity existing = requireUser(id);
         Boolean enabled = request.getEnabled();
@@ -168,7 +186,7 @@ public class UserService {
     @Transactional
     public void resetPassword(CurrentUserPrincipal principal, Long id, UserResetPasswordRequest request) {
         // 1、校验当前用户具备管理员权限
-        assertAdmin(principal);
+        permissionService.assertPermission(principal, "user:reset_password", "无权重置用户密码");
         // 2、查询目标用户是否存在
         UserEntity existing = requireUser(id);
         // 3、使用 BCrypt 加密新密码并更新密码哈希
@@ -194,7 +212,7 @@ public class UserService {
                     .like(UserEntity::getEmail, normalizedKeyword));
         }
         if (!normalizedRole.isEmpty()) {
-            assertRole(normalizedRole);
+            requireRole(normalizedRole);
             wrapper.eq(UserEntity::getRoleCode, normalizeRole(normalizedRole));
         }
         if (enabled != null) {
@@ -229,23 +247,65 @@ public class UserService {
         }
     }
 
-    private void assertAdmin(CurrentUserPrincipal principal) {
-        if (principal == null || !ROLE_ADMIN.equals(principal.roleCode())) {
-            throw new BusinessException(CODE_FORBIDDEN, "仅管理员可操作用户管理");
-        }
-    }
-
     private void assertAgentOrAdmin(CurrentUserPrincipal principal) {
         if (principal == null || (!ROLE_ADMIN.equals(principal.roleCode()) && !ROLE_AGENT.equals(principal.roleCode()))) {
             throw new BusinessException(CODE_FORBIDDEN, "无操作权限");
         }
     }
 
-    private void assertRole(String roleCode) {
-        String normalizedRole = normalizeRole(roleCode);
-        if (!ROLE_ADMIN.equals(normalizedRole) && !ROLE_AGENT.equals(normalizedRole)) {
-            throw new BusinessException(CODE_BAD_REQUEST, "角色仅支持 ADMIN 或 AGENT");
+    private void syncUserRoles(Long userId, String primaryRoleCode, List<RoleEntity> roles, String operator) {
+        userRoleMapper.physicalDeleteByUserId(userId);
+        for (RoleEntity role : roles) {
+            UserRoleEntity userRole = new UserRoleEntity();
+            userRole.setUserId(userId);
+            userRole.setRoleId(role.getId());
+            userRole.setPrimaryRole(primaryRoleCode.equals(normalizeRole(role.getRoleCode())));
+            userRole.setCreatedBy(operator);
+            userRole.setUpdatedBy(operator);
+            userRoleMapper.insert(userRole);
         }
+    }
+
+    private RoleEntity requireRole(String roleCode) {
+        String normalizedRole = normalizeRole(roleCode);
+        if (normalizedRole.isEmpty()) {
+            throw new BusinessException(CODE_BAD_REQUEST, "请选择角色");
+        }
+        RoleEntity role = roleMapper.selectOne(new LambdaQueryWrapper<RoleEntity>()
+                .eq(RoleEntity::getRoleCode, normalizedRole)
+                .eq(RoleEntity::getEnabled, true)
+                .last("LIMIT 1"));
+        if (role == null || role.getId() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "角色不存在或已停用");
+        }
+        return role;
+    }
+
+    private List<RoleEntity> requireRoles(List<String> roleCodes) {
+        List<RoleEntity> roles = roleCodes.stream().map(this::requireRole).toList();
+        Set<Long> roleIds = new LinkedHashSet<>();
+        for (RoleEntity role : roles) {
+            if (role.getId() == null || !roleIds.add(role.getId())) {
+                throw new BusinessException(CODE_BAD_REQUEST, "角色配置重复或无效");
+            }
+        }
+        return roles;
+    }
+
+    private List<String> normalizeAssignedRoleCodes(String primaryRoleCode, List<String> requestedRoleCodes) {
+        String normalizedPrimary = normalizeRole(primaryRoleCode);
+        if (normalizedPrimary.isEmpty()) {
+            throw new BusinessException(CODE_BAD_REQUEST, "请选择主角色");
+        }
+        LinkedHashSet<String> roleCodes = new LinkedHashSet<>();
+        roleCodes.add(normalizedPrimary);
+        if (requestedRoleCodes != null) {
+            requestedRoleCodes.stream()
+                    .map(this::normalizeRole)
+                    .filter(code -> !code.isEmpty())
+                    .forEach(roleCodes::add);
+        }
+        return List.copyOf(roleCodes);
     }
 
     private void assertSelfGuard(CurrentUserPrincipal principal, UserEntity target, String nextRoleCode, Boolean nextEnabled) {
@@ -279,11 +339,33 @@ public class UserService {
                 user.getDisplayName(),
                 user.getEmail(),
                 user.getRoleCode(),
+                roleCodes(user.getId(), user.getRoleCode()),
                 user.getEnabled(),
                 user.getLastLoginAt(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()
         );
+    }
+
+    private List<String> roleCodes(Long userId, String fallbackRoleCode) {
+        List<UserRoleEntity> rows = userRoleMapper.selectList(new LambdaQueryWrapper<UserRoleEntity>()
+                .eq(UserRoleEntity::getUserId, userId)
+                .orderByDesc(UserRoleEntity::getPrimaryRole)
+                .orderByAsc(UserRoleEntity::getId));
+        Set<Long> roleIds = rows.stream()
+                .map(UserRoleEntity::getRoleId)
+                .filter(id -> id != null)
+                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
+        if (roleIds.isEmpty()) {
+            String normalizedFallback = normalizeRole(fallbackRoleCode);
+            return normalizedFallback.isEmpty() ? List.of() : List.of(normalizedFallback);
+        }
+        Map<Long, String> codeById = roleMapper.selectBatchIds(roleIds).stream()
+                .collect(Collectors.toMap(RoleEntity::getId, role -> normalizeRole(role.getRoleCode()), (left, right) -> left, LinkedHashMap::new));
+        return roleIds.stream()
+                .map(codeById::get)
+                .filter(code -> code != null && !code.isEmpty())
+                .toList();
     }
 
     private long normalizePage(Integer page) {

@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.assignment;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleMatchResponse;
@@ -49,6 +50,8 @@ class AssignmentRuleServiceTest {
     private UserMapper userMapper;
     @Mock
     private OperationLogMapper operationLogMapper;
+    @Mock
+    private PermissionService permissionService;
 
     @InjectMocks
     private AssignmentRuleService assignmentRuleService;
@@ -66,10 +69,34 @@ class AssignmentRuleServiceTest {
 
     @BeforeEach
     void setUp() {
+        allowAdminAndAgentOperationalPermissions();
         lenient().when(assignmentRuleMapper.selectCount(any())).thenReturn(0L);
         lenient().when(userMapper.selectById(2L)).thenReturn(agentUser(2L, "验收客服", "AGENT", true));
         lenient().when(userMapper.selectById(3L)).thenReturn(agentUser(3L, "停用客服", "AGENT", false));
         lenient().when(userMapper.selectById(4L)).thenReturn(agentUser(4L, "管理员", "ADMIN", true));
+    }
+
+    private void allowAdminAndAgentOperationalPermissions() {
+        lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String permissionCode = invocation.getArgument(1);
+            String message = invocation.getArgument(2);
+            if (principal == null) {
+                throw new BusinessException(40302, "未登录");
+            }
+            if ("ADMIN".equals(principal.roleCode()) || isAgentOperationalPermission(principal, permissionCode)) {
+                return null;
+            }
+            throw new BusinessException(40302, message);
+        }).when(permissionService).assertPermission(any(), any(), any());
+    }
+
+    private boolean isAgentOperationalPermission(CurrentUserPrincipal principal, String permissionCode) {
+        return "AGENT".equals(principal.roleCode())
+                && (permissionCode.startsWith("ticket:")
+                || permissionCode.startsWith("ticket_attachment:")
+                || "customer:read".equals(permissionCode)
+                || "dashboard:read".equals(permissionCode));
     }
 
     @Test
@@ -182,7 +209,7 @@ class AssignmentRuleServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> assignmentRuleService.listRules(agent, null, null, null));
 
-        assertTrue(ex.getMessage().contains("仅管理员"));
+        assertTrue(ex.getMessage().contains("无权查看分配规则"));
     }
 
     @Test
