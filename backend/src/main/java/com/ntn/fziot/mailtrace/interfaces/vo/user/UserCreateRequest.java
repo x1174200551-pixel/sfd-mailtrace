@@ -37,6 +37,9 @@ public class UserCreateRequest {
     @Schema(description = "角色编码清单；为空时默认只分配主角色")
     private List<String> roleCodes = new ArrayList<>();
 
+    @Schema(description = "主部门ID；为空时默认分配到默认部门")
+    private Long departmentId;
+
     @NotBlank(message = "请输入初始密码")
     @Size(min = 6, max = 128, message = "密码长度需为 6-128 个字符")
     @Schema(description = "初始密码", example = "agent123")

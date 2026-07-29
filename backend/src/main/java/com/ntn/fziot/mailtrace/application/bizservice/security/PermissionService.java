@@ -100,7 +100,8 @@ public class PermissionService {
                     .stream()
                     .map(UserRoleEntity::getRoleId)
                     .filter(id -> id != null)
-                    .forEach(roleIds::add);
+                    .findFirst()
+                    .ifPresent(roleIds::add);
         }
         if (roleIds.isEmpty()) {
             RoleEntity fallbackRole = findRoleByCode(fallbackRoleCode);

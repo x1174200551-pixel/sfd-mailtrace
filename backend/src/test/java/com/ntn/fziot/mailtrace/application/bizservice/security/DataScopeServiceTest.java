@@ -10,9 +10,14 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class DataScopeServiceTest {
 
@@ -24,6 +29,8 @@ class DataScopeServiceTest {
             2L, "agent", "处理人", "agent@example.com", "AGENT");
     private final CurrentUserPrincipal customer = new CurrentUserPrincipal(
             3L, "customer", "客户", "customer@example.com", "CUSTOMER");
+    private final CurrentUserPrincipal custom = new CurrentUserPrincipal(
+            4L, "custom", "自定义角色", "custom@example.com", "AUTHQA_VIEWER");
 
     @BeforeAll
     static void initMybatisPlusTableInfo() {
@@ -72,6 +79,22 @@ class DataScopeServiceTest {
                 () -> dataScopeService.assertAgentOrAdmin(customer));
 
         assertTrue(ex.getMessage().contains("仅管理员和处理人"));
+    }
+
+    @Test
+    void applyTicketScope_whenCustomRoleHasSelfScope_shouldLimitToOwnOrUnassignedTickets() {
+        PermissionService permissionService = mock(PermissionService.class);
+        when(permissionService.getCurrentPermissions(custom)).thenReturn(
+                new PermissionService.PermissionContext(4L, Set.of("AUTHQA_VIEWER"), Set.of("ticket:read"),
+                        Map.of("TICKET", Set.of("SELF"))));
+        DataScopeService rbacDataScopeService = new DataScopeService(permissionService);
+        LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<>();
+
+        rbacDataScopeService.applyTicketScope(wrapper, custom);
+
+        String sqlSegment = wrapper.getSqlSegment();
+        assertTrue(sqlSegment.contains("assignee_id"));
+        assertTrue(sqlSegment.contains("IS NULL"));
     }
 
     private TicketEntity ticket(Long assigneeId) {

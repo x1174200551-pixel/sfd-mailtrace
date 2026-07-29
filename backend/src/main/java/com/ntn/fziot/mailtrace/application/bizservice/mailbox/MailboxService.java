@@ -59,8 +59,8 @@ public class MailboxService {
      */
     public MailboxPageResponse pageMailboxes(CurrentUserPrincipal principal, String keyword, String status,
                                              Boolean enabled, Integer page, Integer size) {
-        // 1、校验当前用户具备管理员权限
-        permissionService.assertPermission(principal, "mailbox:read", "无权查看邮箱配置");
+        // 1、校验当前用户具备邮箱配置页面入口或查看权限
+        assertMailboxReadable(principal);
         // 2、规范化分页参数并按关键字、启用状态、连接状态构建查询条件
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
@@ -85,7 +85,7 @@ public class MailboxService {
      */
     @Transactional
     public MailboxVO createMailbox(CurrentUserPrincipal principal, MailboxSaveRequest request) {
-        // 1、校验当前用户具备管理员权限
+        // 1、校验当前用户具备邮箱新建权限
         permissionService.assertPermission(principal, "mailbox:create", "无权新建邮箱配置");
         // 2、校验邮箱地址唯一性和默认处理人合法性
         String emailAddress = normalizeLower(request.getEmailAddress());
@@ -111,7 +111,7 @@ public class MailboxService {
      */
     @Transactional
     public MailboxVO updateMailbox(CurrentUserPrincipal principal, Long id, MailboxSaveRequest request) {
-        // 1、校验当前用户具备管理员权限
+        // 1、校验当前用户具备邮箱编辑权限
         permissionService.assertPermission(principal, "mailbox:update", "无权编辑邮箱配置");
         // 2、查询目标邮箱并校验邮箱地址唯一性
         MailboxEntity existing = requireMailbox(id);
@@ -136,7 +136,7 @@ public class MailboxService {
      */
     @Transactional
     public MailboxVO updateEnabled(CurrentUserPrincipal principal, Long id, MailboxEnabledRequest request) {
-        // 1、校验当前用户具备管理员权限
+        // 1、校验当前用户具备邮箱启停权限
         permissionService.assertPermission(principal, "mailbox:enable", "无权启停邮箱配置");
         // 2、查询目标邮箱是否存在
         MailboxEntity existing = requireMailbox(id);
@@ -156,7 +156,7 @@ public class MailboxService {
      */
     @Transactional
     public void deleteMailbox(CurrentUserPrincipal principal, Long id) {
-        // 1、校验当前用户具备管理员权限
+        // 1、校验当前用户具备邮箱删除权限
         permissionService.assertPermission(principal, "mailbox:delete", "无权删除邮箱配置");
         // 2、查询目标邮箱是否存在
         MailboxEntity existing = requireMailbox(id);
@@ -172,7 +172,7 @@ public class MailboxService {
     @Transactional
     public MailboxConnectionTestResponse testSavedMailbox(CurrentUserPrincipal principal, Long id, String testType) {
         long start = System.currentTimeMillis();
-        // 1、校验当前用户具备管理员权限
+        // 1、校验当前用户具备邮箱连接测试权限
         permissionService.assertPermission(principal, "mailbox:test_connection", "无权测试邮箱连接");
         // 2、读取已保存邮箱并解密 IMAP/SMTP 密码
         MailboxEntity mailbox = requireMailbox(id);
@@ -203,7 +203,7 @@ public class MailboxService {
      */
     public MailboxConnectionTestResponse testDraftMailbox(CurrentUserPrincipal principal, MailboxConnectionTestRequest request) {
         long start = System.currentTimeMillis();
-        // 1、校验当前用户具备管理员权限
+        // 1、校验当前用户具备邮箱连接测试权限
         permissionService.assertPermission(principal, "mailbox:test_connection", "无权测试邮箱连接");
         // 2、规范化连接测试类型
         String testType = normalizeTestType(request.getTestType());
@@ -246,6 +246,17 @@ public class MailboxService {
             wrapper.eq(MailboxEntity::getEnabled, false);
         }
         return wrapper;
+    }
+
+    private void assertMailboxReadable(CurrentUserPrincipal principal) {
+        if (principal == null) {
+            throw new BusinessException(40302, "未登录");
+        }
+        if (permissionService.hasPermission(principal, "mailbox:read")
+                || permissionService.hasPermission(principal, "menu:mailboxes")) {
+            return;
+        }
+        throw new BusinessException(40302, "无权查看邮箱配置");
     }
 
     private MailboxSummaryVO buildSummary() {

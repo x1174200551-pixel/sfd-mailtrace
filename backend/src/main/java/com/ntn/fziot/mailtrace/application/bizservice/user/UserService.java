@@ -13,12 +13,16 @@ import com.ntn.fziot.mailtrace.interfaces.vo.user.UserResetPasswordRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserUpdateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserVO;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.DepartmentEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.UserDepartmentEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.DepartmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserDepartmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -43,11 +47,14 @@ public class UserService {
     private static final int CODE_CONFLICT = 40901;
     private static final String ROLE_ADMIN = "ADMIN";
     private static final String ROLE_AGENT = "AGENT";
+    private static final String DEFAULT_DEPT_CODE = "DEFAULT";
 
     private final UserMapper userMapper;
     private final OperationLogMapper operationLogMapper;
     private final RoleMapper roleMapper;
     private final UserRoleMapper userRoleMapper;
+    private final DepartmentMapper departmentMapper;
+    private final UserDepartmentMapper userDepartmentMapper;
     private final PasswordEncoder passwordEncoder;
     private final PermissionService permissionService;
 
@@ -103,6 +110,7 @@ public class UserService {
         String primaryRoleCode = normalizeRole(request.getRoleCode());
         List<String> roleCodes = normalizeAssignedRoleCodes(primaryRoleCode, request.getRoleCodes());
         List<RoleEntity> roles = requireRoles(roleCodes);
+        DepartmentEntity department = requireTargetDepartment(request.getDepartmentId());
         ensureAccountUnique(account);
 
         // 3、使用 BCrypt 加密初始密码并写入用户表
@@ -117,6 +125,7 @@ public class UserService {
         user.setUpdatedBy(principal.account());
         userMapper.insert(user);
         syncUserRoles(user.getId(), primaryRoleCode, roles, principal.account());
+        syncUserDepartment(user.getId(), department.getId(), principal.account());
 
         // 4、写入用户创建操作日志
         recordLog(principal, "CREATE", user.getId(), "新建用户：" + user.getAccount());
@@ -136,6 +145,7 @@ public class UserService {
         String primaryRoleCode = normalizeRole(request.getRoleCode());
         List<String> roleCodes = normalizeAssignedRoleCodes(primaryRoleCode, request.getRoleCodes());
         List<RoleEntity> roles = requireRoles(roleCodes);
+        DepartmentEntity department = requireTargetDepartment(request.getDepartmentId());
         Boolean enabled = request.getEnabled() == null || request.getEnabled();
         // 3、防止管理员把自己降级或停用
         assertSelfGuard(principal, existing, primaryRoleCode, enabled);
@@ -149,6 +159,7 @@ public class UserService {
                 .set(UserEntity::getEnabled, enabled)
                 .set(UserEntity::getUpdatedBy, principal.account()));
         syncUserRoles(id, primaryRoleCode, roles, principal.account());
+        syncUserDepartment(id, department.getId(), principal.account());
 
         // 5、写入用户编辑操作日志并返回最新用户详情
         recordLog(principal, "UPDATE", id, "编辑用户：" + existing.getAccount());
@@ -297,15 +308,17 @@ public class UserService {
         if (normalizedPrimary.isEmpty()) {
             throw new BusinessException(CODE_BAD_REQUEST, "请选择主角色");
         }
-        LinkedHashSet<String> roleCodes = new LinkedHashSet<>();
-        roleCodes.add(normalizedPrimary);
         if (requestedRoleCodes != null) {
-            requestedRoleCodes.stream()
+            List<String> extraRoleCodes = requestedRoleCodes.stream()
                     .map(this::normalizeRole)
                     .filter(code -> !code.isEmpty())
-                    .forEach(roleCodes::add);
+                    .filter(code -> !normalizedPrimary.equals(code))
+                    .toList();
+            if (!extraRoleCodes.isEmpty()) {
+                throw new BusinessException(CODE_BAD_REQUEST, "当前版本一个用户只能分配一个角色");
+            }
         }
-        return List.copyOf(roleCodes);
+        return List.of(normalizedPrimary);
     }
 
     private void assertSelfGuard(CurrentUserPrincipal principal, UserEntity target, String nextRoleCode, Boolean nextEnabled) {
@@ -333,6 +346,7 @@ public class UserService {
     }
 
     private UserVO toVO(UserEntity user) {
+        DepartmentEntity department = primaryDepartment(user.getId());
         return new UserVO(
                 user.getId(),
                 user.getAccount(),
@@ -340,6 +354,9 @@ public class UserService {
                 user.getEmail(),
                 user.getRoleCode(),
                 roleCodes(user.getId(), user.getRoleCode()),
+                department == null ? null : department.getId(),
+                department == null ? null : department.getDeptName(),
+                department == null ? null : department.getDeptPath(),
                 user.getEnabled(),
                 user.getLastLoginAt(),
                 user.getCreatedAt(),
@@ -352,20 +369,55 @@ public class UserService {
                 .eq(UserRoleEntity::getUserId, userId)
                 .orderByDesc(UserRoleEntity::getPrimaryRole)
                 .orderByAsc(UserRoleEntity::getId));
-        Set<Long> roleIds = rows.stream()
-                .map(UserRoleEntity::getRoleId)
-                .filter(id -> id != null)
-                .collect(LinkedHashSet::new, LinkedHashSet::add, LinkedHashSet::addAll);
-        if (roleIds.isEmpty()) {
+        Long roleId = rows.stream().map(UserRoleEntity::getRoleId).filter(id -> id != null).findFirst().orElse(null);
+        if (roleId == null) {
             String normalizedFallback = normalizeRole(fallbackRoleCode);
             return normalizedFallback.isEmpty() ? List.of() : List.of(normalizedFallback);
         }
-        Map<Long, String> codeById = roleMapper.selectBatchIds(roleIds).stream()
+        Map<Long, String> codeById = roleMapper.selectBatchIds(List.of(roleId)).stream()
                 .collect(Collectors.toMap(RoleEntity::getId, role -> normalizeRole(role.getRoleCode()), (left, right) -> left, LinkedHashMap::new));
-        return roleIds.stream()
-                .map(codeById::get)
-                .filter(code -> code != null && !code.isEmpty())
-                .toList();
+        String roleCode = codeById.get(roleId);
+        return roleCode == null || roleCode.isEmpty() ? List.of() : List.of(roleCode);
+    }
+
+    private void syncUserDepartment(Long userId, Long departmentId, String operator) {
+        userDepartmentMapper.physicalDeleteByUserId(userId);
+        UserDepartmentEntity userDepartment = new UserDepartmentEntity();
+        userDepartment.setUserId(userId);
+        userDepartment.setDepartmentId(departmentId);
+        userDepartment.setPrimaryDepartment(true);
+        userDepartment.setCreatedBy(operator);
+        userDepartment.setUpdatedBy(operator);
+        userDepartmentMapper.insert(userDepartment);
+    }
+
+    private DepartmentEntity requireTargetDepartment(Long departmentId) {
+        DepartmentEntity department = departmentId == null ? defaultDepartment() : departmentMapper.selectById(departmentId);
+        if (department == null || !Boolean.TRUE.equals(department.getEnabled())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "部门不存在或已停用");
+        }
+        return department;
+    }
+
+    private DepartmentEntity defaultDepartment() {
+        return departmentMapper.selectOne(new LambdaQueryWrapper<DepartmentEntity>()
+                .eq(DepartmentEntity::getDeptCode, DEFAULT_DEPT_CODE)
+                .eq(DepartmentEntity::getEnabled, true)
+                .last("LIMIT 1"));
+    }
+
+    private DepartmentEntity primaryDepartment(Long userId) {
+        UserDepartmentEntity relation = userDepartmentMapper.selectList(new LambdaQueryWrapper<UserDepartmentEntity>()
+                        .eq(UserDepartmentEntity::getUserId, userId)
+                        .orderByDesc(UserDepartmentEntity::getPrimaryDepartment)
+                        .orderByAsc(UserDepartmentEntity::getId))
+                .stream()
+                .findFirst()
+                .orElse(null);
+        if (relation == null || relation.getDepartmentId() == null) {
+            return null;
+        }
+        return departmentMapper.selectById(relation.getDepartmentId());
     }
 
     private long normalizePage(Integer page) {

@@ -31,6 +31,9 @@ public class UserUpdateRequest {
     @Schema(description = "角色编码清单；为空时默认只分配主角色")
     private List<String> roleCodes = new ArrayList<>();
 
+    @Schema(description = "主部门ID；为空时默认分配到默认部门")
+    private Long departmentId;
+
     @Schema(description = "是否启用", example = "true")
     private Boolean enabled = true;
 }

@@ -131,6 +131,9 @@ type ManagedUser = {
   email: string
   roleCode: RoleCode
   roleCodes?: string[]
+  departmentId?: number | null
+  departmentName?: string | null
+  departmentPath?: string | null
   enabled: boolean
   lastLoginAt: string | null
   createdAt: string | null
@@ -160,6 +163,7 @@ type UserFormState = {
   email: string
   roleCode: RoleCode
   roleCodes: string[]
+  departmentId: number | null
   password: string
   enabled: boolean
 }
@@ -213,6 +217,23 @@ type PermissionTreeNode = {
   moduleCode: string | null
   parentId: number | null
   children: PermissionTreeNode[]
+}
+
+type DepartmentNode = {
+  id: number
+  parentId: number | null
+  deptCode: string
+  deptName: string
+  deptDesc: string | null
+  leaderUserId: number | null
+  leaderDisplayName: string | null
+  deptPath: string | null
+  enabled: boolean
+  sortOrder: number | null
+  memberCount: number
+  createdAt: string | null
+  updatedAt: string | null
+  children: DepartmentNode[]
 }
 
 type RoleFormState = {
@@ -587,11 +608,12 @@ function dataScopeDesc(resourceType: string, scopeCode: string) {
 }
 
 function normalizeRoleCodes(primaryRoleCode: string, roleCodes: string[]) {
-  const result = new Set<string>()
   const primary = toRoleCode(primaryRoleCode)
-  if (primary) result.add(primary)
-  roleCodes.map(toRoleCode).filter(Boolean).forEach((code) => result.add(code))
-  return Array.from(result)
+  return primary ? [primary] : roleCodes.map(toRoleCode).filter(Boolean).slice(0, 1)
+}
+
+function flattenDepartments(nodes: DepartmentNode[]): DepartmentNode[] {
+  return nodes.flatMap((node) => [node, ...flattenDepartments(node.children || [])])
 }
 
 function collectPermissionNodes(nodes: PermissionTreeNode[]): PermissionTreeNode[] {
@@ -938,6 +960,7 @@ const emptyUserForm: UserFormState = {
   email: '',
   roleCode: 'AGENT',
   roleCodes: ['AGENT'],
+  departmentId: null,
   password: '',
   enabled: true,
 }
@@ -1566,6 +1589,8 @@ function App() {
   const [usersData, setUsersData] = useState<UserPageResponse | null>(null)
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
+  const [departmentTree, setDepartmentTree] = useState<DepartmentNode[]>([])
+  const [departmentsError, setDepartmentsError] = useState('')
   const [userFormMode, setUserFormMode] = useState<UserFormMode>('create')
   const [userFormOpen, setUserFormOpen] = useState(false)
   const [userFormSubmitting, setUserFormSubmitting] = useState(false)
@@ -1784,6 +1809,12 @@ function App() {
   const canUpdateRoles = hasPermission('role:update')
   const canEnableRoles = hasPermission('role:enable')
   const canUpdateRolePermissions = hasPermission('role:permission_update')
+  const canReadMailboxes = hasPermission('mailbox:read') || hasPermission('menu:mailboxes')
+  const canCreateMailboxes = hasPermission('mailbox:create')
+  const canUpdateMailboxes = hasPermission('mailbox:update')
+  const canEnableMailboxes = hasPermission('mailbox:enable')
+  const canDeleteMailboxes = hasPermission('mailbox:delete')
+  const canTestMailboxes = hasPermission('mailbox:test_connection')
   const canAccessMenuNode = useCallback(
     (adminOnly?: boolean, permission?: string) => {
       if (permission) return hasPermission(permission)
@@ -1801,7 +1832,6 @@ function App() {
   const visibleMenuGroups = useMemo(
     () =>
       menuGroups
-        .filter((group) => canAccessMenuNode(group.adminOnly, group.permission))
         .map((group) => ({
           ...group,
           items: group.items.filter((item) => canAccessMenuNode(item.adminOnly, item.permission)),
@@ -1816,6 +1846,7 @@ function App() {
     },
     [rolesData],
   )
+  const departmentOptions = useMemo(() => flattenDepartments(departmentTree).filter((department) => department.enabled), [departmentTree])
   const selectedRole = useMemo(
     () => rolesData?.records.find((role) => role.id === selectedRoleId) ?? null,
     [rolesData, selectedRoleId],
@@ -1888,9 +1919,10 @@ function App() {
 
   useEffect(() => {
     if (!user) return
-    const activeExists = visibleMenuGroups.some((group) => group.items.some((item) => item.title === activeMenu))
-    if (!activeExists) {
-      setActiveMenu('工作台')
+    const visibleItems = visibleMenuGroups.flatMap((group) => group.items)
+    const activeExists = visibleItems.some((item) => item.title === activeMenu)
+    if (!activeExists && visibleItems.length > 0) {
+      setActiveMenu(visibleItems[0].title)
     }
   }, [activeMenu, user, visibleMenuGroups])
 
@@ -1983,6 +2015,28 @@ function App() {
       void fetchPermissionTree()
     }
   }, [activeMenu, fetchPermissionTree])
+
+  const fetchDepartments = useCallback(async () => {
+    if (!token || activeMenu !== '用户管理' || !canReadUsers) return
+    try {
+      const data = await requestApi<DepartmentNode[]>('/api/v1/departments?enabled=true', {
+        headers: authHeaders(token),
+      })
+      setDepartmentTree(data)
+      setDepartmentsError('')
+      const flat = flattenDepartments(data).filter((department) => department.enabled)
+      setUserForm((value) => (
+        value.departmentId || flat.length === 0 ? value : { ...value, departmentId: flat[0].id }
+      ))
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setDepartmentsError(error instanceof Error ? error.message : '部门列表加载失败')
+    }
+  }, [activeMenu, canReadUsers, handleAuthExpired, token])
+
+  useEffect(() => {
+    void fetchDepartments()
+  }, [fetchDepartments])
 
   const fetchUsers = useCallback(async () => {
     if (!token || activeMenu !== '用户管理') return
@@ -2097,7 +2151,7 @@ function App() {
 
   const fetchMailboxes = useCallback(async () => {
     if (!token || activeMenu !== '邮箱配置') return
-    if (!isAdmin) {
+    if (!canReadMailboxes) {
       setMailboxesData(null)
       setMailboxesError('当前账号没有邮箱配置管理权限')
       return
@@ -2137,8 +2191,8 @@ function App() {
     }
   }, [
     activeMenu,
+    canReadMailboxes,
     handleAuthExpired,
-    isAdmin,
     mailboxDirty,
     mailboxForm.id,
     mailboxKeyword,
@@ -2153,7 +2207,7 @@ function App() {
   }, [fetchMailboxes])
 
   const fetchMailboxAssignees = useCallback(async () => {
-    if (!token || activeMenu !== '邮箱配置' || !isAdmin) return
+    if (!token || activeMenu !== '邮箱配置' || !canReadUsers) return
 
     try {
       const data = await requestApi<UserPageResponse>('/api/v1/users?page=1&size=100&roleCode=AGENT&enabled=true', {
@@ -2164,7 +2218,7 @@ function App() {
       if (handleAuthExpired(error)) return
       setMailboxAssignees([])
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, token])
+  }, [activeMenu, canReadUsers, handleAuthExpired, token])
 
   useEffect(() => {
     void fetchMailboxAssignees()
@@ -3010,6 +3064,7 @@ function App() {
   }
 
   function openCreateMailbox() {
+    if (!canCreateMailboxes) return
     setMailboxForm(emptyMailboxForm)
     setMailboxDirty(true)
     setMailboxTestResult(null)
@@ -3049,6 +3104,10 @@ function App() {
 
   async function saveMailbox() {
     if (!token) return
+    if (mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes) {
+      setMailboxesError(mailboxForm.id ? '当前账号没有编辑邮箱配置权限' : '当前账号没有新建邮箱配置权限')
+      return
+    }
     setMailboxSaving(true)
     setMailboxesError('')
     try {
@@ -3073,6 +3132,10 @@ function App() {
 
   async function testMailboxConnection(testType = 'ALL') {
     if (!token) return
+    if (!canTestMailboxes) {
+      setMailboxesError('当前账号没有测试邮箱连接权限')
+      return
+    }
     setMailboxTesting(true)
     setMailboxesError('')
     try {
@@ -3099,6 +3162,8 @@ function App() {
   }
 
   function openMailboxConfirm(mailbox: Mailbox, type: 'enable' | 'disable' | 'delete') {
+    if (type === 'delete' && !canDeleteMailboxes) return
+    if (type !== 'delete' && !canEnableMailboxes) return
     if (type === 'delete') {
       setMailboxConfirmAction({
         mailbox,
@@ -3120,6 +3185,8 @@ function App() {
 
   async function submitMailboxConfirm() {
     if (!token || !mailboxConfirmAction) return
+    if (mailboxConfirmAction.type === 'delete' && !canDeleteMailboxes) return
+    if (mailboxConfirmAction.type !== 'delete' && !canEnableMailboxes) return
     setMailboxActionLoading(true)
     setMailboxesError('')
     try {
@@ -3721,7 +3788,7 @@ function App() {
   function openCreateUser() {
     setUserFormMode('create')
     setEditingUser(null)
-    setUserForm(emptyUserForm)
+    setUserForm({ ...emptyUserForm, departmentId: departmentOptions[0]?.id ?? null })
     setUserFormError('')
     setUserFormOpen(true)
   }
@@ -3871,7 +3938,8 @@ function App() {
       displayName: nextUser.displayName,
       email: nextUser.email,
       roleCode: nextUser.roleCode,
-      roleCodes: assignedRoleCodes,
+      roleCodes: assignedRoleCodes.slice(0, 1),
+      departmentId: nextUser.departmentId ?? departmentOptions[0]?.id ?? null,
       password: '',
       enabled: nextUser.enabled,
     })
@@ -3889,7 +3957,10 @@ function App() {
         await requestApi<ManagedUser>('/api/v1/users', {
           method: 'POST',
           headers: authHeaders(token),
-          body: JSON.stringify(userForm),
+          body: JSON.stringify({
+            ...userForm,
+            roleCodes: normalizeRoleCodes(userForm.roleCode, userForm.roleCodes),
+          }),
         })
         setUserPage(1)
       } else if (editingUser) {
@@ -3901,6 +3972,7 @@ function App() {
             email: userForm.email,
             roleCode: userForm.roleCode,
             roleCodes: normalizeRoleCodes(userForm.roleCode, userForm.roleCodes),
+            departmentId: userForm.departmentId,
             enabled: userForm.enabled,
           }),
         })
@@ -7503,6 +7575,7 @@ function App() {
                             <th>姓名</th>
                             <th>邮箱</th>
                             <th>角色</th>
+                            <th>主部门</th>
                             <th>菜单范围</th>
                             <th>数据范围</th>
                             <th>状态</th>
@@ -7521,15 +7594,14 @@ function App() {
                               <td>{managedUser.email}</td>
                               <td>
                                 <div className="role-pill-list">
-                                  {normalizeRoleCodes(managedUser.roleCode, managedUser.roleCodes || []).map((roleCode) => (
-                                    <span className={roleCode === 'ADMIN' ? 'role-pill admin' : 'role-pill'} key={roleCode}>
-                                      {roleSelectOptions.find((role) => role.value === roleCode)?.label || roleLabel(roleCode)}
-                                    </span>
-                                  ))}
+                                  <span className={managedUser.roleCode === 'ADMIN' ? 'role-pill admin' : 'role-pill'}>
+                                    {roleSelectOptions.find((role) => role.value === managedUser.roleCode)?.label || roleLabel(managedUser.roleCode)}
+                                  </span>
                                 </div>
                               </td>
-                              <td>{(managedUser.roleCodes?.length || 0) > 1 ? '按多角色合并' : getRoleProfile(managedUser.roleCode).menuScope}</td>
-                              <td>{(managedUser.roleCodes?.length || 0) > 1 ? '按数据范围合并' : getRoleProfile(managedUser.roleCode).dataScope}</td>
+                              <td>{managedUser.departmentName || '默认部门'}</td>
+                              <td>{getRoleProfile(managedUser.roleCode).menuScope}</td>
+                              <td>{getRoleProfile(managedUser.roleCode).dataScope}</td>
                               <td>
                                 <span className={managedUser.enabled ? 'state-pill enabled' : 'state-pill disabled'}>
                                   {managedUser.enabled ? '启用' : '停用'}
@@ -7620,18 +7692,18 @@ function App() {
                     <RefreshCw size={16} />
                     刷新数据
                   </button>
-                  <button className="primary-action" onClick={openCreateMailbox} type="button">
+                  <button className="primary-action" disabled={!canCreateMailboxes} onClick={openCreateMailbox} type="button">
                     <Plus size={16} />
                     新增邮箱
                   </button>
                 </div>
               </div>
 
-              {!isAdmin ? (
+              {!canReadMailboxes ? (
                 <div className="permission-state">
                   <ShieldCheck size={42} />
                   <strong>无邮箱配置管理权限</strong>
-                  <p>邮箱账号、密码和连接测试仅管理员可维护，处理人入口隐藏。</p>
+                  <p>当前角色未开通邮箱配置页面入口或查看权限。</p>
                 </div>
               ) : (
                 <>
@@ -7803,12 +7875,13 @@ function App() {
                                     <div className="user-ops mailbox-ops" onClick={(event) => event.stopPropagation()}>
                                       <button
                                         className={mailbox.enabled ? 'danger' : 'success'}
+                                        disabled={!canEnableMailboxes}
                                         onClick={() => openMailboxConfirm(mailbox, mailbox.enabled ? 'disable' : 'enable')}
                                         type="button"
                                       >
                                         {mailbox.enabled ? '停用' : '启用'}
                                       </button>
-                                      <button className="danger" onClick={() => openMailboxConfirm(mailbox, 'delete')} type="button">
+                                      <button className="danger" disabled={!canDeleteMailboxes} onClick={() => openMailboxConfirm(mailbox, 'delete')} type="button">
                                         删除
                                       </button>
                                     </div>
@@ -7825,7 +7898,7 @@ function App() {
                           <p>可清空筛选重新查询，或新增第一个客服邮箱。</p>
                           <div>
                             <button onClick={resetMailboxFilters} type="button">清空筛选</button>
-                            <button className="primary-action" onClick={openCreateMailbox} type="button">新增邮箱</button>
+                            <button className="primary-action" disabled={!canCreateMailboxes} onClick={openCreateMailbox} type="button">新增邮箱</button>
                           </div>
                         </div>
                       )}
@@ -7896,6 +7969,7 @@ function App() {
                               <label>
                                 <span><b className="required">*</b> 邮箱名称</span>
                                 <input
+                                  disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                   onChange={(event) => updateMailboxForm({ mailboxName: event.target.value })}
                                   placeholder="例如 客服支持邮箱"
                                   value={mailboxForm.mailboxName}
@@ -7904,6 +7978,7 @@ function App() {
                               <label>
                                 <span><b className="required">*</b> 邮箱地址</span>
                                 <input
+                                  disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                   onChange={(event) => updateMailboxForm({ emailAddress: event.target.value })}
                                   placeholder="support@example.com"
                                   type="email"
@@ -7913,6 +7988,7 @@ function App() {
                               <label>
                                 <span>默认处理人</span>
                                 <select
+                                  disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                   onChange={(event) => updateMailboxForm({ defaultAssigneeId: event.target.value })}
                                   value={mailboxForm.defaultAssigneeId}
                                 >
@@ -7929,6 +8005,7 @@ function App() {
                                 <span>启用状态</span>
                                 <button
                                   className={mailboxForm.enabled ? 'template-switch enabled' : 'template-switch'}
+                                  disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                   onClick={() => updateMailboxForm({ enabled: !mailboxForm.enabled })}
                                   type="button"
                                 >
@@ -7945,6 +8022,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> IMAP 服务器</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ imapHost: event.target.value })}
                                     placeholder="imap.example.com"
                                     value={mailboxForm.imapHost}
@@ -7953,6 +8031,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> 端口</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     inputMode="numeric"
                                     onChange={(event) => updateMailboxForm({ imapPort: Number(event.target.value.replace(/\D/g, '') || 0) })}
                                     placeholder="993"
@@ -7963,6 +8042,7 @@ function App() {
                                   <span>SSL</span>
                                   <button
                                     className={mailboxForm.imapSslEnabled ? 'template-switch enabled' : 'template-switch'}
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onClick={() => updateMailboxForm({ imapSslEnabled: !mailboxForm.imapSslEnabled })}
                                     type="button"
                                   >
@@ -7973,6 +8053,7 @@ function App() {
                                 <label>
                                   <span>收件文件夹</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ imapFolder: event.target.value })}
                                     placeholder="INBOX"
                                     value={mailboxForm.imapFolder}
@@ -7981,6 +8062,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> IMAP 账号</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ imapUsername: event.target.value })}
                                     placeholder="通常为邮箱地址"
                                     value={mailboxForm.imapUsername}
@@ -7989,6 +8071,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> 密码 / 授权码</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ imapPassword: event.target.value })}
                                     placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
                                     type="password"
@@ -8005,6 +8088,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> SMTP 服务器</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ smtpHost: event.target.value })}
                                     placeholder="smtp.example.com"
                                     value={mailboxForm.smtpHost}
@@ -8013,6 +8097,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> 端口</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     inputMode="numeric"
                                     onChange={(event) => updateMailboxForm({ smtpPort: Number(event.target.value.replace(/\D/g, '') || 0) })}
                                     placeholder="587"
@@ -8023,6 +8108,7 @@ function App() {
                                   <span>SSL/TLS</span>
                                   <button
                                     className={mailboxForm.smtpSslEnabled ? 'template-switch enabled' : 'template-switch'}
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onClick={() => updateMailboxForm({ smtpSslEnabled: !mailboxForm.smtpSslEnabled })}
                                     type="button"
                                   >
@@ -8033,6 +8119,7 @@ function App() {
                                 <label>
                                   <span>发件人显示名</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ smtpFromName: event.target.value })}
                                     placeholder="客服支持中心"
                                     value={mailboxForm.smtpFromName}
@@ -8041,6 +8128,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> SMTP 账号</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ smtpUsername: event.target.value })}
                                     placeholder="通常为邮箱地址"
                                     value={mailboxForm.smtpUsername}
@@ -8049,6 +8137,7 @@ function App() {
                                 <label>
                                   <span><b className="required">*</b> 密码 / 授权码</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ smtpPassword: event.target.value })}
                                     placeholder={mailboxForm.id ? '为空则不修改' : '新建时必填'}
                                     type="password"
@@ -8065,6 +8154,7 @@ function App() {
                                 <label>
                                   <span>拉取频率（秒）</span>
                                   <input
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     min={60}
                                     max={1800}
                                     onChange={(event) => updateMailboxForm({ fetchIntervalSec: Number(event.target.value || 120) })}
@@ -8077,6 +8167,7 @@ function App() {
                                   <span>自动回执</span>
                                   <button
                                     className={mailboxForm.autoReplyEnabled ? 'template-switch enabled' : 'template-switch'}
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onClick={() => updateMailboxForm({ autoReplyEnabled: !mailboxForm.autoReplyEnabled })}
                                     type="button"
                                   >
@@ -8087,6 +8178,7 @@ function App() {
                                 <label>
                                   <span>回执模板</span>
                                   <select
+                                    disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
                                     onChange={(event) => updateMailboxForm({ autoReplyTemplateId: event.target.value })}
                                     value={mailboxForm.autoReplyTemplateId}
                                   >
@@ -8141,13 +8233,13 @@ function App() {
                             </button>
                             {activeMailboxStep === 'test' ? (
                               <>
-                                <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('IMAP')} type="button">
+                                <button disabled={mailboxTesting || !canTestMailboxes} onClick={() => void testMailboxConnection('IMAP')} type="button">
                                   测试收信
                                 </button>
-                                <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('SMTP')} type="button">
+                                <button disabled={mailboxTesting || !canTestMailboxes} onClick={() => void testMailboxConnection('SMTP')} type="button">
                                   测试发信
                                 </button>
-                                <button disabled={mailboxTesting} onClick={() => void testMailboxConnection('ALL')} type="button">
+                                <button disabled={mailboxTesting || !canTestMailboxes} onClick={() => void testMailboxConnection('ALL')} type="button">
                                   {mailboxTesting ? '测试中...' : '测试全部'}
                                 </button>
                               </>
@@ -8156,7 +8248,7 @@ function App() {
                                 下一步
                               </button>
                             )}
-                            <button className="primary-action" disabled={mailboxSaving} onClick={() => void saveMailbox()} type="button">
+                            <button className="primary-action" disabled={mailboxSaving || (mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes)} onClick={() => void saveMailbox()} type="button">
                               <Check size={16} />
                               {mailboxSaving ? '保存中...' : '保存配置'}
                             </button>
@@ -9214,7 +9306,7 @@ function App() {
                       setUserForm((value) => ({
                         ...value,
                         roleCode: nextRole,
-                        roleCodes: normalizeRoleCodes(nextRole, value.roleCodes),
+                        roleCodes: normalizeRoleCodes(nextRole, []),
                       }))
                     }}
                     value={userForm.roleCode}
@@ -9224,46 +9316,28 @@ function App() {
                     ))}
                   </select>
                 </label>
-                <div className="user-role-checks">
-                  <span>附加角色</span>
-                  <div>
-                    {roleSelectOptions.map((role) => (
-                      <label key={role.value}>
-                        <input
-                          checked={normalizeRoleCodes(userForm.roleCode, userForm.roleCodes).includes(role.value)}
-                          disabled={userFormSubmitting || role.value === userForm.roleCode}
-                          onChange={(event) => {
-                            setUserForm((value) => {
-                              const next = new Set(normalizeRoleCodes(value.roleCode, value.roleCodes))
-                              if (event.target.checked) {
-                                next.add(role.value)
-                              } else {
-                                next.delete(role.value)
-                              }
-                              next.add(value.roleCode)
-                              return { ...value, roleCodes: Array.from(next) }
-                            })
-                          }}
-                          type="checkbox"
-                        />
-                        {role.label}
-                      </label>
+                <label>
+                  <span>主部门</span>
+                  <select
+                    disabled={userFormSubmitting || departmentOptions.length === 0}
+                    onChange={(event) => setUserForm((value) => ({ ...value, departmentId: Number(event.target.value) || null }))}
+                    value={userForm.departmentId ?? ''}
+                  >
+                    {departmentOptions.map((department) => (
+                      <option key={department.id} value={department.id}>{department.deptName}</option>
                     ))}
-                  </div>
-                  <small>主角色用于列表展示；实际菜单、按钮和数据范围按全部角色合并。</small>
-                </div>
+                  </select>
+                  <small>{departmentsError || '用于后续主管视角和部门数据范围。'}</small>
+                </label>
                 <div className="role-preview">
                   <span>角色生效预览</span>
                   <strong>
-                    {normalizeRoleCodes(userForm.roleCode, userForm.roleCodes)
-                      .map((roleCode) => roleSelectOptions.find((role) => role.value === roleCode)?.label || roleLabel(roleCode))
-                      .join('、')}
+                    {roleSelectOptions.find((role) => role.value === userForm.roleCode)?.label || roleLabel(userForm.roleCode)}
                   </strong>
-                  <small>{normalizeRoleCodes(userForm.roleCode, userForm.roleCodes).length > 1 ? '菜单、按钮和数据范围按多角色合并' : getRoleProfile(userForm.roleCode).dataScope}；保存后刷新当前用户信息即可按新权限生效。</small>
+                  <small>{getRoleProfile(userForm.roleCode).dataScope}；一个用户同一时间只绑定一个角色，保存后刷新当前用户信息即可按新权限生效。</small>
                   <div>
-                    {normalizeRoleCodes(userForm.roleCode, userForm.roleCodes).slice(0, 4).map((roleCode) => (
-                      <em key={roleCode}>{roleSelectOptions.find((role) => role.value === roleCode)?.label || roleLabel(roleCode)}</em>
-                    ))}
+                    <em>{departmentOptions.find((department) => department.id === userForm.departmentId)?.deptName || '默认部门'}</em>
+                    <em>{roleSelectOptions.find((role) => role.value === userForm.roleCode)?.label || roleLabel(userForm.roleCode)}</em>
                   </div>
                 </div>
                 {userFormMode === 'create' && (

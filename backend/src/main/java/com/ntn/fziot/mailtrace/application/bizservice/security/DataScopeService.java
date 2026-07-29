@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -22,6 +23,7 @@ public class DataScopeService {
         this.permissionService = null;
     }
 
+    @Autowired
     public DataScopeService(PermissionService permissionService) {
         this.permissionService = permissionService;
     }
