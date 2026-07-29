@@ -119,8 +119,8 @@ public class DashboardService {
         }
         if (closedToday) {
             LocalDate today = LocalDate.now();
-            wrapper.ge(TicketEntity::getCreatedAt, today.atStartOfDay())
-                    .lt(TicketEntity::getCreatedAt, today.plusDays(1).atStartOfDay());
+            wrapper.ge(TicketEntity::getClosedAt, today.atStartOfDay())
+                    .lt(TicketEntity::getClosedAt, today.plusDays(1).atStartOfDay());
         }
         return ticketMapper.selectCount(wrapper);
     }

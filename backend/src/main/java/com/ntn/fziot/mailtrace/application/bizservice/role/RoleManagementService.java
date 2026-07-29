@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.PermissionTreeNodeVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleDataScopeRequest;
@@ -13,13 +14,11 @@ import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RolePermissionSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleVO;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.PermissionEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleDataScopeEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RolePermissionEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.PermissionMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleDataScopeMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
@@ -47,16 +46,16 @@ public class RoleManagementService {
     private static final int CODE_FORBIDDEN = 40302;
     private static final int CODE_NOT_FOUND = 40401;
     private static final int CODE_CONFLICT = 40901;
-    private static final Set<String> SYSTEM_ROLE_CODES = Set.of("ADMIN", "AGENT");
+    private static final Set<String> SYSTEM_ROLE_CODES = Set.of("ADMIN", "AGENT", "SUPERVISOR");
     private static final Set<String> SUPPORTED_RESOURCE_TYPES = Set.of("TICKET", "CUSTOMER", "DASHBOARD");
-    private static final Set<String> SUPPORTED_SCOPE_CODES = Set.of("ALL", "SELF");
+    private static final Set<String> SUPPORTED_SCOPE_CODES = Set.of("ALL", "SELF", "DEPT", "DEPT_AND_CHILDREN");
 
     private final RoleMapper roleMapper;
     private final PermissionMapper permissionMapper;
     private final RolePermissionMapper rolePermissionMapper;
     private final RoleDataScopeMapper roleDataScopeMapper;
     private final UserRoleMapper userRoleMapper;
-    private final OperationLogMapper operationLogMapper;
+    private final OperationLogService operationLogService;
     private final PermissionService permissionService;
 
     /**
@@ -144,7 +143,7 @@ public class RoleManagementService {
         roleMapper.insert(role);
 
         // 4、记录操作日志并返回角色详情
-        recordLog(principal, "CREATE", role.getId(), "新建角色：" + roleName);
+        operationLogService.record(principal, "ROLE", "CREATE", role.getId(), "新建角色：" + roleName);
         return toVO(roleMapper.selectById(role.getId()));
     }
 
@@ -171,7 +170,7 @@ public class RoleManagementService {
                 .set(RoleEntity::getUpdatedBy, principal.account()));
 
         // 5、记录操作日志并返回角色详情
-        recordLog(principal, "UPDATE", id, "编辑角色：" + existing.getRoleName());
+        operationLogService.record(principal, "ROLE", "UPDATE", id, "编辑角色：" + existing.getRoleName());
         return toVO(roleMapper.selectById(id));
     }
 
@@ -191,7 +190,7 @@ public class RoleManagementService {
                 .set(RoleEntity::getEnabled, request.getEnabled())
                 .set(RoleEntity::getUpdatedBy, principal.account()));
         // 4、记录操作日志并返回角色详情
-        recordLog(principal, Boolean.TRUE.equals(request.getEnabled()) ? "ENABLE" : "DISABLE", id,
+        operationLogService.record(principal, "ROLE", Boolean.TRUE.equals(request.getEnabled()) ? "ENABLE" : "DISABLE", id,
                 (Boolean.TRUE.equals(request.getEnabled()) ? "启用角色：" : "停用角色：") + existing.getRoleName());
         return toVO(roleMapper.selectById(id));
     }
@@ -229,7 +228,7 @@ public class RoleManagementService {
         }
 
         // 7、记录操作日志并返回最新角色详情
-        recordLog(principal, "PERMISSION_UPDATE", id, "配置角色权限：" + role.getRoleName());
+        operationLogService.record(principal, "ROLE", "PERMISSION_UPDATE", id, "配置角色权限：" + role.getRoleName());
         return toVO(roleMapper.selectById(id));
     }
 
@@ -414,15 +413,4 @@ public class RoleManagementService {
         return value == null ? "" : value.trim();
     }
 
-    private void recordLog(CurrentUserPrincipal principal, String actionCode, Long bizId, String content) {
-        OperationLogEntity log = new OperationLogEntity();
-        log.setOperator(principal.account());
-        log.setModuleCode("ROLE");
-        log.setActionCode(actionCode);
-        log.setBizId(String.valueOf(bizId));
-        log.setContent(content);
-        log.setCreatedBy(principal.account());
-        log.setUpdatedBy(principal.account());
-        operationLogMapper.insert(log);
-    }
 }

@@ -53,6 +53,7 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  FolderTree,
   SlidersHorizontal,
   Timer,
   TriangleAlert,
@@ -234,6 +235,23 @@ type DepartmentNode = {
   createdAt: string | null
   updatedAt: string | null
   children: DepartmentNode[]
+}
+
+type DepartmentStats = {
+  totalDepartments: number
+  enabledDepartments: number
+  disabledDepartments: number
+  leaderCount: number
+  memberCount: number
+  unassignedUserCount: number
+}
+
+type DepartmentMemberPageResponse = {
+  records: ManagedUser[]
+  total: number
+  page: number
+  size: number
+  pages: number
 }
 
 type RoleFormState = {
@@ -596,14 +614,40 @@ function dataResourceLabel(resourceType: string) {
 }
 
 function dataScopeLabel(scopeCode: string) {
-  return ({ ALL: '全部范围', SELF: '自己范围' } as Record<string, string>)[scopeCode] || scopeCode
+  return ({
+    ALL: '全部范围',
+    SELF: '自己范围',
+    DEPT: '本部门',
+    DEPT_AND_CHILDREN: '本部门及下级',
+  } as Record<string, string>)[scopeCode] || scopeCode
 }
 
 function dataScopeDesc(resourceType: string, scopeCode: string) {
   const scope = dataScopeLabel(scopeCode)
-  if (resourceType === 'TICKET') return scopeCode === 'ALL' ? '可查看全部工单' : '自己负责工单 + 未分配池'
-  if (resourceType === 'CUSTOMER') return scopeCode === 'ALL' ? '全部客户聚合数据' : '自己可见工单关联客户'
-  if (resourceType === 'DASHBOARD') return scopeCode === 'ALL' ? '全部工作台统计数据' : '自己负责工单 + 未分配池统计'
+  if (resourceType === 'TICKET') {
+    return ({
+      ALL: '可查看全部工单',
+      SELF: '自己负责工单 + 未分配池',
+      DEPT: '本部门成员负责工单 + 未分配池',
+      DEPT_AND_CHILDREN: '本部门及下级部门成员负责工单 + 未分配池',
+    } as Record<string, string>)[scopeCode] || scope
+  }
+  if (resourceType === 'CUSTOMER') {
+    return ({
+      ALL: '全部客户聚合数据',
+      SELF: '自己可见工单关联客户',
+      DEPT: '本部门可见工单关联客户',
+      DEPT_AND_CHILDREN: '本部门及下级部门可见工单关联客户',
+    } as Record<string, string>)[scopeCode] || scope
+  }
+  if (resourceType === 'DASHBOARD') {
+    return ({
+      ALL: '全部工作台统计数据',
+      SELF: '自己负责工单 + 未分配池统计',
+      DEPT: '本部门成员负责工单 + 未分配池统计',
+      DEPT_AND_CHILDREN: '本部门及下级部门成员负责工单 + 未分配池统计',
+    } as Record<string, string>)[scopeCode] || scope
+  }
   return scope
 }
 
@@ -614,6 +658,63 @@ function normalizeRoleCodes(primaryRoleCode: string, roleCodes: string[]) {
 
 function flattenDepartments(nodes: DepartmentNode[]): DepartmentNode[] {
   return nodes.flatMap((node) => [node, ...flattenDepartments(node.children || [])])
+}
+
+function countMembers(nodes: DepartmentNode[]): number {
+  return nodes.reduce((sum, node) => sum + node.memberCount + countMembers(node.children || []), 0)
+}
+
+function findDeptNode(nodes: DepartmentNode[], id: number): DepartmentNode | null {
+  for (const node of nodes) {
+    if (node.id === id) return node
+    if (node.children) {
+      const found = findDeptNode(node.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+function RecursiveOrgTreeNode({ node, selectedId, onSelect, onCreateChild, depth }: {
+  node: DepartmentNode; selectedId: number | null; onSelect: (id: number) => void; onCreateChild: (parentId: number) => void; depth: number
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const hasChildren = node.children && node.children.length > 0
+  return (
+    <div className="tree-node-wrapper">
+      <div
+        className={`tree-node-row${selectedId === node.id ? ' selected' : ''}`}
+        style={{ paddingLeft: 16 + depth * 20 }}
+        onClick={() => onSelect(node.id)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter') onSelect(node.id) }}
+      >
+        <span
+          className={`tree-arrow${expanded ? ' expanded' : ''}`}
+          style={{ visibility: hasChildren ? 'visible' : 'hidden' }}
+          onClick={(e) => { e.stopPropagation(); setExpanded(!expanded) }}
+        >
+          <ChevronDown size={12} />
+        </span>
+        <Folder size={14} style={{ color: '#f59e0b', flexShrink: 0 }} />
+        <span className="tree-node-label">{node.deptName}</span>
+        {node.memberCount > 0 && <span className="tree-node-count">{node.memberCount} 人</span>}
+        <span
+          className="tree-add-child"
+          title="新建子部门"
+          onClick={(e) => { e.stopPropagation(); onCreateChild(node.id) }}
+        >+</span>
+      </div>
+      {hasChildren && expanded && (
+        <div>
+          {node.children!.map((child) => (
+            <RecursiveOrgTreeNode key={child.id} node={child} selectedId={selectedId} onSelect={onSelect} onCreateChild={onCreateChild} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function collectPermissionNodes(nodes: PermissionTreeNode[]): PermissionTreeNode[] {
@@ -917,6 +1018,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { title: '用户管理', icon: UserCog, adminOnly: true, permission: 'menu:users' },
       { title: '角色管理', icon: ShieldCheck, adminOnly: true, permission: 'menu:roles' },
+      { title: '组织管理', icon: FolderTree, adminOnly: true, permission: 'menu:departments' },
       { title: '编号规则', icon: SlidersHorizontal, permission: 'menu:ticket_number_rule' },
       { title: '通知模板', icon: Bell, permission: 'menu:notification_templates' },
     ],
@@ -1591,6 +1693,39 @@ function App() {
   const [usersError, setUsersError] = useState('')
   const [departmentTree, setDepartmentTree] = useState<DepartmentNode[]>([])
   const [departmentsError, setDepartmentsError] = useState('')
+  const [orgTree, setOrgTree] = useState<DepartmentNode[]>([])
+  const [orgStats, setOrgStats] = useState<DepartmentStats | null>(null)
+  const [orgStatsLoading, setOrgStatsLoading] = useState(false)
+  const [orgTreeLoading, setOrgTreeLoading] = useState(false)
+  const [orgError, setOrgError] = useState('')
+  const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null)
+  const [deptFormOpen, setDeptFormOpen] = useState(false)
+  const [deptFormMode, setDeptFormMode] = useState<'create' | 'edit'>('create')
+  const [deptFormSubmitting, setDeptFormSubmitting] = useState(false)
+  const [deptFormError, setDeptFormError] = useState('')
+  const [deptMoveOpen, setDeptMoveOpen] = useState(false)
+  const [deptMoveParentId, setDeptMoveParentId] = useState<number>(0)
+  const [deptMoveSubmitting, setDeptMoveSubmitting] = useState(false)
+  const [deptMemberKeyword, setDeptMemberKeyword] = useState('')
+  const [deptMemberRoleFilter, setDeptMemberRoleFilter] = useState('ALL')
+  const [deptMemberPage, setDeptMemberPage] = useState(1)
+  const [deptMemberPageSize, setDeptMemberPageSize] = useState(10)
+  const [deptMembersData, setDeptMembersData] = useState<DepartmentMemberPageResponse | null>(null)
+  const [deptMembersLoading, setDeptMembersLoading] = useState(false)
+  const [deptMembersError, setDeptMembersError] = useState('')
+  const [addDeptMemberOpen, setAddDeptMemberOpen] = useState(false)
+  const [deptCandidateKeyword, setDeptCandidateKeyword] = useState('')
+  const [deptCandidatesData, setDeptCandidatesData] = useState<DepartmentMemberPageResponse | null>(null)
+  const [deptCandidatesLoading, setDeptCandidatesLoading] = useState(false)
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState<number[]>([])
+  const [deptMemberSubmitting, setDeptMemberSubmitting] = useState(false)
+  const [deptLeaderOpen, setDeptLeaderOpen] = useState(false)
+  const [deptLeaderUserId, setDeptLeaderUserId] = useState<number>(0)
+  const [deptLeaderSubmitting, setDeptLeaderSubmitting] = useState(false)
+  const [deptConfirmOpen, setDeptConfirmOpen] = useState(false)
+  const [deptConfirmTarget, setDeptConfirmTarget] = useState<DepartmentNode | null>(null)
+  const [deptEnableSubmitting, setDeptEnableSubmitting] = useState(false)
+  const [deptForm, setDeptForm] = useState({ parentId: 0, deptName: '', deptDesc: '', leaderUserId: 0, enabled: true })
   const [userFormMode, setUserFormMode] = useState<UserFormMode>('create')
   const [userFormOpen, setUserFormOpen] = useState(false)
   const [userFormSubmitting, setUserFormSubmitting] = useState(false)
@@ -1798,6 +1933,8 @@ function App() {
   const hasPermission = useCallback((permissionCode: string) => userHasPermission(user, permissionCode), [user])
   const isAdmin = userHasRole(user, 'ADMIN')
   const isAgent = userHasRole(user, 'AGENT')
+  const canOpenTicketList = hasPermission('menu:tickets') && hasPermission('ticket:read')
+  const canReadTickets = hasPermission('ticket:read')
   const canReadCustomers = hasPermission('customer:read')
   const canReadUsers = hasPermission('user:read')
   const canCreateUsers = hasPermission('user:create')
@@ -1815,6 +1952,25 @@ function App() {
   const canEnableMailboxes = hasPermission('mailbox:enable')
   const canDeleteMailboxes = hasPermission('mailbox:delete')
   const canTestMailboxes = hasPermission('mailbox:test_connection')
+  const canReadFetchLogs = hasPermission('mail_fetch_log:read')
+  const canReadSendLogs = hasPermission('mail_send_log:read')
+  const canReadAssignmentRules = hasPermission('assignment_rule:read')
+  const canCreateAssignmentRules = hasPermission('assignment_rule:create')
+  const canReadSlaPolicies = hasPermission('sla_policy:read')
+  const canCreateSlaPolicies = hasPermission('sla_policy:create')
+  const canReadWorkCalendars = hasPermission('work_calendar:read')
+  const canCreateWorkCalendars = hasPermission('work_calendar:create')
+  const canReadHolidays = hasPermission('holiday:read')
+  const canCreateHolidays = hasPermission('holiday:create')
+  const canUpdateHolidays = hasPermission('holiday:update')
+  const canImportHolidays = hasPermission('holiday:import')
+  const canReadDepartments = hasPermission('department:read')
+  const canCreateDepartments = hasPermission('department:create')
+  const canUpdateDepartments = hasPermission('department:update')
+  const canEnableDepartments = hasPermission('department:enable')
+  const canReadTicketNumberRule = hasPermission('ticket_number_rule:read')
+  const canUpdateTicketNumberRule = hasPermission('ticket_number_rule:update')
+  const canReadTemplates = hasPermission('notification_template:read')
   const canAccessMenuNode = useCallback(
     (adminOnly?: boolean, permission?: string) => {
       if (permission) return hasPermission(permission)
@@ -1847,6 +2003,18 @@ function App() {
     [rolesData],
   )
   const departmentOptions = useMemo(() => flattenDepartments(departmentTree).filter((department) => department.enabled), [departmentTree])
+  const orgDeptOptions = useMemo(() => flattenDepartments(orgTree), [orgTree])
+  const hasRootDepartment = orgTree.length > 0
+  const selectedDeptNode = useMemo(() => selectedDeptId ? findDeptNode(orgTree, selectedDeptId) : null, [orgTree, selectedDeptId])
+  const selectedDeptTotalMemberCount = useMemo(() => selectedDeptNode ? countMembers([selectedDeptNode]) : 0, [selectedDeptNode])
+  const movableParentOptions = useMemo(
+    () => orgDeptOptions.filter((department) => department.id !== selectedDeptId && !(selectedDeptNode && findDeptNode(selectedDeptNode.children || [], department.id))),
+    [orgDeptOptions, selectedDeptId, selectedDeptNode],
+  )
+  const deptRoleOptions = useMemo(
+    () => [{ label: '全部角色', value: 'ALL' }, ...roleSelectOptions],
+    [roleSelectOptions],
+  )
   const selectedRole = useMemo(
     () => rolesData?.records.find((role) => role.id === selectedRoleId) ?? null,
     [rolesData, selectedRoleId],
@@ -2034,6 +2202,289 @@ function App() {
     }
   }, [activeMenu, canReadUsers, handleAuthExpired, token])
 
+  const fetchOrgTree = useCallback(async () => {
+    if (!token || activeMenu !== '组织管理') return
+    if (!canReadDepartments) {
+      setOrgTree([])
+      setOrgError('当前账号没有组织管理权限')
+      return
+    }
+    setOrgTreeLoading(true)
+    setOrgError('')
+    try {
+      const data = await requestApi<DepartmentNode[]>('/api/v1/departments', {
+        headers: authHeaders(token),
+      })
+      setOrgTree(data)
+      const flat = flattenDepartments(data)
+      setSelectedDeptId((current) => (
+        current && flat.some((department) => department.id === current)
+          ? current
+          : flat[0]?.id ?? null
+      ))
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setOrgError(error instanceof Error ? error.message : '组织架构加载失败')
+    } finally {
+      setOrgTreeLoading(false)
+    }
+  }, [activeMenu, canReadDepartments, handleAuthExpired, token])
+
+  const fetchOrgStats = useCallback(async () => {
+    if (!token || activeMenu !== '组织管理' || !canReadDepartments) return
+    setOrgStatsLoading(true)
+    try {
+      const data = await requestApi<DepartmentStats>('/api/v1/departments/stats', {
+        headers: authHeaders(token),
+      })
+      setOrgStats(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setOrgError(error instanceof Error ? error.message : '组织统计加载失败')
+    } finally {
+      setOrgStatsLoading(false)
+    }
+  }, [activeMenu, canReadDepartments, handleAuthExpired, token])
+
+  const fetchDeptMembers = useCallback(async () => {
+    if (!token || activeMenu !== '组织管理' || !selectedDeptId || !canReadDepartments) return
+    const params = new URLSearchParams()
+    if (deptMemberKeyword.trim()) params.set('keyword', deptMemberKeyword.trim())
+    if (deptMemberRoleFilter !== 'ALL') params.set('roleCode', deptMemberRoleFilter)
+    params.set('page', String(deptMemberPage))
+    params.set('size', String(deptMemberPageSize))
+    setDeptMembersLoading(true)
+    setDeptMembersError('')
+    try {
+      const data = await requestApi<DepartmentMemberPageResponse>(`/api/v1/departments/${selectedDeptId}/members?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setDeptMembersData(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setDeptMembersError(error instanceof Error ? error.message : '部门成员加载失败')
+    } finally {
+      setDeptMembersLoading(false)
+    }
+  }, [
+    activeMenu,
+    canReadDepartments,
+    deptMemberKeyword,
+    deptMemberPage,
+    deptMemberPageSize,
+    deptMemberRoleFilter,
+    handleAuthExpired,
+    selectedDeptId,
+    token,
+  ])
+
+  const fetchDeptCandidates = useCallback(async () => {
+    if (!token || !selectedDeptId || !addDeptMemberOpen || !canReadDepartments) return
+    const params = new URLSearchParams()
+    if (deptCandidateKeyword.trim()) params.set('keyword', deptCandidateKeyword.trim())
+    params.set('page', '1')
+    params.set('size', '20')
+    setDeptCandidatesLoading(true)
+    try {
+      const data = await requestApi<DepartmentMemberPageResponse>(`/api/v1/departments/${selectedDeptId}/member-candidates?${params.toString()}`, {
+        headers: authHeaders(token),
+      })
+      setDeptCandidatesData(data)
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      message.error(error instanceof Error ? error.message : '候选成员加载失败')
+    } finally {
+      setDeptCandidatesLoading(false)
+    }
+  }, [addDeptMemberOpen, canReadDepartments, deptCandidateKeyword, handleAuthExpired, selectedDeptId, token])
+
+  useEffect(() => {
+    if (activeMenu === '组织管理') {
+      void fetchOrgTree()
+      void fetchOrgStats()
+    }
+  }, [activeMenu, fetchOrgStats, fetchOrgTree])
+
+  useEffect(() => {
+    if (activeMenu === '组织管理') {
+      void fetchDeptMembers()
+    }
+  }, [activeMenu, fetchDeptMembers])
+
+  useEffect(() => {
+    void fetchDeptCandidates()
+  }, [fetchDeptCandidates])
+
+  const submitDeptForm = useCallback(async (event: FormEvent) => {
+    event.preventDefault()
+    if (deptFormSubmitting) return
+    const name = deptForm.deptName.trim()
+    if (!name) { setDeptFormError('请输入部门名称'); return }
+    setDeptFormError('')
+    setDeptFormSubmitting(true)
+    try {
+      if (deptFormMode === 'create') {
+        await requestApi<DepartmentNode>('/api/v1/departments', {
+          method: 'POST',
+          headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            parentId: deptForm.parentId || null,
+            deptName: name,
+            deptDesc: deptForm.deptDesc.trim(),
+            leaderUserId: deptForm.leaderUserId || null,
+            enabled: deptForm.enabled,
+          }),
+        })
+      } else {
+        const deptId = selectedDeptId
+        if (!deptId) return
+        await requestApi<DepartmentNode>(`/api/v1/departments/${deptId}`, {
+          method: 'PUT',
+          headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deptName: name,
+            deptDesc: deptForm.deptDesc.trim(),
+            leaderUserId: deptForm.leaderUserId || null,
+            enabled: deptForm.enabled,
+          }),
+        })
+      }
+      setDeptFormOpen(false)
+      message.success(deptFormMode === 'create' ? '部门已创建' : '部门信息已保存')
+      void fetchOrgTree()
+      void fetchOrgStats()
+      void fetchDeptMembers()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setDeptFormError(error instanceof Error ? error.message : '保存失败')
+    } finally {
+      setDeptFormSubmitting(false)
+    }
+  }, [deptForm, deptFormMode, deptFormSubmitting, fetchDeptMembers, fetchOrgStats, fetchOrgTree, handleAuthExpired, selectedDeptId, token])
+
+  const submitDeptMove = useCallback(async () => {
+    if (!selectedDeptId || deptMoveSubmitting) return
+    setDeptMoveSubmitting(true)
+    try {
+      await requestApi<DepartmentNode>(`/api/v1/departments/${selectedDeptId}/parent`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentId: deptMoveParentId || null }),
+      })
+      setDeptMoveOpen(false)
+      message.success('部门已移动')
+      void fetchOrgTree()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      message.error(error instanceof Error ? error.message : '移动失败')
+    } finally {
+      setDeptMoveSubmitting(false)
+    }
+  }, [deptMoveParentId, deptMoveSubmitting, fetchOrgTree, handleAuthExpired, selectedDeptId, token])
+
+  const submitAddDeptMembers = useCallback(async () => {
+    if (!selectedDeptId || deptMemberSubmitting || selectedCandidateIds.length === 0) return
+    setDeptMemberSubmitting(true)
+    try {
+      await requestApi<ManagedUser[]>(`/api/v1/departments/${selectedDeptId}/members`, {
+        method: 'POST',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: selectedCandidateIds }),
+      })
+      setAddDeptMemberOpen(false)
+      message.success(`已添加 ${selectedCandidateIds.length} 名成员`)
+      setSelectedCandidateIds([])
+      void fetchDeptMembers()
+      void fetchDeptCandidates()
+      void fetchOrgTree()
+      void fetchOrgStats()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      message.error(error instanceof Error ? error.message : '添加成员失败')
+    } finally {
+      setDeptMemberSubmitting(false)
+    }
+  }, [
+    deptMemberSubmitting,
+    fetchDeptCandidates,
+    fetchDeptMembers,
+    fetchOrgStats,
+    fetchOrgTree,
+    handleAuthExpired,
+    selectedCandidateIds,
+    selectedDeptId,
+    token,
+  ])
+
+  const removeDeptMember = useCallback(async (member: ManagedUser) => {
+    if (!selectedDeptId || deptMemberSubmitting) return
+    setDeptMemberSubmitting(true)
+    try {
+      await requestApi<void>(`/api/v1/departments/${selectedDeptId}/members/${member.id}`, {
+        method: 'DELETE',
+        headers: authHeaders(token),
+      })
+      message.success(`已将 ${member.displayName} 移出当前部门`)
+      void fetchDeptMembers()
+      void fetchOrgTree()
+      void fetchOrgStats()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      message.error(error instanceof Error ? error.message : '移出成员失败')
+    } finally {
+      setDeptMemberSubmitting(false)
+    }
+  }, [deptMemberSubmitting, fetchDeptMembers, fetchOrgStats, fetchOrgTree, handleAuthExpired, selectedDeptId, token])
+
+  const updateDeptLeader = useCallback(async (leaderUserId: number) => {
+    if (!selectedDeptId || !leaderUserId || deptLeaderSubmitting) return
+    setDeptLeaderSubmitting(true)
+    try {
+      await requestApi<DepartmentNode>(`/api/v1/departments/${selectedDeptId}/leader`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leaderUserId }),
+      })
+      setDeptLeaderOpen(false)
+      const leaderName = deptMembersData?.records.find((member) => member.id === leaderUserId)?.displayName
+      message.success(leaderName ? `已将 ${leaderName} 设为负责人` : '负责人已更新')
+      void fetchOrgTree()
+      void fetchOrgStats()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      message.error(error instanceof Error ? error.message : '设置负责人失败')
+    } finally {
+      setDeptLeaderSubmitting(false)
+    }
+  }, [deptLeaderSubmitting, fetchOrgStats, fetchOrgTree, handleAuthExpired, selectedDeptId, token])
+
+  const submitDeptLeader = useCallback(async () => {
+    await updateDeptLeader(deptLeaderUserId)
+  }, [deptLeaderUserId, updateDeptLeader])
+
+  const submitDeptEnable = useCallback(async () => {
+    const target = deptConfirmTarget
+    if (!target || deptEnableSubmitting) return
+    setDeptEnableSubmitting(true)
+    try {
+      await requestApi(`/api/v1/departments/${target.id}/enabled`, {
+        method: 'PATCH',
+        headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: !target.enabled }),
+      })
+      setDeptConfirmOpen(false)
+      setDeptConfirmTarget(null)
+      message.success(target.enabled ? '部门已停用' : '部门已启用')
+      void fetchOrgTree()
+      void fetchOrgStats()
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      message.error(error instanceof Error ? error.message : '操作失败')
+    } finally {
+      setDeptEnableSubmitting(false)
+    }
+  }, [deptConfirmTarget, deptEnableSubmitting, fetchOrgStats, fetchOrgTree, handleAuthExpired, token])
+
   useEffect(() => {
     void fetchDepartments()
   }, [fetchDepartments])
@@ -2075,7 +2526,7 @@ function App() {
 
   const fetchTemplates = useCallback(async () => {
     if (!token || activeMenu !== '通知模板') return
-    if (!isAdmin) {
+    if (!canReadTemplates) {
       setTemplatesData(null)
       setTemplatesError('当前账号没有通知模板管理权限')
       return
@@ -2113,7 +2564,7 @@ function App() {
     } finally {
       setTemplatesLoading(false)
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, selectedTemplateId, templateDraftMode, templateKeyword, token])
+  }, [activeMenu, canReadTemplates, handleAuthExpired, selectedTemplateId, templateDraftMode, templateKeyword, token])
 
   useEffect(() => {
     void fetchTemplates()
@@ -2121,7 +2572,7 @@ function App() {
 
   const fetchTicketRule = useCallback(async () => {
     if (!token || activeMenu !== '编号规则') return
-    if (!isAdmin) {
+    if (!canReadTicketNumberRule) {
       setTicketRule(null)
       setTicketRuleError('当前账号没有编号规则管理权限')
       return
@@ -2143,7 +2594,7 @@ function App() {
     } finally {
       setTicketRuleLoading(false)
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, token])
+  }, [activeMenu, canReadTicketNumberRule, handleAuthExpired, token])
 
   useEffect(() => {
     void fetchTicketRule()
@@ -2227,6 +2678,11 @@ function App() {
   // ---- 拉取日志 ----
   const fetchFetchLogs = useCallback(async () => {
     if (!token || activeMenu !== '收件记录') return
+    if (!canReadFetchLogs) {
+      setFetchLogsData(null)
+      setFetchLogsError('当前账号没有收件记录查看权限')
+      return
+    }
 
     const params = new URLSearchParams({
       page: String(fetchLogPage),
@@ -2252,28 +2708,33 @@ function App() {
       setFetchLogsLoading(false)
     }
   }, [token, activeMenu, fetchLogPage, fetchLogPageSize, fetchLogMailboxFilter,
-      fetchLogSuccessFilter, fetchLogStartFrom, fetchLogStartTo, handleAuthExpired])
-
-  useEffect(() => {
-    if (activeMenu === '收件记录') {
-      void fetchFetchLogs()
-      void fetchFetchLogStats()
-    }
-  }, [fetchFetchLogs, activeMenu])
+      fetchLogSuccessFilter, fetchLogStartFrom, fetchLogStartTo, canReadFetchLogs, handleAuthExpired])
 
   const fetchFetchLogStats = useCallback(async () => {
-    if (!token) return
+    if (!token || !canReadFetchLogs) return
     try {
       const data = await requestApi<MailFetchLogStats>('/api/v1/mail-fetch-logs/stats', {
         headers: authHeaders(token),
       })
       setFetchLogStats(data)
     } catch { /* stats 加载失败不影响主列表 */ }
-  }, [token])
+  }, [canReadFetchLogs, token])
+
+  useEffect(() => {
+    if (activeMenu === '收件记录') {
+      void fetchFetchLogs()
+      void fetchFetchLogStats()
+    }
+  }, [activeMenu, fetchFetchLogs, fetchFetchLogStats])
 
   // ---- 发送日志 ----
   const fetchSendLogs = useCallback(async () => {
     if (!token || activeMenu !== '发件记录') return
+    if (!canReadSendLogs) {
+      setSendLogsData(null)
+      setSendLogsError('当前账号没有发件记录查看权限')
+      return
+    }
     const params = new URLSearchParams({
       page: String(sendLogPage),
       size: String(sendLogPageSize),
@@ -2297,30 +2758,30 @@ function App() {
     } finally {
       setSendLogsLoading(false)
     }
-  }, [token, activeMenu, sendLogPage, sendLogPageSize, sendLogMailboxFilter, sendLogTypeFilter, sendLogStatusFilter, sendLogStartFrom, sendLogStartTo, handleAuthExpired])
+  }, [token, activeMenu, sendLogPage, sendLogPageSize, sendLogMailboxFilter, sendLogTypeFilter, sendLogStatusFilter, sendLogStartFrom, sendLogStartTo, canReadSendLogs, handleAuthExpired])
 
   const fetchSendLogStats = useCallback(async () => {
-    if (!token) return
+    if (!token || !canReadSendLogs) return
     try {
       const data = await requestApi<{ totalCount: number; successCount: number; failCount: number }>('/api/v1/mail-send/logs/stats', { headers: authHeaders(token) })
       setSendLogStats(data)
     } catch { /* ignore */ }
-  }, [token])
+  }, [canReadSendLogs, token])
 
   const fetchSendPendingCount = useCallback(async () => {
-    if (!token) return
+    if (!token || !canReadSendLogs) return
     try {
       const count = await requestApi<number>('/api/v1/mail-send/logs/pending-count', { headers: authHeaders(token) })
       setSendPendingCount(count)
     } catch { /* ignore */ }
-  }, [token])
+  }, [canReadSendLogs, token])
 
   useEffect(() => {
     if (activeMenu === '发件记录') {
       void fetchSendLogs()
       void fetchSendLogStats()
     }
-  }, [fetchSendLogs, activeMenu])
+  }, [activeMenu, fetchSendLogs, fetchSendLogStats])
 
   // 全局拉取待处理数量（菜单角标）
   useEffect(() => {
@@ -2329,7 +2790,7 @@ function App() {
 
   const fetchAssignmentRules = useCallback(async () => {
     if (!token || activeMenu !== '分配规则') return
-    if (!isAdmin) {
+    if (!canReadAssignmentRules) {
       setAssignmentRulesData(null)
       setAssignmentRulesError('当前账号没有分配规则管理权限')
       return
@@ -2372,7 +2833,7 @@ function App() {
     assignmentMatchTypeFilter,
     assignmentRuleDirty,
     handleAuthExpired,
-    isAdmin,
+    canReadAssignmentRules,
     token,
   ])
 
@@ -2382,7 +2843,7 @@ function App() {
 
   const fetchSlaPolicies = useCallback(async () => {
     if (!token || activeMenu !== 'SLA策略') return
-    if (!isAdmin) {
+    if (!canReadSlaPolicies) {
       setSlaPoliciesData(null)
       setSlaPoliciesError('当前账号没有 SLA 策略管理权限')
       return
@@ -2421,7 +2882,7 @@ function App() {
   }, [
     activeMenu,
     handleAuthExpired,
-    isAdmin,
+    canReadSlaPolicies,
     slaPolicyDefaultFilter,
     slaPolicyDirty,
     slaPolicyEnabledFilter,
@@ -2436,7 +2897,7 @@ function App() {
   }, [fetchSlaPolicies])
 
   const fetchWorkCalendarsForSla = useCallback(async () => {
-    if (!token || activeMenu !== 'SLA策略' || !isAdmin) return
+    if (!token || activeMenu !== 'SLA策略' || !canReadWorkCalendars) return
     setWorkCalendarsLoading(true)
     try {
       const data = await requestApi<WorkCalendarListResponse>('/api/v1/work-calendars', {
@@ -2453,7 +2914,7 @@ function App() {
     } finally {
       setWorkCalendarsLoading(false)
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, token])
+  }, [activeMenu, canReadWorkCalendars, handleAuthExpired, token])
 
   useEffect(() => {
     void fetchWorkCalendarsForSla()
@@ -2461,7 +2922,7 @@ function App() {
 
   const fetchWorkCalendarsPage = useCallback(async () => {
     if (!token || activeMenu !== '工作日历') return
-    if (!isAdmin) {
+    if (!canReadWorkCalendars) {
       setWorkCalendarData(null)
       setWorkCalendarError('当前账号没有工作日历管理权限')
       return
@@ -2502,7 +2963,7 @@ function App() {
   }, [
     activeMenu,
     handleAuthExpired,
-    isAdmin,
+    canReadWorkCalendars,
     token,
     workCalendarDefaultFilter,
     workCalendarDirty,
@@ -2515,7 +2976,7 @@ function App() {
   }, [fetchWorkCalendarsPage])
 
   const fetchCalendarSlaPolicies = useCallback(async () => {
-    if (!token || activeMenu !== '工作日历' || !isAdmin) return
+    if (!token || activeMenu !== '工作日历' || !canReadSlaPolicies) return
     try {
       const data = await requestApi<SlaPolicyListResponse>('/api/v1/sla-policies', {
         headers: authHeaders(token),
@@ -2525,7 +2986,7 @@ function App() {
       if (handleAuthExpired(error)) return
       setWorkCalendarError(error instanceof Error ? error.message : 'SLA 策略引用加载失败')
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, token])
+  }, [activeMenu, canReadSlaPolicies, handleAuthExpired, token])
 
   useEffect(() => {
     void fetchCalendarSlaPolicies()
@@ -2533,7 +2994,7 @@ function App() {
 
   const fetchHolidays = useCallback(async () => {
     if (!token || activeMenu !== '工作日历') return
-    if (!isAdmin) {
+    if (!canReadHolidays) {
       setHolidaysData(null)
       setHolidaysError('当前账号没有节假日管理权限')
       return
@@ -2573,7 +3034,7 @@ function App() {
     handleAuthExpired,
     holidayKeyword,
     holidayMonth,
-    isAdmin,
+    canReadHolidays,
     token,
     workCalendarForm.id,
   ])
@@ -2583,7 +3044,7 @@ function App() {
   }, [fetchHolidays])
 
   const fetchAssignmentAssignees = useCallback(async () => {
-    if (!token || activeMenu !== '分配规则' || !isAdmin) return
+    if (!token || activeMenu !== '分配规则' || !canReadUsers) return
     try {
       const data = await requestApi<UserPageResponse>('/api/v1/users?page=1&size=100&roleCode=AGENT&enabled=true', {
         headers: authHeaders(token),
@@ -2593,7 +3054,7 @@ function App() {
       if (handleAuthExpired(error)) return
       setAssignmentAssignees([])
     }
-  }, [activeMenu, handleAuthExpired, isAdmin, token])
+  }, [activeMenu, canReadUsers, handleAuthExpired, token])
 
   useEffect(() => {
     void fetchAssignmentAssignees()
@@ -2733,17 +3194,26 @@ function App() {
   }, [activeMenu, fetchDashboard])
 
   const navigateToTickets = useCallback((status: string = 'ALL', slaBreachedOnly = false) => {
+    if (!canOpenTicketList) {
+      message.warning('当前账号没有工单列表查看权限')
+      return
+    }
     setTicketStatusTab(status)
     setTicketSlaBreachedOnly(slaBreachedOnly)
     setTicketKeyword('')
     setTicketPage(1)
     setShowTicketDetailPage(false)
     setActiveMenu('全部工单')
-  }, [])
+  }, [canOpenTicketList])
 
   // ---- 工单列表 ----
   const fetchTickets = useCallback(async () => {
     if (!token || activeMenu !== '全部工单') return
+    if (!canReadTickets) {
+      setTicketsData(null)
+      setTicketsError('当前账号没有工单查看权限')
+      return
+    }
     const params = new URLSearchParams({ page: String(ticketPage), size: String(ticketPageSize) })
     if (ticketStatusTab !== 'ALL') params.set('status', ticketStatusTab)
     if (ticketSlaBreachedOnly) params.set('slaBreached', 'true')
@@ -2760,7 +3230,7 @@ function App() {
     } finally {
       setTicketsLoading(false)
     }
-  }, [token, activeMenu, ticketPage, ticketPageSize, ticketStatusTab, ticketSlaBreachedOnly, ticketKeyword, handleAuthExpired])
+  }, [token, activeMenu, canReadTickets, ticketPage, ticketPageSize, ticketStatusTab, ticketSlaBreachedOnly, ticketKeyword, handleAuthExpired])
 
   const handleBackToList = useCallback(() => {
     setShowTicketDetailPage(false)
@@ -4874,7 +5344,18 @@ function App() {
                               {dashboardTodoRecords.map((ticket) => {
                                 const statusText = ticket.status === 'PENDING_ASSIGN' ? '待分配' : statusLabel(ticket.status)
                                 return (
-                                  <button key={ticket.id} onClick={() => { void handleOpenDetail(ticket.id); setActiveMenu('全部工单') }} type="button">
+                                  <button
+                                    key={ticket.id}
+                                    onClick={() => {
+                                      if (!canOpenTicketList) {
+                                        message.warning('当前账号没有工单列表查看权限')
+                                        return
+                                      }
+                                      void handleOpenDetail(ticket.id)
+                                      setActiveMenu('全部工单')
+                                    }}
+                                    type="button"
+                                  >
                                     <div className="dashboard-todo__top">
                                       <span className={`priority-pill ${priorityBadgeClass(ticket.priority)}`}>{priorityBadgeText(ticket.priority)}</span>
                                       <small>{relativeTime(ticket.createdAt)}</small>
@@ -5875,18 +6356,23 @@ function App() {
                     <RefreshCw size={16} />
                     刷新
                   </button>
-                  <button className="primary-action" onClick={openCreateAssignmentRule} type="button">
+                  <button
+                    className="primary-action"
+                    disabled={!canCreateAssignmentRules}
+                    onClick={openCreateAssignmentRule}
+                    type="button"
+                  >
                     <Plus size={16} />
                     新建规则
                   </button>
                 </div>
               </div>
 
-              {!isAdmin ? (
+              {!canReadAssignmentRules ? (
                 <div className="permission-state">
                   <ShieldCheck size={42} />
                   <strong>无分配规则管理权限</strong>
-                  <p>非管理员不可新建、编辑、启停、排序或删除自动分配规则。</p>
+                  <p>当前账号没有分配规则查看权限；新建、编辑、启停、排序或删除由独立权限控制。</p>
                 </div>
               ) : (
                 <>
@@ -6269,18 +6755,23 @@ function App() {
                     <RefreshCw size={16} />
                     刷新
                   </button>
-                  <button className="primary-action" onClick={openCreateSlaPolicy} type="button">
+                  <button
+                    className="primary-action"
+                    disabled={!canCreateSlaPolicies}
+                    onClick={openCreateSlaPolicy}
+                    type="button"
+                  >
                     <Plus size={16} />
                     新建策略
                   </button>
                 </div>
               </div>
 
-              {!isAdmin ? (
+              {!canReadSlaPolicies ? (
                 <div className="permission-state">
                   <ShieldCheck size={42} />
                   <strong>无 SLA 策略管理权限</strong>
-                  <p>非管理员不可新建、编辑、启停、设置默认或删除 SLA 策略。</p>
+                  <p>当前账号没有 SLA 策略查看权限；新建、编辑、启停、设置默认或删除由独立权限控制。</p>
                 </div>
               ) : (
                 <>
@@ -6669,22 +7160,27 @@ function App() {
                     <RefreshCw size={16} />
                     刷新
                   </button>
-                  <button className="primary-action" onClick={openCreateWorkCalendar} type="button">
+                  <button
+                    className="primary-action"
+                    disabled={!canCreateWorkCalendars}
+                    onClick={openCreateWorkCalendar}
+                    type="button"
+                  >
                     <Plus size={16} />
                     新建日历
                   </button>
-                  <button onClick={openCreateHoliday} type="button">
+                  <button disabled={!canCreateHolidays} onClick={openCreateHoliday} type="button">
                     <Plus size={16} />
                     新增节假日
                   </button>
                 </div>
               </div>
 
-              {!isAdmin ? (
+              {!canReadWorkCalendars ? (
                 <div className="permission-state">
                   <ShieldCheck size={42} />
                   <strong>无工作日历管理权限</strong>
-                  <p>非管理员不可新建、编辑、设置默认、删除工作日历或维护节假日。</p>
+                  <p>当前账号没有工作日历查看权限；日历与节假日维护动作由独立权限控制。</p>
                 </div>
               ) : (
                 <>
@@ -6927,18 +7423,18 @@ function App() {
                         </Row>
 
                         <Space style={{ marginTop: 16 }} wrap>
-                          <Button onClick={openCreateWorkCalendar}>新建草稿</Button>
+                          <Button disabled={!canCreateWorkCalendars} onClick={openCreateWorkCalendar}>新建草稿</Button>
                           <Button
                             type="primary"
                             loading={workCalendarSaving}
-                            disabled={!workCalendarForm.calendarName.trim() || workCalendarForm.workdays.length === 0 || workCalendarTimeInvalid}
+                            disabled={!hasPermission(workCalendarForm.id ? 'work_calendar:update' : 'work_calendar:create') || !workCalendarForm.calendarName.trim() || workCalendarForm.workdays.length === 0 || workCalendarTimeInvalid}
                             onClick={() => void saveWorkCalendar()}
                           >
                             保存日历
                           </Button>
                           <Button
                             danger
-                            disabled={!selectedCalendarForPage || Boolean(workCalendarDeleteBlockedReason)}
+                            disabled={!hasPermission('work_calendar:delete') || !selectedCalendarForPage || Boolean(workCalendarDeleteBlockedReason)}
                             icon={<DeleteOutlined />}
                             onClick={() => selectedCalendarForPage && setWorkCalendarConfirmAction({ type: 'delete-calendar', calendar: selectedCalendarForPage })}
                           >
@@ -6956,7 +7452,7 @@ function App() {
                           <Button
                             size="small"
                             loading={holidayImporting}
-                            disabled={!workCalendarForm.id || holidaysLoading}
+                            disabled={!canImportHolidays || !workCalendarForm.id || holidaysLoading}
                             onClick={() => void importNationalHolidays()}
                           >
                             导入 {holidayImportYear} 法定节假日
@@ -6980,7 +7476,7 @@ function App() {
                             onChange={(event) => setHolidayKeyword(event.target.value)}
                             onPressEnter={() => void fetchHolidays()}
                           />
-                          <Button onClick={openCreateHoliday}>新增</Button>
+                          <Button disabled={!canCreateHolidays} onClick={openCreateHoliday}>新增</Button>
                         </Space>
                         <Typography.Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 12 }}>
                           快捷导入从三方节假日接口获取所选年份放假日期；补班日当前不单独建模。
@@ -6995,12 +7491,14 @@ function App() {
                           locale={{
                             emptyText: (
                               <Empty description="当前月份暂无节假日" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                                <Button type="primary" onClick={openCreateHoliday}>新增节假日</Button>
+                                <Button disabled={!canCreateHolidays} type="primary" onClick={openCreateHoliday}>新增节假日</Button>
                               </Empty>
                             ),
                           }}
                           onRow={(record) => ({
-                            onClick: () => selectHoliday(record),
+                            onClick: () => {
+                              if (canUpdateHolidays) selectHoliday(record)
+                            },
                           })}
                           columns={[
                             { title: '日期', dataIndex: 'holidayDate', width: 112 },
@@ -7010,11 +7508,11 @@ function App() {
                               width: 120,
                               render: (_value: unknown, record: Holiday) => (
                                 <Space onClick={(event) => event.stopPropagation()}>
-                                  <Button size="small" onClick={() => selectHoliday(record)}>编辑</Button>
+                                  <Button disabled={!canUpdateHolidays} size="small" onClick={() => selectHoliday(record)}>编辑</Button>
                                   <Button
                                     size="small"
                                     danger
-                                    disabled={workCalendarActionLoading}
+                                    disabled={!hasPermission('holiday:delete') || workCalendarActionLoading}
                                     onClick={() => setWorkCalendarConfirmAction({ type: 'delete-holiday', holiday: record })}
                                   >
                                     删除
@@ -7040,11 +7538,11 @@ function App() {
                             />
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>字段按当前后端：holidayDate + holidayName。</Typography.Text>
                             <Space wrap>
-                              <Button onClick={openCreateHoliday}>新建草稿</Button>
+                              <Button disabled={!canCreateHolidays} onClick={openCreateHoliday}>新建草稿</Button>
                               <Button
                                 type="primary"
                                 loading={holidaySaving}
-                                disabled={!holidayForm.calendarId || !holidayForm.holidayDate || !holidayForm.holidayName.trim()}
+                                disabled={!(holidayForm.id ? canUpdateHolidays : canCreateHolidays) || !holidayForm.calendarId || !holidayForm.holidayDate || !holidayForm.holidayName.trim()}
                                 onClick={() => void saveHoliday()}
                               >
                                 保存节假日
@@ -7385,7 +7883,7 @@ function App() {
                             <div className="role-scope-card" key={resourceType}>
                               <strong>{dataResourceLabel(resourceType)}</strong>
                               <div>
-                                {['SELF', 'ALL'].map((scopeCode) => (
+                                {['SELF', 'DEPT', 'DEPT_AND_CHILDREN', 'ALL'].map((scopeCode) => (
                                   <button
                                     className={selectedScope === scopeCode ? 'active' : ''}
                                     disabled={selectedRoleReadonly || roleSaving || rolePermissionSaving || !canUpdateRolePermissions}
@@ -8742,7 +9240,7 @@ function App() {
                   </button>
                   <button
                     className="primary-action"
-                    disabled={activeSystemGroup !== 'ticket' || !ticketRuleDirty || ticketRuleSaving}
+                    disabled={activeSystemGroup !== 'ticket' || !canUpdateTicketNumberRule || !ticketRuleDirty || ticketRuleSaving}
                     onClick={() => setTicketRuleConfirmOpen(true)}
                     type="button"
                   >
@@ -8752,11 +9250,11 @@ function App() {
                 </div>
               </div>
 
-              {!isAdmin ? (
+              {!canReadTicketNumberRule ? (
                 <div className="permission-state">
                   <ShieldCheck size={42} />
                   <strong>无编号规则管理权限</strong>
-                  <p>非管理员只读自己的工作信息，编号规则配置入口对处理人隐藏。</p>
+                  <p>当前账号没有编号规则查看权限；保存修改由独立权限控制。</p>
                 </div>
               ) : (
                 <>
@@ -9007,11 +9505,11 @@ function App() {
                 </div>
               </div>
 
-              {!isAdmin ? (
+              {!canReadTemplates ? (
                 <div className="permission-state">
                   <ShieldCheck size={42} />
                   <strong>无通知模板管理权限</strong>
-                  <p>非管理员只读自己的工作信息，通知模板编辑入口对处理人隐藏。</p>
+                  <p>当前账号没有通知模板查看权限；模板编辑、预览由独立权限控制。</p>
                 </div>
               ) : (
                 <>
@@ -9214,6 +9712,238 @@ function App() {
                     </aside>
                   </div>
 
+                </>
+              )}
+            </section>
+          ) : activeMenu === '组织管理' ? (
+            <section className="app-content dept-page" aria-label="组织管理">
+              <div className="content-title">
+                <div>
+                  <h1>组织架构管理</h1>
+                  <p>维护部门层级、成员归属和负责人。</p>
+                </div>
+                <div className="content-actions">
+                  <button disabled={orgTreeLoading || orgStatsLoading} onClick={() => { void fetchOrgTree(); void fetchOrgStats(); void fetchDeptMembers(); }} type="button">
+                    <RefreshCw size={16} />
+                    刷新
+                  </button>
+                  {!hasRootDepartment && (
+                    <button className="primary-action" disabled={!canCreateDepartments} onClick={() => { setDeptFormMode('create'); setDeptForm({ parentId: 0, deptName: '', deptDesc: '', leaderUserId: 0, enabled: true }); setDeptFormOpen(true); }} type="button">
+                      <Plus size={16} />
+                      创建顶级部门
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {orgError ? (
+                <div className="permission-state">
+                  <TriangleAlert size={42} />
+                  <strong>加载失败</strong>
+                  <p>{orgError}</p>
+                  <button onClick={fetchOrgTree} type="button" style={{ marginTop: 12, height: 38, border: '1px solid #e5e7eb', borderRadius: 8, padding: '0 13px', background: '#fff', fontWeight: 600, cursor: 'pointer' }}>
+                    <RefreshCw size={16} /> 重试
+                  </button>
+                </div>
+              ) : orgTree.length === 0 && !orgTreeLoading ? (
+                <div className="permission-state">
+                  <FolderTree size={42} />
+                  <strong>暂无部门数据</strong>
+                  <p>请先新建部门来创建组织架构。</p>
+                </div>
+              ) : (
+                <>
+                  <div className="user-metrics">
+                    <div className="user-metric">
+                      <span>部门总数</span>
+                      <strong>{orgStats ? orgStats.totalDepartments : '--'}</strong>
+                      <small>启用 {orgStats ? orgStats.enabledDepartments : '--'}，停用 {orgStats ? orgStats.disabledDepartments : '--'}</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>成员总数</span>
+                      <strong>{orgStats ? orgStats.memberCount : '--'}</strong>
+                      <small>已分配主部门成员</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>负责人</span>
+                      <strong>{orgStats ? orgStats.leaderCount : '--'}</strong>
+                      <small>部门负责人数量</small>
+                    </div>
+                    <div className="user-metric">
+                      <span>未分配用户</span>
+                      <strong>{orgStats ? orgStats.unassignedUserCount : '--'}</strong>
+                      <small>待分配主部门</small>
+                    </div>
+                  </div>
+
+                  <div className="dept-layout org-layout">
+                    <section className="org-card">
+                      <div className="org-card-head">
+                        <div className="org-card-title"><FolderTree size={16} /> 组织树</div>
+                      </div>
+                      <div className="org-card-body org-tree-body">
+                        <div className="org-search-row">
+                          <input placeholder="搜索部门 / 负责人" type="search" />
+                          <button type="button"><Search size={15} /> 定位</button>
+                        </div>
+                        {orgTreeLoading ? (
+                          <div className="org-loading">
+                            <Loader size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+                            <p style={{ margin: 0, fontSize: 13 }}>加载中...</p>
+                          </div>
+                        ) : (
+                          <div className="dept-tree">
+                            {orgTree.map((node) => (
+                              <RecursiveOrgTreeNode key={node.id} node={node} selectedId={selectedDeptId} onSelect={(id) => { setSelectedDeptId(id); setDeptMemberPage(1); }} onCreateChild={(parentId) => { setDeptFormMode('create'); setDeptForm({ parentId, deptName: '', deptDesc: '', leaderUserId: 0, enabled: true }); setDeptFormOpen(true); }} depth={0} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <section className="org-card org-member-card">
+                      <div className="org-card-head">
+                        <div>
+                          <div className="org-card-title"><Folder size={16} /> {selectedDeptNode?.deptName || '部门成员'}</div>
+                          <p>{selectedDeptNode ? selectedDeptNode.deptName : '请选择部门'}</p>
+                        </div>
+                        {selectedDeptNode && (
+                          <div className="org-actions">
+                            <button disabled={!canCreateDepartments} onClick={() => { setDeptFormMode('create'); setDeptForm({ parentId: selectedDeptNode.id, deptName: '', deptDesc: '', leaderUserId: 0, enabled: true }); setDeptFormOpen(true); }} type="button">
+                              <Plus size={14} /> 新建下级
+                            </button>
+                            <button disabled={!canUpdateDepartments} onClick={() => { setDeptMoveParentId(selectedDeptNode.parentId ?? 0); setDeptMoveOpen(true); }} type="button">
+                              <SwapOutlined /> 移动部门
+                            </button>
+                            <button disabled={!canUpdateDepartments} onClick={() => { const n = selectedDeptNode; setDeptFormMode('edit'); setDeptForm({ parentId: n.parentId ?? 0, deptName: n.deptName, deptDesc: n.deptDesc ?? '', leaderUserId: n.leaderUserId ?? 0, enabled: n.enabled }); setDeptFormOpen(true); }} type="button">
+                              <Edit3 size={14} /> 编辑
+                            </button>
+                            <button className="danger" disabled={!canEnableDepartments} onClick={() => { setDeptConfirmTarget(selectedDeptNode); setDeptConfirmOpen(true); }} type="button">
+                              <PowerOff size={14} /> {selectedDeptNode.enabled ? '停用' : '启用'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="org-card-body">
+                        {!selectedDeptNode ? (
+                          <div className="org-empty">
+                            <Folder size={36} style={{ marginBottom: 8, color: '#d1d5db' }} />
+                            <p style={{ margin: 0, fontSize: 13 }}>请从左侧部门树中选择一个部门查看详情</p>
+                          </div>
+                        ) : (
+                          <div className="member-section">
+                            <div className="member-section-head">
+                              <h2>成员管理</h2>
+                              <div className="org-actions">
+                                <button disabled={!canUpdateDepartments || !deptMembersData?.records.length} onClick={() => { setDeptLeaderUserId(selectedDeptNode.leaderUserId ?? deptMembersData?.records[0]?.id ?? 0); setDeptLeaderOpen(true); }} type="button">设置负责人</button>
+                                <button className="primary" disabled={!canUpdateDepartments} onClick={() => { setDeptCandidateKeyword(''); setSelectedCandidateIds([]); setAddDeptMemberOpen(true); }} type="button">
+                                  <UserPlus size={14} /> 添加成员
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="member-toolbar">
+                              <input placeholder="搜索姓名 / 账号 / 邮箱" type="search" value={deptMemberKeyword} onChange={(event) => { setDeptMemberKeyword(event.target.value); setDeptMemberPage(1); }} />
+                              <select value={deptMemberRoleFilter} onChange={(event) => { setDeptMemberRoleFilter(event.target.value); setDeptMemberPage(1); }}>
+                                {deptRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                              </select>
+                              <button onClick={() => void fetchDeptMembers()} type="button"><Search size={15} /> 查询</button>
+                            </div>
+
+                            {deptMembersError ? (
+                              <div className="org-empty"><p>{deptMembersError}</p></div>
+                            ) : (
+                              <div className="org-table-wrap">
+                                <table className="org-table">
+                                  <thead>
+                                    <tr>
+                                      <th>成员</th>
+                                      <th>角色</th>
+                                      <th>主部门</th>
+                                      <th>状态</th>
+                                      <th style={{ textAlign: 'right' }}>操作</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {deptMembersLoading ? (
+                                      <tr><td colSpan={5}>加载中...</td></tr>
+                                    ) : deptMembersData?.records.length ? deptMembersData.records.map((member) => (
+                                      <tr key={member.id}>
+                                        <td><strong>{member.displayName}</strong><br /><span>{member.email || member.account}</span></td>
+                                        <td><span className="org-tag">{roleSelectOptions.find((role) => role.value === member.roleCode)?.label || roleLabel(member.roleCode)}</span></td>
+                                        <td>{member.departmentName || '-'}</td>
+                                        <td><span className={member.enabled ? 'badge-active' : 'badge-disabled'}>{member.enabled ? '启用' : '停用'}</span></td>
+                                        <td>
+                                          <div className="org-row-actions">
+                                            <button disabled={!canUpdateDepartments || selectedDeptNode.leaderUserId === member.id} onClick={() => void updateDeptLeader(member.id)} type="button">设负责人</button>
+                                            <button disabled={!canUpdateDepartments} onClick={() => void removeDeptMember(member)} type="button">移出</button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )) : (
+                                      <tr><td colSpan={5}>暂无成员</td></tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+
+                            <div className="org-pager">
+                              <span>共 {deptMembersData?.total ?? 0} 条，当前第 {deptMembersData?.page ?? deptMemberPage} 页</span>
+                              <div>
+                                <select value={deptMemberPageSize} onChange={(event) => { setDeptMemberPageSize(Number(event.target.value)); setDeptMemberPage(1); }}>
+                                  <option value={10}>10 条/页</option>
+                                  <option value={20}>20 条/页</option>
+                                  <option value={50}>50 条/页</option>
+                                </select>
+                                <button disabled={deptMemberPage <= 1} onClick={() => setDeptMemberPage((page) => Math.max(1, page - 1))} type="button">上一页</button>
+                                <button className="active" type="button">{deptMemberPage}</button>
+                                <button disabled={deptMembersData ? deptMemberPage >= deptMembersData.pages : true} onClick={() => setDeptMemberPage((page) => page + 1)} type="button">下一页</button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+
+                    <aside className="org-side">
+                      <section className="org-card">
+                        <div className="org-card-head">
+                          <div className="org-card-title">部门信息</div>
+                          {selectedDeptNode && <span className={selectedDeptNode.enabled ? 'badge-active' : 'badge-disabled'}>{selectedDeptNode.enabled ? '启用' : '停用'}</span>}
+                        </div>
+                        <div className="org-card-body">
+                          {selectedDeptNode ? (
+                            <div className="org-info-grid">
+                              <div><span>上级部门</span><strong>{selectedDeptNode.parentId ? orgDeptOptions.find((dept) => dept.id === selectedDeptNode.parentId)?.deptName || '-' : '顶级部门'}</strong></div>
+                              <div><span>负责人</span><strong>{selectedDeptNode.leaderDisplayName || '未设置'}</strong></div>
+                              <div><span>成员 / 下级</span><strong>{selectedDeptNode.memberCount} 人 / {selectedDeptNode.children?.length ?? 0} 个</strong></div>
+                              <div><span>部门层级</span><strong>{selectedDeptNode.parentId ? '下级部门' : '顶级部门'}</strong></div>
+                              <div><span>创建时间</span><strong>{selectedDeptNode.createdAt ? dayjs(selectedDeptNode.createdAt).format('YYYY-MM-DD') : '-'}</strong></div>
+                              <div><span>更新时间</span><strong>{selectedDeptNode.updatedAt ? dayjs(selectedDeptNode.updatedAt).format('YYYY-MM-DD HH:mm') : '-'}</strong></div>
+                            </div>
+                          ) : (
+                            <p>请选择部门。</p>
+                          )}
+                        </div>
+                      </section>
+
+                      <section className="org-card">
+                        <div className="org-card-head">
+                          <div className="org-card-title">数据权限范围</div>
+                          <span className="org-tag blue">预览</span>
+                        </div>
+                        <div className="org-card-body">
+                          <div className="scope-list">
+                            <div className="scope-card"><div><strong>全部数据</strong><span className="org-tag orange">{orgStats?.memberCount ?? 0} 人</span></div><p>可查看当前工作空间内所有部门成员相关数据。</p></div>
+                            <div className="scope-card"><div><strong>仅本人</strong><span className="org-tag">1 人</span></div><p>只能查看自己负责或参与处理的数据。</p></div>
+                            <div className="scope-card"><div><strong>仅本部门</strong><span className="org-tag blue">{selectedDeptNode?.memberCount ?? 0} 人</span></div><p>只能查看当前部门直属成员相关数据。</p></div>
+                            <div className="scope-card"><div><strong>本部门及下级部门</strong><span className="org-tag green">{selectedDeptTotalMemberCount} 人</span></div><p>可查看当前部门及下级部门相关数据。</p></div>
+                          </div>
+                        </div>
+                      </section>
+                    </aside>
+                  </div>
                 </>
               )}
             </section>
@@ -9745,6 +10475,205 @@ function App() {
             </Checkbox>
           </div>
         </Modal>
+
+        {deptFormOpen && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="dept-form-title">
+            <form className="user-modal" onSubmit={submitDeptForm}>
+              <div className="user-modal__head">
+                <h2 id="dept-form-title">{deptFormMode === 'create' ? '新建部门' : '编辑部门'}</h2>
+                <button aria-label="关闭" onClick={() => setDeptFormOpen(false)} type="button"><X size={18} /></button>
+              </div>
+              {deptFormError && <div className="user-alert">{deptFormError}</div>}
+              <div className="user-modal__body">
+                {deptFormMode === 'create' && (
+                  <label style={{ gridColumn: '1 / -1' }}>
+                    <span>上级部门</span>
+                    <select value={deptForm.parentId} onChange={(e) => setDeptForm((v) => ({ ...v, parentId: Number(e.target.value) }))}>
+                      {!hasRootDepartment && <option value={0}>顶级部门</option>}
+                      {orgDeptOptions.map((d) => (
+                        <option key={d.id} value={d.id}>{d.deptName}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label style={{ gridColumn: deptFormMode === 'create' ? undefined : '1 / -1' }}>
+                  <span>部门名称 <span style={{ color: '#ef4444' }}>*</span></span>
+                  <input required value={deptForm.deptName} onChange={(e) => setDeptForm((v) => ({ ...v, deptName: e.target.value }))} placeholder="例如：华北小组" />
+                </label>
+                <label>
+                  <span>负责人</span>
+                  <select value={deptForm.leaderUserId} onChange={(e) => setDeptForm((v) => ({ ...v, leaderUserId: Number(e.target.value) }))}>
+                    <option value={0}>暂不设置</option>
+                    {(deptMembersData?.records || []).map((member) => (
+                      <option key={member.id} value={member.id}>{member.displayName}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>状态</span>
+                  <select value={deptForm.enabled ? 'true' : 'false'} onChange={(e) => setDeptForm((v) => ({ ...v, enabled: e.target.value === 'true' }))}>
+                    <option value="true">启用</option>
+                    <option value="false">停用</option>
+                  </select>
+                </label>
+                <label style={{ gridColumn: '1 / -1' }}>
+                  <span>部门说明</span>
+                  <textarea value={deptForm.deptDesc} onChange={(e) => setDeptForm((v) => ({ ...v, deptDesc: e.target.value }))} placeholder="可选填写部门职责描述" style={{ height: 72, padding: '8px 12px', resize: 'vertical' }} />
+                </label>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={deptFormSubmitting} onClick={() => setDeptFormOpen(false)} type="button">取消</button>
+                <button className="primary-action" disabled={deptFormSubmitting || !deptForm.deptName.trim()} type="submit">
+                  <Check size={16} /> {deptFormSubmitting ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {deptMoveOpen && selectedDeptNode && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="dept-move-title">
+            <div className="user-modal compact">
+              <div className="user-modal__head">
+                <h2 id="dept-move-title">移动部门</h2>
+                <button aria-label="关闭" onClick={() => setDeptMoveOpen(false)} type="button"><X size={18} /></button>
+              </div>
+              <div className="user-modal__body single">
+                <p className="modal-hint">当前部门：{selectedDeptNode.deptName}</p>
+                <label>
+                  <span>上级部门</span>
+                  <select value={deptMoveParentId} onChange={(e) => setDeptMoveParentId(Number(e.target.value))}>
+                    {selectedDeptNode.parentId == null && <option value={0}>顶级部门</option>}
+                    {movableParentOptions.map((d) => (
+                      <option key={d.id} value={d.id}>{d.deptName}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={deptMoveSubmitting} onClick={() => setDeptMoveOpen(false)} type="button">取消</button>
+                <button className="primary-action" disabled={deptMoveSubmitting} onClick={() => void submitDeptMove()} type="button">
+                  <Check size={16} /> {deptMoveSubmitting ? '移动中...' : '确认移动'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {addDeptMemberOpen && selectedDeptNode && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="dept-add-member-title">
+            <div className="user-modal wide">
+              <div className="user-modal__head">
+                <h2 id="dept-add-member-title">添加成员</h2>
+                <button aria-label="关闭" onClick={() => setAddDeptMemberOpen(false)} type="button"><X size={18} /></button>
+              </div>
+              <div className="user-modal__body single">
+                <p className="modal-hint">加入部门：{selectedDeptNode.deptName}</p>
+                <div className="member-toolbar">
+                  <input placeholder="搜索姓名 / 账号 / 邮箱" type="search" value={deptCandidateKeyword} onChange={(event) => setDeptCandidateKeyword(event.target.value)} />
+                  <button onClick={() => void fetchDeptCandidates()} type="button"><Search size={15} /> 查询</button>
+                </div>
+                <div className="candidate-list">
+                  {deptCandidatesLoading ? (
+                    <div className="candidate-row">加载中...</div>
+                  ) : deptCandidatesData?.records.length ? deptCandidatesData.records.map((candidate) => {
+                    const checked = selectedCandidateIds.includes(candidate.id)
+                    return (
+                      <label className="candidate-row" key={candidate.id}>
+                        <input
+                          checked={checked}
+                          onChange={(event) => setSelectedCandidateIds((ids) => (
+                            event.target.checked ? [...ids, candidate.id] : ids.filter((id) => id !== candidate.id)
+                          ))}
+                          type="checkbox"
+                        />
+                        <span className="candidate-main"><strong>{candidate.displayName}</strong><span>{candidate.email || candidate.account} / {candidate.departmentName || '未分配部门'}</span></span>
+                        <span className={checked ? 'org-tag blue' : 'org-tag green'}>{checked ? '已选择' : '可添加'}</span>
+                      </label>
+                    )
+                  }) : (
+                    <div className="candidate-row">暂无可添加成员</div>
+                  )}
+                </div>
+              </div>
+              <div className="user-modal__foot">
+                <span className="modal-hint">已选择 {selectedCandidateIds.length} 人</span>
+                <button disabled={deptMemberSubmitting} onClick={() => setAddDeptMemberOpen(false)} type="button">取消</button>
+                <button className="primary-action" disabled={deptMemberSubmitting || selectedCandidateIds.length === 0} onClick={() => void submitAddDeptMembers()} type="button">
+                  <Check size={16} /> {deptMemberSubmitting ? '添加中...' : '确认添加'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deptLeaderOpen && selectedDeptNode && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="dept-leader-title">
+            <div className="user-modal compact">
+              <div className="user-modal__head">
+                <h2 id="dept-leader-title">设置负责人</h2>
+                <button aria-label="关闭" onClick={() => setDeptLeaderOpen(false)} type="button"><X size={18} /></button>
+              </div>
+              <div className="user-modal__body single">
+                <p className="modal-hint">当前部门：{selectedDeptNode.deptName}</p>
+                <label>
+                  <span>负责人</span>
+                  <select value={deptLeaderUserId} onChange={(event) => setDeptLeaderUserId(Number(event.target.value))}>
+                    <option value={0}>请选择负责人</option>
+                    {(deptMembersData?.records || []).map((member) => (
+                      <option key={member.id} value={member.id}>{member.displayName} / {member.email || member.account}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="user-modal__foot">
+                <button disabled={deptLeaderSubmitting} onClick={() => setDeptLeaderOpen(false)} type="button">取消</button>
+                <button className="primary-action" disabled={deptLeaderSubmitting || !deptLeaderUserId} onClick={() => void submitDeptLeader()} type="button">
+                  <Check size={16} /> {deptLeaderSubmitting ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deptConfirmOpen && deptConfirmTarget && (
+          <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="dept-confirm-title">
+            <div className="confirm-modal">
+              <h3 id="dept-confirm-title">
+                <TriangleAlert size={18} style={{ color: '#f59e0b', marginRight: 6, verticalAlign: 'middle' }} />
+                {deptConfirmTarget.enabled ? '确认停用' : '确认启用'}
+              </h3>
+              <p>
+                确认{deptConfirmTarget.enabled ? '停用' : '启用'}部门 <strong>「{deptConfirmTarget.deptName}」</strong> 吗？
+              </p>
+              {deptConfirmTarget.enabled ? (
+                <p style={{ fontSize: 13, color: '#6b7280', marginTop: 0 }}>
+                  停用后，该部门及下级部门在组织树中不可见，<br />
+                  部门成员在用户管理中仍可查看，但不再归属该部门。<br />
+                  如需恢复，可联系有编辑权限的管理员重新启用。
+                </p>
+              ) : (
+                <p style={{ fontSize: 13, color: '#6b7280', marginTop: 0 }}>
+                  启用后，该部门在组织树中恢复显示，<br />
+                  部门成员重新归属该部门，恢复数据范围权限。
+                </p>
+              )}
+              <div className="user-modal__foot">
+                <button disabled={deptEnableSubmitting} onClick={() => setDeptConfirmOpen(false)} type="button">取消</button>
+                <button
+                  className="primary-action"
+                  style={deptConfirmTarget.enabled ? { background: '#ef4444', borderColor: '#ef4444' } : {}}
+                  disabled={deptEnableSubmitting}
+                  onClick={submitDeptEnable}
+                  type="button"
+                >
+                  <PowerOff size={16} />
+                  {deptEnableSubmitting ? '处理中...' : `确认${deptConfirmTarget.enabled ? '停用' : '启用'}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

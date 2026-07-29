@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserEnabledRequest;
@@ -14,13 +15,11 @@ import com.ntn.fziot.mailtrace.interfaces.vo.user.UserSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserUpdateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.DepartmentEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserDepartmentEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.DepartmentMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserDepartmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
@@ -50,7 +49,7 @@ public class UserService {
     private static final String DEFAULT_DEPT_CODE = "DEFAULT";
 
     private final UserMapper userMapper;
-    private final OperationLogMapper operationLogMapper;
+    private final OperationLogService operationLogService;
     private final RoleMapper roleMapper;
     private final UserRoleMapper userRoleMapper;
     private final DepartmentMapper departmentMapper;
@@ -128,7 +127,7 @@ public class UserService {
         syncUserDepartment(user.getId(), department.getId(), principal.account());
 
         // 4、写入用户创建操作日志
-        recordLog(principal, "CREATE", user.getId(), "新建用户：" + user.getAccount());
+        operationLogService.record(principal, "USER", "CREATE", user.getId(), "新建用户：" + user.getAccount());
         // 5、返回新建后的用户详情
         return toVO(userMapper.selectById(user.getId()));
     }
@@ -162,7 +161,7 @@ public class UserService {
         syncUserDepartment(id, department.getId(), principal.account());
 
         // 5、写入用户编辑操作日志并返回最新用户详情
-        recordLog(principal, "UPDATE", id, "编辑用户：" + existing.getAccount());
+        operationLogService.record(principal, "USER", "UPDATE", id, "编辑用户：" + existing.getAccount());
         return toVO(userMapper.selectById(id));
     }
 
@@ -185,7 +184,7 @@ public class UserService {
                 .set(UserEntity::getUpdatedBy, principal.account()));
 
         // 4、写入启用或停用操作日志
-        recordLog(principal, enabled ? "ENABLE" : "DISABLE", id,
+        operationLogService.record(principal, "USER", enabled ? "ENABLE" : "DISABLE", id,
                 (enabled ? "启用用户：" : "停用用户：") + existing.getAccount());
         // 5、返回最新用户详情
         return toVO(userMapper.selectById(id));
@@ -207,7 +206,7 @@ public class UserService {
                 .set(UserEntity::getUpdatedBy, principal.account()));
 
         // 4、写入重置密码操作日志
-        recordLog(principal, "RESET_PASSWORD", id, "重置密码：" + existing.getAccount());
+        operationLogService.record(principal, "USER", "RESET_PASSWORD", id, "重置密码：" + existing.getAccount());
     }
 
     private LambdaQueryWrapper<UserEntity> buildQuery(String keyword, String roleCode, Boolean enabled) {
@@ -331,18 +330,6 @@ public class UserService {
         if (!Boolean.TRUE.equals(nextEnabled)) {
             throw new BusinessException(CODE_FORBIDDEN, "不能停用当前登录账号");
         }
-    }
-
-    private void recordLog(CurrentUserPrincipal principal, String actionCode, Long bizId, String content) {
-        OperationLogEntity log = new OperationLogEntity();
-        log.setOperator(principal.account());
-        log.setModuleCode("USER");
-        log.setActionCode(actionCode);
-        log.setBizId(String.valueOf(bizId));
-        log.setContent(content);
-        log.setCreatedBy(principal.account());
-        log.setUpdatedBy(principal.account());
-        operationLogMapper.insert(log);
     }
 
     private UserVO toVO(UserEntity user) {

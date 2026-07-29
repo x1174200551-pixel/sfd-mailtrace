@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.log;
 import com.ntn.fziot.mailtrace.application.bizservice.mailfetch.MailFetchLogBizService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.log.MailFetchLogPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.log.MailFetchLogStatsVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +28,7 @@ public class MailFetchLogController {
 
     @Operation(summary = "拉取日志分页查询")
     @GetMapping
+    @RequirePermission(value = "mail_fetch_log:read", message = "无权访问拉取日志")
     public BasicResult<MailFetchLogPageResponse> pageFetchLogs(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) Long mailboxId,
@@ -42,6 +44,7 @@ public class MailFetchLogController {
 
     @Operation(summary = "拉取日志统计概览")
     @GetMapping("/stats")
+    @RequirePermission(value = "mail_fetch_log:read", message = "无权访问拉取日志")
     public BasicResult<MailFetchLogStatsVO> stats() {
         return BasicResult.ok(mailFetchLogBizService.stats());
     }

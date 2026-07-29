@@ -2,6 +2,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.ticket;
 
 import com.ntn.fziot.mailtrace.application.bizservice.attachment.TicketAttachmentService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAttachmentVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,6 +30,7 @@ public class TicketAttachmentController {
 
     @Operation(summary = "上传附件")
     @PostMapping
+    @RequirePermission(value = "ticket_attachment:upload", message = "无权上传工单附件")
     public BasicResult<TicketAttachmentVO> upload(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long ticketId,
@@ -39,6 +41,7 @@ public class TicketAttachmentController {
 
     @Operation(summary = "附件列表")
     @GetMapping
+    @RequirePermission(value = "ticket_attachment:read", message = "无权查看工单附件")
     public BasicResult<List<TicketAttachmentVO>> list(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long ticketId) {
@@ -47,6 +50,7 @@ public class TicketAttachmentController {
 
     @Operation(summary = "删除附件")
     @DeleteMapping("/{attachmentId}")
+    @RequirePermission(value = "ticket_attachment:delete", message = "无权删除工单附件")
     public BasicResult<Void> delete(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long ticketId,
@@ -57,6 +61,7 @@ public class TicketAttachmentController {
 
     @Operation(summary = "下载附件")
     @GetMapping("/{attachmentId}/download")
+    @RequirePermission(value = "ticket_attachment:download", message = "无权下载工单附件")
     public ResponseEntity<Resource> download(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long ticketId,

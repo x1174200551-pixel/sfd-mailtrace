@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.user;
 import com.ntn.fziot.mailtrace.application.bizservice.user.UserService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserPageResponse;
@@ -34,6 +35,7 @@ public class UserController {
 
     @Operation(summary = "用户分页查询")
     @GetMapping
+    @RequirePermission(value = "user:read", message = "无权查看用户管理")
     public BasicResult<UserPageResponse> pageUsers(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
@@ -46,6 +48,7 @@ public class UserController {
 
     @Operation(summary = "新建用户")
     @PostMapping
+    @RequirePermission(value = "user:create", message = "无权新建用户")
     public BasicResult<UserVO> createUser(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody UserCreateRequest request) {
@@ -54,6 +57,7 @@ public class UserController {
 
     @Operation(summary = "编辑用户")
     @PutMapping("/{id}")
+    @RequirePermission(value = "user:update", message = "无权编辑用户")
     public BasicResult<UserVO> updateUser(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -63,6 +67,7 @@ public class UserController {
 
     @Operation(summary = "启用或停用用户")
     @PatchMapping("/{id}/enabled")
+    @RequirePermission(value = "user:enable", message = "无权启停用户")
     public BasicResult<UserVO> updateEnabled(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -72,6 +77,7 @@ public class UserController {
 
     @Operation(summary = "重置用户密码")
     @PostMapping("/{id}/reset-password")
+    @RequirePermission(value = "user:reset_password", message = "无权重置用户密码")
     public BasicResult<Void> resetPassword(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,

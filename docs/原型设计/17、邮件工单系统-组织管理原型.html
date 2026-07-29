@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮件工单系统 - 组织管理原型</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+
+    body {
+      color: #1f2937;
+      background: #f5f6f8;
+      font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .app-workspace {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    /* ===== Sidebar (matching App.css) ===== */
+    .app-sidebar {
+      height: 100vh;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #e5e7eb;
+      background: #fff;
+    }
+
+    .app-logo {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      border-bottom: 1px solid #e5e7eb;
+      color: #1f2937;
+      white-space: nowrap;
+    }
+
+    .app-logo__mark {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      color: #fff;
+      background: #2563eb;
+      font-weight: 800;
+    }
+
+    .app-logo strong {
+      overflow: hidden;
+      font-size: 16px;
+      font-weight: 700;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 12px 10px;
+    }
+
+    .sidebar-group { margin-bottom: 16px; }
+
+    .sidebar-group h2 {
+      margin: 0 0 4px;
+      padding: 8px 12px;
+      color: #9ca3af;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .sidebar-item {
+      width: 100%;
+      min-height: 40px;
+      border: 0;
+      border-radius: 8px;
+      margin-bottom: 2px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #6b7280;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.18s ease, color 0.18s ease;
+    }
+
+    .sidebar-item:hover { color: #1f2937; background: #f3f4f6; }
+    .sidebar-item.active { color: #2563eb; background: #eff6ff; }
+
+    .sidebar-item i:first-child { width: 18px; text-align: center; flex-shrink: 0; }
+    .sidebar-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ===== Main ===== */
+    .app-main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .app-header {
+      height: 64px;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fff;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #6b7280;
+    }
+
+    .header-left strong { color: #1f2937; font-weight: 700; }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .header-icon {
+      width: 32px; height: 32px;
+      border: 0;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #6b7280;
+      background: transparent;
+      position: relative;
+    }
+
+    .header-icon:hover { background: #f3f4f6; }
+
+    .badge-dot {
+      position: absolute; top: 7px; right: 7px;
+      width: 8px; height: 8px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+
+    .header-profile {
+      border-left: 1px solid #e5e7eb;
+      padding-left: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .profile-avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: linear-gradient(135deg, #34d399 0%, #14b8a6 100%);
+      font-weight: 700;
+    }
+
+    .header-profile strong, .header-profile small { display: block; }
+    .header-profile small { color: #9ca3af; font-size: 12px; }
+
+    .app-content {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* ===== Page Header (matching App.css .content-title) ===== */
+    .content-title {
+      margin-bottom: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .content-title h1 {
+      margin: 0 0 6px;
+      color: #1f2937;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .content-title p {
+      margin: 0;
+      color: #6b7280;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .content-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .content-actions button {
+      height: 38px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 0 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #1f2937;
+      background: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      transition: background 0.18s ease;
+    }
+
+    .content-actions button:hover { background: #f9fafb; }
+
+    .content-actions button.primary-action {
+      border-color: #2563eb;
+      color: #fff;
+      background: #2563eb;
+    }
+
+    .content-actions button.primary-action:hover { background: #1d4ed8; }
+
+    /* ===== Stats Cards (matching .user-metrics / .user-metric) ===== */
+    .org-metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .org-metric {
+      border: 1px solid #f3f4f6;
+      border-radius: 8px;
+      padding: 16px 18px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    }
+
+    .org-metric span { color: #6b7280; font-size: 13px; font-weight: 600; }
+    .org-metric strong { display: block; margin: 10px 0 4px; font-size: 26px; font-weight: 800; }
+    .org-metric small { color: #9ca3af; font-size: 12px; font-weight: 600; }
+
+    /* ===== Org Layout (Tree + Detail) ===== */
+    .org-layout {
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    /* ===== Ant Design Card style ===== */
+    .ant-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(15,23,42,.04);
+      overflow: hidden;
+    }
+
+    .ant-card-head {
+      min-height: 54px;
+      padding: 0 18px;
+      border-bottom: 1px solid #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .ant-card-head-title {
+      color: #1f2937;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ant-card-body {
+      padding: 0;
+    }
+
+    .ant-card-extra {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ===== Tree nodes ===== */
+    .org-tree {
+      padding: 8px 0;
+      max-height: 480px;
+      overflow-y: auto;
+    }
+
+    .tree-node {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .tree-node .node-row {
+      height: 38px;
+      padding: 0 12px 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .12s ease;
+      border-radius: 4px;
+      margin: 1px 6px;
+    }
+
+    .tree-node .node-row:hover { background: #f9fafb; }
+
+    .tree-node .node-row.selected {
+      color: #2563eb;
+      background: #eff6ff;
+      font-weight: 600;
+    }
+
+    .tree-node .arrow {
+      width: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #9ca3af;
+      font-size: 10px;
+      flex-shrink: 0;
+      transition: transform .15s ease;
+    }
+
+    .tree-node .arrow.expanded { transform: rotate(90deg); }
+
+    .tree-node .folder-icon { color: #f59e0b; width: 16px; text-align: center; flex-shrink: 0; font-size: 13px; }
+    .tree-node .building-icon { color: #3b82f6; width: 16px; text-align: center; flex-shrink: 0; font-size: 13px; }
+
+    .tree-node .node-label {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+
+    .tree-node .node-count {
+      color: #9ca3af;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tree-node .children-block { padding-left: 20px; }
+
+    /* ===== Detail panel ===== */
+    .detail-body {
+      padding: 18px;
+    }
+
+    .detail-empty {
+      padding: 60px 20px;
+      text-align: center;
+      color: #9ca3af;
+    }
+
+    .detail-empty i { font-size: 36px; margin-bottom: 10px; color: #d1d5db; }
+    .detail-empty p { margin: 0; font-size: 13px; }
+
+    .ant-descriptions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .ant-descriptions.full { grid-column: 1 / -1; }
+
+    .ant-descriptions-item {
+      min-width: 0;
+    }
+
+    .ant-descriptions-item.full { grid-column: 1 / -1; }
+
+    .ant-descriptions-item-label {
+      display: block;
+      margin-bottom: 3px;
+      color: #6b7280;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .ant-descriptions-item-content {
+      color: #1f2937;
+      font-size: 14px;
+      font-weight: 500;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* ===== Ant Design Tags ===== */
+    .ant-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 24px;
+      border-radius: 6px;
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .ant-tag.green {
+      color: #059669;
+      background: #ecfdf5;
+    }
+
+    .ant-tag.red {
+      color: #dc2626;
+      background: #fef2f2;
+    }
+
+    .ant-tag.blue {
+      color: #1d4ed8;
+      background: #eff6ff;
+    }
+
+    .ant-tag.gray {
+      color: #6b7280;
+      background: #f3f4f6;
+    }
+
+    .ant-tag i { font-size: 8px; }
+
+    /* ===== Detail Action Buttons ===== */
+    .detail-actions {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid #f3f4f6;
+      display: flex;
+      gap: 10px;
+    }
+
+    .ant-btn-sm {
+      height: 32px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 0 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #374151;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      transition: background .18s ease;
+    }
+
+    .ant-btn-sm:hover { background: #f9fafb; }
+    .ant-btn-sm.danger { color: #ef4444; border-color: #fecaca; }
+    .ant-btn-sm.danger:hover { background: #fef2f2; }
+    .ant-btn-sm.primary { color: #2563eb; border-color: #bfdbfe; }
+    .ant-btn-sm.primary:hover { background: #eff6ff; }
+
+    /* ===== Member list ===== */
+    .member-section { margin-top: 18px; }
+
+    .member-head {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .member-head strong { font-size: 14px; font-weight: 700; }
+    .member-head a { color: #2563eb; font-size: 13px; cursor: pointer; text-decoration: none; font-weight: 600; }
+    .member-head a:hover { color: #1d4ed8; }
+
+    .member-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+    }
+
+    .member-chip {
+      height: 40px;
+      border: 1px solid #f3f4f6;
+      border-radius: 8px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fafbfc;
+      transition: background .12s ease;
+    }
+
+    .member-chip:hover { background: #f3f4f6; }
+
+    .member-chip .ma {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .member-chip .mn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+    .member-chip .mt { color: #2563eb; font-size: 11px; font-weight: 700; }
+    .member-chip .mt.admin-tag { color: #6b7280; }
+
+    /* ===== Modal (matching user-modal) ===== */
+    .modal-mask {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,.45);
+      z-index: 80;
+    }
+
+    .modal-mask.hidden { display: none; }
+
+    .dept-modal {
+      width: min(560px, calc(100vw - 40px));
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 26px 70px rgba(15,23,42,.22);
+    }
+
+    .dept-modal__head {
+      min-height: 58px;
+      padding: 0 22px;
+      border-bottom: 1px solid #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .dept-modal__head h2 {
+      margin: 0;
+      color: #111827;
+      font-size: 18px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dept-modal__head button {
+      width: 32px; height: 32px;
+      border: 0;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #6b7280;
+      background: transparent;
+    }
+
+    .dept-modal__head button:hover { background: #f3f4f6; }
+
+    .dept-modal__body {
+      padding: 20px 22px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .dept-modal__body .full-row { grid-column: 1 / -1; }
+
+    .dept-modal__body label {
+      display: block;
+      margin-bottom: 8px;
+      color: #374151;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .dept-modal__body label .req { color: #ef4444; margin-left: 2px; }
+
+    .dept-modal__body input,
+    .dept-modal__body select,
+    .dept-modal__body textarea {
+      width: 100%;
+      height: 40px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 0 12px;
+      color: #111827;
+      background: #fff;
+      font-weight: 600;
+      outline: none;
+      transition: border .18s ease;
+    }
+
+    .dept-modal__body input:focus,
+    .dept-modal__body select:focus,
+    .dept-modal__body textarea:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+
+    .dept-modal__body textarea {
+      height: 72px;
+      padding: 8px 12px;
+      resize: vertical;
+    }
+
+    .dept-modal__body small.hint {
+      display: block;
+      margin-top: 7px;
+      color: #9ca3af;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .dept-modal__foot {
+      min-height: 58px;
+      padding: 0 22px;
+      border-top: 1px solid #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .dept-modal__foot button {
+      height: 38px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 0 15px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #374151;
+      background: #fff;
+      font-weight: 800;
+    }
+
+    .dept-modal__foot button.primary {
+      border-color: #2563eb;
+      color: #fff;
+      background: #2563eb;
+    }
+
+    .dept-modal__foot button.primary:hover { background: #1d4ed8; }
+
+    /* ===== Confirm Modal (matching confirm-modal) ===== */
+    .confirm-modal {
+      width: min(420px, calc(100vw - 40px));
+      border-radius: 10px;
+      padding: 26px;
+      background: #fff;
+      box-shadow: 0 26px 70px rgba(15,23,42,.22);
+    }
+
+    .confirm-modal h3 {
+      margin: 0;
+      color: #111827;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .confirm-modal p {
+      margin: 12px 0;
+      color: #6b7280;
+      line-height: 1.7;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .confirm-modal p strong { color: #1f2937; }
+
+    .confirm-foot {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .confirm-foot button {
+      height: 38px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 0 15px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #374151;
+      background: #fff;
+      font-weight: 800;
+    }
+
+    .confirm-foot button.danger {
+      border-color: #fecaca;
+      color: #ef4444;
+    }
+
+    .confirm-foot button.danger:hover { background: #fef2f2; }
+
+    /* ===== Interaction Notes (Proto notes) ===== */
+    .proto-notes {
+      margin-top: 24px;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 20px;
+      background: #fff;
+    }
+
+    .proto-notes h3 {
+      margin: 0 0 14px;
+      color: #1f2937;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .proto-notes ul {
+      margin: 0;
+      padding-left: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .proto-notes li {
+      padding-left: 20px;
+      position: relative;
+      color: #374151;
+      line-height: 1.6;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .proto-notes li::before {
+      content: "·";
+      position: absolute;
+      left: 6px;
+      color: #2563eb;
+      font-weight: 700;
+    }
+
+    .proto-notes code {
+      background: #f3f4f6;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .proto-tag {
+      display: inline-block;
+      height: 20px;
+      border-radius: 4px;
+      padding: 0 5px;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 20px;
+      margin-right: 4px;
+    }
+
+    .proto-tag.blue { background: #dbeafe; color: #1d4ed8; }
+    .proto-tag.green { background: #d1fae5; color: #059669; }
+    .proto-tag.amber { background: #fef3c7; color: #d97706; }
+    .proto-tag.red { background: #fee2e2; color: #dc2626; }
+    .proto-tag.gray { background: #f3f4f6; color: #6b7280; }
+
+    /* ===== Ant Design Table-like row ===== */
+    .user-page-table {
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-workspace">
+    <!-- Sidebar -->
+    <aside class="app-sidebar">
+      <div class="app-logo">
+        <span class="app-logo__mark">M</span>
+        <strong>MailTrace</strong>
+      </div>
+      <nav class="sidebar-nav">
+        <div class="sidebar-group">
+          <h2>工作台</h2>
+          <div class="sidebar-item"><i class="fa-solid fa-gauge-high"></i><span>工作台</span></div>
+        </div>
+        <div class="sidebar-group">
+          <h2>工单中心</h2>
+          <div class="sidebar-item"><i class="fa-solid fa-ticket"></i><span>全部工单</span></div>
+          <div class="sidebar-item"><i class="fa-solid fa-users"></i><span>客户管理</span></div>
+        </div>
+        <div class="sidebar-group">
+          <h2>邮件管理</h2>
+          <div class="sidebar-item"><i class="fa-regular fa-envelope"></i><span>邮箱配置</span></div>
+          <div class="sidebar-item"><i class="fa-solid fa-download"></i><span>收件记录</span></div>
+          <div class="sidebar-item"><i class="fa-solid fa-upload"></i><span>发件记录</span></div>
+        </div>
+        <div class="sidebar-group">
+          <h2>SLA 管理</h2>
+          <div class="sidebar-item"><i class="fa-solid fa-arrow-right-arrow-left"></i><span>分配规则</span></div>
+          <div class="sidebar-item"><i class="fa-regular fa-clock"></i><span>SLA 策略</span></div>
+          <div class="sidebar-item"><i class="fa-regular fa-calendar"></i><span>工作日历</span></div>
+        </div>
+        <div class="sidebar-group">
+          <h2>系统管理</h2>
+          <div class="sidebar-item"><i class="fa-solid fa-user-gear"></i><span>用户管理</span></div>
+          <div class="sidebar-item"><i class="fa-solid fa-shield-halved"></i><span>角色管理</span></div>
+          <div class="sidebar-item active"><i class="fa-solid fa-sitemap"></i><span>组织管理</span></div>
+          <div class="sidebar-item"><i class="fa-regular fa-file-lines"></i><span>通知模板</span></div>
+          <div class="sidebar-item"><i class="fa-solid fa-hashtag"></i><span>编号规则</span></div>
+        </div>
+      </nav>
+    </aside>
+
+    <!-- Main -->
+    <main class="app-main">
+      <header class="app-header">
+        <div class="header-left">
+          <i class="fa-solid fa-house" style="font-size:13px;color:#9ca3af"></i>
+          <span style="color:#9ca3af">/</span>
+          <strong>组织管理</strong>
+        </div>
+        <div class="header-right">
+          <button class="header-icon"><i class="fa-regular fa-bell"></i><span class="badge-dot"></span></button>
+          <div class="header-profile">
+            <span class="profile-avatar">管</span>
+            <div><strong>管理员</strong><small>admin@example.com</small></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="app-content">
+        <!-- Page header -->
+        <div class="content-title">
+          <div>
+            <h1>组织管理</h1>
+            <p>管理部门结构、负责人和成员归属；部门负责人的数据范围在角色管理页配置。</p>
+          </div>
+          <div class="content-actions">
+            <button><i class="fa-solid fa-rotate"></i>刷新</button>
+            <button class="primary-action"><i class="fa-solid fa-plus"></i>新建部门</button>
+          </div>
+        </div>
+
+        <!-- Stats cards -->
+        <div class="org-metrics">
+          <div class="org-metric">
+            <span>部门总数</span>
+            <strong>5</strong>
+            <small>后台组织架构</small>
+          </div>
+          <div class="org-metric">
+            <span>总成员</span>
+            <strong>26</strong>
+            <small>全员（含部门负责人）</small>
+          </div>
+          <div class="org-metric">
+            <span>直属部门</span>
+            <strong>3</strong>
+            <small>当前层级下一级</small>
+          </div>
+          <div class="org-metric">
+            <span>已启用</span>
+            <strong>5</strong>
+            <small>所有部门运行中</small>
+          </div>
+        </div>
+
+        <!-- Org Layout -->
+        <div class="org-layout">
+          <!-- Left: Tree -->
+          <div class="ant-card">
+            <div class="ant-card-head">
+              <div class="ant-card-head-title"><i class="fa-solid fa-sitemap" style="color:#2563eb"></i> 部门结构</div>
+              <div class="ant-card-extra" style="color:#9ca3af;font-size:12px">5 个部门</div>
+            </div>
+            <div class="org-tree">
+              <div class="tree-node">
+                <div class="node-row selected">
+                  <span class="arrow expanded"><i class="fa-solid fa-chevron-right"></i></span>
+                  <span class="building-icon"><i class="fa-regular fa-building"></i></span>
+                  <span class="node-label">总公司</span>
+                  <span class="node-count">5 人</span>
+                </div>
+                <div class="children-block">
+                  <div class="tree-node">
+                    <div class="node-row">
+                      <span class="arrow expanded"><i class="fa-solid fa-chevron-right"></i></span>
+                      <span class="folder-icon"><i class="fa-regular fa-folder"></i></span>
+                      <span class="node-label">客服部</span>
+                      <span class="node-count">8 人</span>
+                    </div>
+                    <div class="children-block">
+                      <div class="tree-node">
+                        <div class="node-row">
+                          <span class="arrow" style="visibility:hidden"><i class="fa-solid fa-chevron-right"></i></span>
+                          <span class="folder-icon"><i class="fa-regular fa-folder"></i></span>
+                          <span class="node-label">售前组</span>
+                          <span class="node-count">3 人</span>
+                        </div>
+                      </div>
+                      <div class="tree-node">
+                        <div class="node-row">
+                          <span class="arrow" style="visibility:hidden"><i class="fa-solid fa-chevron-right"></i></span>
+                          <span class="folder-icon"><i class="fa-regular fa-folder"></i></span>
+                          <span class="node-label">售后组</span>
+                          <span class="node-count">5 人</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="tree-node">
+                    <div class="node-row">
+                      <span class="arrow" style="visibility:hidden"><i class="fa-solid fa-chevron-right"></i></span>
+                      <span class="folder-icon"><i class="fa-regular fa-folder"></i></span>
+                      <span class="node-label">技术部</span>
+                      <span class="node-count">6 人</span>
+                    </div>
+                  </div>
+                  <div class="tree-node">
+                    <div class="node-row">
+                      <span class="arrow" style="visibility:hidden"><i class="fa-solid fa-chevron-right"></i></span>
+                      <span class="folder-icon"><i class="fa-regular fa-folder"></i></span>
+                      <span class="node-label">运营部</span>
+                      <span class="node-count">4 人</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Detail -->
+          <div class="ant-card">
+            <div class="ant-card-head">
+              <div class="ant-card-head-title"><i class="fa-regular fa-building" style="color:#6b7280"></i> 部门详情</div>
+              <div class="ant-card-extra">
+                <button class="ant-btn-sm"><i class="fa-solid fa-pen"></i>编辑</button>
+                <button class="ant-btn-sm danger"><i class="fa-solid fa-ban"></i>停用</button>
+              </div>
+            </div>
+            <div class="detail-body">
+              <!-- Descriptions -->
+              <div class="ant-descriptions">
+                <div class="ant-descriptions-item">
+                  <span class="ant-descriptions-item-label">部门名称</span>
+                  <div class="ant-descriptions-item-content">总公司</div>
+                </div>
+                <div class="ant-descriptions-item">
+                  <span class="ant-descriptions-item-label">部门编码</span>
+                  <div class="ant-descriptions-item-content"><code style="background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px">HQ</code></div>
+                </div>
+                <div class="ant-descriptions-item">
+                  <span class="ant-descriptions-item-label">负责人</span>
+                  <div class="ant-descriptions-item-content">
+                    <span class="ma" style="width:24px;height:24px;font-size:11px;background:#6366f1">张</span>
+                    张总
+                    <span class="ant-tag green"><i class="fa-solid fa-circle"></i> 管理员</span>
+                  </div>
+                </div>
+                <div class="ant-descriptions-item">
+                  <span class="ant-descriptions-item-label">状态</span>
+                  <div class="ant-descriptions-item-content">
+                    <span class="ant-tag green"><i class="fa-solid fa-circle"></i> 启用</span>
+                  </div>
+                </div>
+                <div class="ant-descriptions-item">
+                  <span class="ant-descriptions-item-label">排序</span>
+                  <div class="ant-descriptions-item-content">10</div>
+                </div>
+                <div class="ant-descriptions-item">
+                  <span class="ant-descriptions-item-label">直属成员</span>
+                  <div class="ant-descriptions-item-content">5 人</div>
+                </div>
+                <div class="ant-descriptions-item full">
+                  <span class="ant-descriptions-item-label">说明</span>
+                  <div class="ant-descriptions-item-content" style="color:#6b7280;font-weight:400">公司总部，管理全公司所有部门和业务线。</div>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="detail-actions">
+                <button class="ant-btn-sm primary"><i class="fa-solid fa-plus"></i>新建子部门</button>
+                <button class="ant-btn-sm"><i class="fa-solid fa-arrow-up"></i>上移</button>
+                <button class="ant-btn-sm"><i class="fa-solid fa-arrow-down"></i>下移</button>
+              </div>
+
+              <!-- Members -->
+              <div class="member-section">
+                <div class="member-head">
+                  <strong><i class="fa-regular fa-user" style="margin-right:6px"></i>直属成员</strong>
+                  <a><i class="fa-solid fa-arrow-up-right-from-square"></i>管理成员</a>
+                </div>
+                <div class="member-grid">
+                  <div class="member-chip">
+                    <span class="ma" style="background:#6366f1">张</span>
+                    <span class="mn">张总</span>
+                    <span class="mt">负责人</span>
+                  </div>
+                  <div class="member-chip">
+                    <span class="ma" style="background:#f59e0b">李</span>
+                    <span class="mn">李明</span>
+                    <span class="mt admin-tag">管理员</span>
+                  </div>
+                  <div class="member-chip">
+                    <span class="ma" style="background:#34d399">王</span>
+                    <span class="mn">王芳</span>
+                  </div>
+                  <div class="member-chip">
+                    <span class="ma" style="background:#f472b6">赵</span>
+                    <span class="mn">赵工</span>
+                  </div>
+                  <div class="member-chip">
+                    <span class="ma" style="background:#60a5fa">陈</span>
+                    <span class="mn">陈工</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interaction Notes -->
+        <div class="proto-notes">
+          <h3><i class="fa-regular fa-lightbulb" style="color:#2563eb"></i> 交互说明</h3>
+          <ul>
+            <li><span class="proto-tag blue">PG-17</span> 本原型为组织管理页面，仅在管理员菜单可见（<code>menu:departments</code>）</li>
+            <li><span class="proto-tag green">部门树</span> 左侧展示部门层级结构，点击节点选中并展开/收缩下级；高亮选中节点（蓝色背景 <code>#eff6ff</code>）</li>
+            <li><span class="proto-tag green">部门详情</span> 右侧展示选中部门的信息、状态和直属成员列表；无选中时展示空态引导</li>
+            <li><span class="proto-tag amber">新建部门</span> 点击「新建部门」或「新建子部门」弹出 Modal 表单，填写上级部门/名称/编码/说明/负责人/排序</li>
+            <li><span class="proto-tag amber">编辑部门</span> 点击「编辑」弹窗修改，编码不可编辑（系统内置 <code>DEFAULT</code> 编码的部门不可修改编码）</li>
+            <li><span class="proto-tag amber">启停操作</span> 点击「停用」弹出二次确认 Modal；停用后该部门及下级部门在树中不可见，成员自动失去部门归属；默认部门不可停用</li>
+            <li><span class="proto-tag gray">排序调整</span> 点击「上移」「下移」调整同级部门展示顺序，排序值按 <code>sort_order</code> 字段步进 10</li>
+            <li><span class="proto-tag red">管理成员</span> 点击「管理成员」跳转到用户管理页面，按部门筛选并调整成员归属（入口在用户管理）</li>
+            <li><span class="proto-tag blue">主管权限</span> 部门负责人在数据范围内自动按 <code>DEPT_AND_CHILDREN</code> 获取该部门及下级工单的可视和操作权限；负责人变更在角色管理页配置</li>
+            <li><span class="proto-tag red">交付范围</span> 该原型仅覆盖部门管理页；成员归属调整入口在用户管理页；部门负责人的数据范围在角色管理页配置</li>
+            <li><span class="proto-tag gray">权限校验</span> 组织管理页面需要 <code>department:read</code> 权限；新建/编辑/启停分别校验 <code>department:create/update/enable</code></li>
+          </ul>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- New/Edit Department Modal -->
+  <div class="modal-mask hidden" id="deptModal">
+    <div class="dept-modal">
+      <div class="dept-modal__head">
+        <h2><i class="fa-solid fa-plus" style="color:#2563eb"></i> 新建部门</h2>
+        <button><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="dept-modal__body">
+        <div class="full-row">
+          <label>上级部门</label>
+          <select>
+            <option>总公司</option>
+            <option selected>客服部</option>
+            <option>— 售前组</option>
+            <option>— 售后组</option>
+            <option>技术部</option>
+            <option>运营部</option>
+          </select>
+        </div>
+        <div>
+          <label>部门名称 <span class="req">*</span></label>
+          <input type="text" placeholder="例如：质检组" value="质检组">
+        </div>
+        <div>
+          <label>部门编码</label>
+          <input type="text" placeholder="选填，字母或数字" value="QC">
+          <small class="hint">选填，仅用于标识，不可与同级部门重复</small>
+        </div>
+        <div class="full-row">
+          <label>部门说明</label>
+          <textarea placeholder="可选填写部门职责描述">负责工单质量检查和客服培训</textarea>
+        </div>
+        <div>
+          <label>部门负责人</label>
+          <select>
+            <option value="">—</option>
+            <option>张总（总公司）</option>
+            <option selected>李明（客服部）</option>
+            <option>王芳（客服部）</option>
+          </select>
+          <small class="hint">设为负责人后，该用户自动获得部门及下级数据范围权限</small>
+        </div>
+        <div>
+          <label>排序</label>
+          <input type="number" value="100">
+          <small class="hint">数字越小越靠前</small>
+        </div>
+      </div>
+      <div class="dept-modal__foot">
+        <button>取消</button>
+        <button class="primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Disable Confirm Modal -->
+  <div class="modal-mask hidden" id="confirmModal">
+    <div class="confirm-modal">
+      <h3><i class="fa-solid fa-triangle-exclamation" style="color:#f59e0b;margin-right:6px"></i> 确认停用</h3>
+      <p>
+        确认停用部门 <strong>「售后组」</strong> 吗？
+      </p>
+      <p style="font-size:13px;color:#6b7280;margin-top:0">
+        停用后，该部门及下级部门在组织树中不可见，<br>
+        部门成员在用户管理中仍可查看，但不再归属该部门。<br>
+        如需恢复，可联系有编辑权限的管理员重新启用。
+      </p>
+      <div class="confirm-foot">
+        <button>取消</button>
+        <button class="danger"><i class="fa-solid fa-ban"></i> 确认停用</button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

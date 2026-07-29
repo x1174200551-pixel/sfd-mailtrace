@@ -1,30 +1,23 @@
-# Design QA - P1-W0-01 登录页原型
+# Design QA
 
-final result: passed
+Target: `docs/原型设计/12、邮件工单系统-SLA策略原型.png`
 
-## Source
+Implementation: `frontend/src/App.tsx` / local Vite app `http://127.0.0.1:5173/`
 
-- Reference image: `docs/原型设计/5、邮件工单系统-登录页原型.png`
-- Prototype HTML: `docs/原型设计/5、邮件工单系统-登录页原型.html`
-- Captured screenshot: `docs/原型设计/5、邮件工单系统-登录页原型-渲染截图.png`
-- Wide-screen ratio check: `docs/原型设计/5、邮件工单系统-登录页原型-宽屏比例校验.png`
-- Viewports: 1309x1201, 2048x1100
+Viewport checked: 1440x1024 desktop.
 
 ## Checks
 
-| Area | Result | Notes |
-|------|--------|-------|
-| Layout | passed | Two-column desktop layout matches the reference structure. |
-| Brand area | passed | Product name, subtitle, headline, and capability copy are present; the earlier version badge has been removed. |
-| Illustration | passed | Left workflow illustration approximates the reference using existing system UI language. |
-| Login card | passed | Card position, scale, title, inputs, remember row, forgot action, and primary button align with the reference. |
-| Interaction states | passed | Required, error, loading, success, password toggle, forgot password, and no-account states are implemented. |
-| Wide-screen scaling | passed | Prototype now uses a full-width browser canvas with a balanced inner grid, removing the large blank side gutters on wide screens. |
-| Column balance | passed | Left content column is widened and the right login panel/form is narrowed so the two sides read with more balanced visual weight. |
-| Single-screen fit | passed | Wide-screen verification fits the login page in one viewport without visible page scrolling. |
-| Version badge and footer | passed | The top-left version badge is removed and the copyright text is anchored at the bottom of the page. |
+- Sidebar, topbar, title, metrics, blue notice, three-column work area, and right-side SLA preview match the PG-09 structure.
+- SLA strategy list uses real `GET /api/v1/sla-policies` data and shows default/enabled tags, response/resolve/warning/escalation values, and bound calendar text.
+- Edit panel supports policy name, enabled/default, response hours, resolve hours, warning threshold, escalation threshold, and calendar binding.
+- Delete confirmation is present and blocks default-policy deletion in the UI.
+- SLA preview uses the selected work calendar to calculate work-hour deadlines; `2026-07-27 15:30 + 16 工作小时` renders as `2026-07-29 13:30` for a 09:00-18:00 weekday calendar.
+- Empty-list, loading, API error, and permission states are implemented as real page states instead of persistent explanatory cards.
 
-## Follow-Up Notes
+## Residual Notes
 
-- `PG-01` remains pending because only 谭总 can mark a prototype gate as ✅.
-- The rendered screenshot is a QA artifact; the original numbered PNG remains the provided visual reference.
+- The local database currently has no persistent SLA policies or work calendars after cleanup, so the default visible state is empty.
+- Existing responsive behavior hides the left sidebar at narrow browser widths; desktop prototype fidelity was checked at 1440x1024.
+
+Final result: passed

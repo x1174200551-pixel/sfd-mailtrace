@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.ticket;
 import com.ntn.fziot.mailtrace.application.bizservice.ticket.TicketBizService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPriorityRequest;
@@ -37,6 +38,7 @@ public class TicketController {
 
     @Operation(summary = "工单分页查询")
     @GetMapping
+    @RequirePermission(value = "ticket:read", message = "无权查看工单")
     public BasicResult<TicketPageResponse> pageTickets(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
@@ -54,6 +56,7 @@ public class TicketController {
 
     @Operation(summary = "工单详情")
     @GetMapping("/{id}")
+    @RequirePermission(value = "ticket:read", message = "无权查看工单")
     public BasicResult<TicketVO> getTicket(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id) {
@@ -62,6 +65,7 @@ public class TicketController {
 
     @Operation(summary = "工单统计概览")
     @GetMapping("/stats")
+    @RequirePermission(value = "ticket:read", message = "无权查看工单统计")
     public BasicResult<TicketBizService.TicketStats> stats(
             @AuthenticationPrincipal CurrentUserPrincipal principal) {
         return BasicResult.ok(ticketBizService.stats(principal));
@@ -69,6 +73,7 @@ public class TicketController {
 
     @Operation(summary = "分配处理人")
     @PostMapping("/{id}/assign")
+    @RequirePermission(value = "ticket:assign", message = "无权转派工单")
     public BasicResult<TicketVO> assignTicket(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -78,6 +83,7 @@ public class TicketController {
 
     @Operation(summary = "领取未分配工单")
     @PostMapping("/{id}/claim")
+    @RequirePermission(value = "ticket:claim", message = "无权领取工单")
     public BasicResult<TicketVO> claimTicket(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id) {
@@ -86,6 +92,7 @@ public class TicketController {
 
     @Operation(summary = "回复客户 / 内部备注（internal=true 为内部备注）")
     @PostMapping("/{id}/reply")
+    @RequirePermission(anyOf = {"ticket:reply", "ticket:note"}, message = "无权回复或备注工单")
     public BasicResult<TicketVO> replyTicket(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -95,6 +102,7 @@ public class TicketController {
 
     @Operation(summary = "变更工单状态")
     @PatchMapping("/{id}/status")
+    @RequirePermission(value = "ticket:update_status", message = "无权变更工单状态")
     public BasicResult<TicketVO> updateStatus(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -104,6 +112,7 @@ public class TicketController {
 
     @Operation(summary = "关闭工单")
     @PostMapping("/{id}/close")
+    @RequirePermission(value = "ticket:close", message = "无权关闭工单")
     public BasicResult<TicketVO> closeTicket(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -113,6 +122,7 @@ public class TicketController {
 
     @Operation(summary = "变更工单优先级")
     @PatchMapping("/{id}/priority")
+    @RequirePermission(value = "ticket:update_priority", message = "无权变更工单优先级")
     public BasicResult<TicketVO> updatePriority(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -122,6 +132,7 @@ public class TicketController {
 
     @Operation(summary = "更新工单备注")
     @PatchMapping("/{id}/remark")
+    @RequirePermission(value = "ticket:update_remark", message = "无权编辑工单备注")
     public BasicResult<TicketVO> updateRemark(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,

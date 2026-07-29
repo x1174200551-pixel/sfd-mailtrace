@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.sysparam;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.sysparam.TicketNumberRuleRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sysparam.TicketNumberRuleVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -27,6 +28,7 @@ public class SysParamController {
 
     @Operation(summary = "查询工单编号规则")
     @GetMapping("/ticket-number-rule")
+    @RequirePermission(value = "ticket_number_rule:read", message = "无权查看编号规则")
     public BasicResult<TicketNumberRuleVO> getTicketNumberRule(
             @AuthenticationPrincipal CurrentUserPrincipal principal) {
         return BasicResult.ok(ticketNumberRuleService.getRule(principal));
@@ -34,6 +36,7 @@ public class SysParamController {
 
     @Operation(summary = "预览工单编号规则")
     @PostMapping("/ticket-number-rule/preview")
+    @RequirePermission(value = "ticket_number_rule:preview", message = "无权预览编号规则")
     public BasicResult<TicketNumberRuleVO> previewTicketNumberRule(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody TicketNumberRuleRequest request) {
@@ -42,6 +45,7 @@ public class SysParamController {
 
     @Operation(summary = "保存工单编号规则")
     @PutMapping("/ticket-number-rule")
+    @RequirePermission(value = "ticket_number_rule:update", message = "无权编辑编号规则")
     public BasicResult<TicketNumberRuleVO> updateTicketNumberRule(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody TicketNumberRuleRequest request) {

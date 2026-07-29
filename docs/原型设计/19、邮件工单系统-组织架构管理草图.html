@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮件工单系统 - 组织架构管理原型</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-soft: #eff6ff;
+      --success: #10b981;
+      --success-soft: #ecfdf5;
+      --warning: #f59e0b;
+      --warning-soft: #fffbeb;
+      --danger: #ef4444;
+      --danger-soft: #fef2f2;
+      --bg: #f5f6f8;
+      --surface: #fff;
+      --line: #e5e7eb;
+      --line-soft: #f1f5f9;
+      --text: #111827;
+      --sub: #4b5563;
+      --muted: #9ca3af;
+      --shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      color: var(--text);
+      background: var(--bg);
+      font-family: Inter, "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+
+    .shell {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      overflow: hidden;
+    }
+
+    .sidebar {
+      min-width: 0;
+      border-right: 1px solid var(--line);
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+    }
+    .logo {
+      height: 64px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: var(--primary);
+      font-weight: 800;
+    }
+    .logo strong { font-size: 16px; font-weight: 800; }
+    .nav { flex: 1; overflow-y: auto; padding: 12px; }
+    .nav-title {
+      padding: 8px 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .nav-item {
+      width: 100%;
+      min-height: 40px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 12px;
+      margin-bottom: 2px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--sub);
+      background: transparent;
+      text-align: left;
+      font-weight: 650;
+    }
+    .nav-item.active { color: var(--primary); background: var(--primary-soft); }
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .nav-item.active .nav-icon { background: #dbeafe; color: var(--primary); }
+
+    .main { min-width: 0; display: flex; flex-direction: column; }
+    .topbar {
+      height: 64px;
+      padding: 0 24px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fff;
+    }
+    .crumb { color: var(--sub); }
+    .crumb strong { color: var(--text); }
+    .top-actions { display: flex; align-items: center; gap: 14px; color: var(--sub); }
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      background: #0f172a;
+      font-weight: 800;
+    }
+
+    .content {
+      min-height: 0;
+      padding: 20px 24px;
+      overflow-y: auto;
+    }
+    .title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: 24px; line-height: 1.25; }
+    h2 { font-size: 15px; }
+    h3 { font-size: 14px; }
+    p { color: var(--sub); line-height: 1.65; }
+
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      color: var(--sub);
+      background: #fff;
+      font-weight: 650;
+    }
+    .btn:hover { color: var(--text); background: #f8fafc; }
+    .btn.primary { border-color: var(--primary); color: #fff; background: var(--primary); }
+    .btn.primary:hover { color: #fff; background: #1d4ed8; }
+    .btn.danger { color: var(--danger); border-color: #fecaca; background: #fff; }
+    .btn.ghost { border-color: transparent; background: transparent; }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .metric, .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+    .metric {
+      min-height: 92px;
+      padding: 14px 16px;
+    }
+    .metric span { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .metric strong { display: block; margin-top: 6px; font-size: 24px; line-height: 1.15; }
+    .metric small { color: var(--sub); line-height: 1.6; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 300px minmax(440px, 1fr) 320px;
+      gap: 16px;
+      align-items: start;
+    }
+    .panel-head {
+      min-height: 54px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .panel-body { padding: 16px; }
+
+    .input {
+      width: 100%;
+      height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 10px;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+    }
+    .input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    textarea.input { min-height: 72px; padding-top: 9px; resize: vertical; }
+    .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+
+    .tree { display: flex; flex-direction: column; gap: 6px; }
+    .tree-row {
+      min-height: 42px;
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      color: var(--sub);
+      transition: background 0.18s ease, color 0.18s ease;
+    }
+    .tree-row:hover { background: #f8fafc; color: var(--text); }
+    .tree-row.active {
+      color: var(--primary);
+      background: var(--primary-soft);
+      outline: 1px solid #bfdbfe;
+    }
+    .tree-row.disabled { color: var(--muted); background: #f8fafc; }
+    .tree-row .name { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .tree-row strong { overflow: hidden; color: inherit; text-overflow: ellipsis; white-space: nowrap; }
+    .tree-row small { color: var(--muted); }
+    .tree-add {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--primary);
+      background: #fff;
+      font-weight: 900;
+      opacity: 0;
+      transition: opacity 0.18s ease, background 0.18s ease;
+    }
+    .tree-row:hover .tree-add,
+    .tree-row.active .tree-add { opacity: 1; }
+    .tree-add:hover { color: #fff; background: var(--primary); }
+    .tree-row.disabled .tree-add { visibility: hidden; }
+    .indent-1 { margin-left: 18px; }
+    .indent-2 { margin-left: 36px; }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: var(--sub);
+      background: #f3f4f6;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .tag.blue { color: var(--primary); background: var(--primary-soft); }
+    .tag.green { color: #047857; background: var(--success-soft); }
+    .tag.orange { color: #b45309; background: var(--warning-soft); }
+    .tag.red { color: var(--danger); background: var(--danger-soft); }
+
+    .context-column {
+      display: grid;
+      gap: 12px;
+    }
+    .section {
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fff;
+    }
+    .section + .section { margin-top: 12px; }
+    .context-column .section + .section { margin-top: 0; }
+    .member-panel .section {
+      border: 0;
+      padding: 0;
+    }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .info {
+      min-height: 58px;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #f8fafc;
+    }
+    .info span { color: var(--muted); font-size: 12px; }
+    .info strong { display: block; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line-soft); padding: 11px 8px; text-align: left; vertical-align: middle; }
+    th { color: var(--muted); background: #f8fafc; font-size: 12px; font-weight: 800; }
+    td { color: var(--sub); }
+    td strong { color: var(--text); }
+    .mini-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    .icon-btn {
+      min-width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 7px;
+      color: var(--sub);
+      background: #fff;
+      font-size: 12px;
+    }
+    .table-toolbar {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) 140px auto;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    .pager {
+      min-height: 44px;
+      padding-top: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--sub);
+      font-size: 13px;
+    }
+    .pager-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .page-btn {
+      min-width: 30px;
+      height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 8px;
+      color: var(--sub);
+      background: #fff;
+      font-size: 13px;
+    }
+    .page-btn.active { color: #fff; border-color: var(--primary); background: var(--primary); }
+    .page-size {
+      height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 8px;
+      color: var(--sub);
+      background: #fff;
+    }
+
+    .scope-list { display: grid; gap: 10px; }
+    .scope-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      padding: 12px;
+      background: #f8fafc;
+    }
+    .scope-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .scope-card strong { color: var(--text); }
+    .scope-card p { font-size: 13px; }
+    .impact {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .impact div {
+      border-radius: 8px;
+      padding: 10px;
+      border: 1px solid var(--line-soft);
+      background: #fff;
+    }
+    .impact span { color: var(--muted); font-size: 12px; }
+    .impact b { display: block; margin-top: 4px; font-size: 18px; }
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.28);
+      z-index: 20;
+    }
+    .modal-mask.open { display: flex; }
+    .modal {
+      width: min(480px, 100%);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+      overflow: hidden;
+    }
+    .modal.wide { width: min(720px, 100%); }
+    .modal-head {
+      min-height: 60px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .modal-head h2 { margin-bottom: 4px; }
+    .modal-close {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--sub);
+      background: #fff;
+    }
+    .modal-body { padding: 18px; display: grid; gap: 12px; }
+    .field span {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--sub);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .modal-foot {
+      padding: 14px 18px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      background: #f8fafc;
+    }
+    .modal-foot .summary {
+      margin-right: auto;
+      color: var(--sub);
+      line-height: 36px;
+    }
+    .member-picker {
+      display: grid;
+      gap: 12px;
+    }
+    .member-search {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 140px auto;
+      gap: 8px;
+    }
+    .candidate-list {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+    }
+    .candidate-row {
+      min-height: 58px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border-bottom: 1px solid var(--line-soft);
+    }
+    .candidate-row:last-child { border-bottom: 0; }
+    .candidate-row:hover { background: #f8fafc; }
+    .candidate-row input { width: 16px; height: 16px; }
+    .candidate-main { min-width: 0; }
+    .candidate-main strong { display: block; }
+    .candidate-main span {
+      display: block;
+      margin-top: 3px;
+      overflow: hidden;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+    }
+    .option-list {
+      display: grid;
+      gap: 8px;
+    }
+    .option-row {
+      min-height: 48px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .option-row:hover { background: #f8fafc; }
+    .option-row input { width: 16px; height: 16px; }
+
+    @media (max-width: 1180px) {
+      .layout { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .member-search { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="logo">
+        <span class="logo-mark">M</span>
+        <strong>MailTrace</strong>
+      </div>
+      <nav class="nav">
+        <div class="nav-title">工作空间</div>
+        <button class="nav-item"><span class="nav-icon">H</span><span>工作台</span></button>
+        <div class="nav-title">工单中心</div>
+        <button class="nav-item"><span class="nav-icon">T</span><span>全部工单</span></button>
+        <button class="nav-item"><span class="nav-icon">C</span><span>客户管理</span></button>
+        <div class="nav-title">系统管理</div>
+        <button class="nav-item"><span class="nav-icon">U</span><span>用户管理</span></button>
+        <button class="nav-item"><span class="nav-icon">R</span><span>角色管理</span></button>
+        <button class="nav-item active"><span class="nav-icon">O</span><span>组织架构</span></button>
+      </nav>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb">系统管理 / <strong>组织架构</strong></div>
+        <div class="top-actions"><span>管理员</span><span class="avatar">谭</span></div>
+      </header>
+
+      <section class="content">
+        <div class="title-row">
+          <div>
+            <h1>组织架构管理</h1>
+            <p>维护部门层级、成员归属和负责人。</p>
+          </div>
+          <div class="actions">
+            <button class="btn">展开全部</button>
+            <button class="btn">只看启用</button>
+            <button class="btn">刷新</button>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="metric"><span>部门总数</span><strong>18</strong><small>启用 16，停用 2</small></div>
+          <div class="metric"><span>成员总数</span><strong>86</strong><small>已分配主部门 81 人</small></div>
+          <div class="metric"><span>负责人</span><strong>12</strong><small>部门负责人数量</small></div>
+          <div class="metric"><span>未分配用户</span><strong>5</strong><small>待分配主部门</small></div>
+        </div>
+
+        <div class="layout">
+          <aside class="panel">
+            <div class="panel-head">
+              <h2>组织树</h2>
+            </div>
+            <div class="panel-body">
+              <div class="search-row">
+                <input class="input" placeholder="搜索部门 / 负责人">
+                <button class="btn">定位</button>
+              </div>
+              <div class="tree">
+                <div class="tree-row">
+                  <span>▾</span>
+                  <span class="name"><strong>客服中心</strong><small>42 人 · 3 个下级</small></span>
+                  <span class="tag green">启用</span>
+                  <button class="tree-add" title="新建下级部门" data-open-create="客服中心">+</button>
+                </div>
+                <div class="tree-row indent-1 active">
+                  <span>▾</span>
+                  <span class="name"><strong>售后支持部</strong><small>23 人 · 王主管</small></span>
+                  <span class="tag blue">选中</span>
+                  <button class="tree-add" title="新建下级部门" data-open-create="售后支持部">+</button>
+                </div>
+                <div class="tree-row indent-2">
+                  <span>•</span>
+                  <span class="name"><strong>华东小组</strong><small>8 人 · 李组长</small></span>
+                  <span class="tag green">启用</span>
+                  <button class="tree-add" title="新建下级部门" data-open-create="华东小组">+</button>
+                </div>
+                <div class="tree-row indent-2">
+                  <span>•</span>
+                  <span class="name"><strong>华南小组</strong><small>7 人</small></span>
+                  <span class="tag green">启用</span>
+                  <button class="tree-add" title="新建下级部门" data-open-create="华南小组">+</button>
+                </div>
+                <div class="tree-row indent-2 disabled">
+                  <span>•</span>
+                  <span class="name"><strong>旧项目组</strong><small>0 人</small></span>
+                  <span class="tag">停用</span>
+                  <button class="tree-add" title="新建下级部门">+</button>
+                </div>
+                <div class="tree-row indent-1">
+                  <span>▸</span>
+                  <span class="name"><strong>售前支持部</strong><small>11 人</small></span>
+                  <span class="tag green">启用</span>
+                  <button class="tree-add" title="新建下级部门" data-open-create="售前支持部">+</button>
+                </div>
+                <div class="tree-row">
+                  <span>▸</span>
+                  <span class="name"><strong>运营中心</strong><small>18 人</small></span>
+                  <span class="tag green">启用</span>
+                  <button class="tree-add" title="新建下级部门" data-open-create="运营中心">+</button>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <section class="panel member-panel">
+            <div class="panel-head">
+              <div>
+                <h2 id="deptTitle">售后支持部</h2>
+                <p id="deptPath">客服中心 / 售后支持部</p>
+              </div>
+              <div class="actions">
+                <button class="btn" data-open-create="售后支持部">新建下级</button>
+                <button class="btn" id="openMoveDept">移动部门</button>
+                <button class="btn" id="openEditDept">编辑</button>
+                <button class="btn danger">停用</button>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="section">
+                <div class="section-head">
+                  <h2>成员管理</h2>
+                  <div class="actions">
+                    <button class="btn">设置负责人</button>
+                    <button class="btn primary" id="openAddMember">添加成员</button>
+                  </div>
+                </div>
+
+                <div class="table-toolbar">
+                  <input class="input" placeholder="搜索姓名 / 账号 / 邮箱">
+                  <select class="input">
+                    <option>全部角色</option>
+                    <option>主管</option>
+                    <option>客服处理人</option>
+                    <option>自定义只读</option>
+                  </select>
+                  <div class="actions">
+                    <button class="btn">查询</button>
+                  </div>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>成员</th>
+                      <th>角色</th>
+                      <th>主部门</th>
+                      <th>状态</th>
+                      <th style="text-align: right;">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>王主管</strong><br><span>wang.supervisor@example.com</span></td>
+                      <td><span class="tag blue">主管</span></td>
+                      <td>售后支持部</td>
+                      <td><span class="tag green">启用</span></td>
+                      <td><div class="mini-actions"><button class="icon-btn">编辑</button><button class="icon-btn">移出</button></div></td>
+                    </tr>
+                    <tr>
+                      <td><strong>张三</strong><br><span>zhangsan@example.com</span></td>
+                      <td><span class="tag">客服处理人</span></td>
+                      <td>售后支持部</td>
+                      <td><span class="tag green">启用</span></td>
+                      <td><div class="mini-actions"><button class="icon-btn">设负责人</button><button class="icon-btn">移出</button></div></td>
+                    </tr>
+                    <tr>
+                      <td><strong>李四</strong><br><span>lisi@example.com</span></td>
+                      <td><span class="tag">自定义只读</span></td>
+                      <td>华东小组</td>
+                      <td><span class="tag green">启用</span></td>
+                      <td><div class="mini-actions"><button class="icon-btn">编辑</button><button class="icon-btn">移出</button></div></td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div class="pager">
+                  <span>共 23 条，当前 1-10 条</span>
+                  <div class="pager-actions">
+                    <select class="page-size">
+                      <option>10 条/页</option>
+                      <option>20 条/页</option>
+                      <option>50 条/页</option>
+                    </select>
+                    <button class="page-btn">上一页</button>
+                    <button class="page-btn active">1</button>
+                    <button class="page-btn">2</button>
+                    <button class="page-btn">3</button>
+                    <button class="page-btn">下一页</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside class="context-column">
+            <section class="section">
+              <div class="section-head">
+                <h2>部门信息</h2>
+                <span class="tag green">启用</span>
+              </div>
+              <div class="info-grid">
+                <div class="info"><span>上级部门</span><strong>客服中心</strong></div>
+                <div class="info"><span>负责人</span><strong>王主管</strong></div>
+                <div class="info"><span>成员 / 下级</span><strong>23 人 / 3 个</strong></div>
+                <div class="info"><span>部门层级</span><strong>二级部门</strong></div>
+                <div class="info"><span>创建时间</span><strong>2026-07-29</strong></div>
+                <div class="info"><span>更新时间</span><strong>2026-07-29 16:30</strong></div>
+              </div>
+            </section>
+
+            <section class="section">
+              <div class="section-head">
+                <h2>数据权限范围</h2>
+                <span class="tag blue">预览</span>
+              </div>
+              <div class="scope-list">
+                <div class="scope-card">
+                  <div class="scope-top"><strong>全部数据</strong><span class="tag orange">86 人</span></div>
+                  <p>可查看当前工作空间内所有部门成员相关数据。</p>
+                </div>
+                <div class="scope-card">
+                  <div class="scope-top"><strong>仅本人</strong><span class="tag">1 人</span></div>
+                  <p>只能查看自己负责或参与处理的数据。</p>
+                </div>
+                <div class="scope-card">
+                  <div class="scope-top"><strong>仅本部门</strong><span class="tag blue">8 人</span></div>
+                  <p>只能查看售后支持部直属成员相关数据。</p>
+                </div>
+                <div class="scope-card">
+                  <div class="scope-top"><strong>本部门及下级部门</strong><span class="tag green">23 人</span></div>
+                  <p>可查看售后支持部、华东小组、华南小组等部门相关数据。</p>
+                </div>
+              </div>
+              <div class="impact">
+                <div><span>影响角色</span><b>3</b></div>
+                <div><span>可见成员</span><b>23</b></div>
+                <div><span>未分配池</span><b>包含</b></div>
+              </div>
+            </section>
+          </aside>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-mask" id="createDeptModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="createDeptTitle">
+      <div class="modal-head">
+        <div>
+          <h2 id="createDeptTitle">新建子部门</h2>
+          <p id="parentDeptText">上级部门：售后支持部</p>
+        </div>
+        <button class="modal-close" id="modalClose">×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>部门名称</span>
+          <input class="input" id="deptNameInput" placeholder="例如：华北小组">
+        </label>
+        <label class="field">
+          <span>负责人</span>
+          <select class="input">
+            <option>暂不设置</option>
+            <option>王主管</option>
+            <option>张三</option>
+            <option>李四</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>状态</span>
+          <select class="input">
+            <option>启用</option>
+            <option>停用</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="modalCancel">取消</button>
+        <button class="btn primary" id="modalCreate">创建部门</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="addMemberModal">
+    <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="addMemberTitle">
+      <div class="modal-head">
+        <div>
+          <h2 id="addMemberTitle">添加成员</h2>
+          <p id="addMemberDeptText">加入部门：售后支持部</p>
+        </div>
+        <button class="modal-close" id="addMemberClose">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="member-picker">
+          <div class="member-search">
+            <input class="input" placeholder="搜索姓名 / 账号 / 邮箱">
+            <select class="input">
+              <option>全部用户</option>
+              <option>未分配部门</option>
+              <option>其他部门成员</option>
+            </select>
+            <button class="btn">查询</button>
+          </div>
+          <div class="candidate-list">
+            <label class="candidate-row">
+              <input type="checkbox" data-member-option>
+              <span class="candidate-main"><strong>赵敏</strong><span>zhaomin@example.com · 当前未分配部门</span></span>
+              <span class="tag green" data-member-status>可添加</span>
+            </label>
+            <label class="candidate-row">
+              <input type="checkbox" data-member-option checked>
+              <span class="candidate-main"><strong>陈工</strong><span>chengong@example.com · 运营中心</span></span>
+              <span class="tag blue" data-member-status>已选择</span>
+            </label>
+            <label class="candidate-row">
+              <input type="checkbox" data-member-option>
+              <span class="candidate-main"><strong>刘芳</strong><span>liufang@example.com · 售前支持部</span></span>
+              <span class="tag green" data-member-status>可添加</span>
+            </label>
+            <label class="candidate-row">
+              <input type="checkbox" data-member-option>
+              <span class="candidate-main"><strong>周晨</strong><span>zhouchen@example.com · 当前未分配部门</span></span>
+              <span class="tag green" data-member-status>可添加</span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="summary" id="selectedMemberSummary">已选择 1 人</span>
+        <button class="btn" id="addMemberCancel">取消</button>
+        <button class="btn primary" id="addMemberConfirm">确认添加</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="moveDeptModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="moveDeptTitle">
+      <div class="modal-head">
+        <div>
+          <h2 id="moveDeptTitle">移动部门</h2>
+          <p id="moveDeptText">当前部门：售后支持部</p>
+        </div>
+        <button class="modal-close" id="moveDeptClose">×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>选择新的上级部门</span>
+          <div class="option-list">
+            <label class="option-row">
+              <input type="radio" name="newParentDept" checked>
+              <span class="candidate-main"><strong>客服中心</strong><span>当前上级部门</span></span>
+              <span class="tag blue">当前</span>
+            </label>
+            <label class="option-row">
+              <input type="radio" name="newParentDept">
+              <span class="candidate-main"><strong>售前支持部</strong><span>客服中心 / 售前支持部</span></span>
+              <span class="tag green">可移动</span>
+            </label>
+            <label class="option-row">
+              <input type="radio" name="newParentDept">
+              <span class="candidate-main"><strong>运营中心</strong><span>一级部门</span></span>
+              <span class="tag green">可移动</span>
+            </label>
+          </div>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="moveDeptCancel">取消</button>
+        <button class="btn primary" id="moveDeptConfirm">确认移动</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-mask" id="editDeptModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="editDeptTitle">
+      <div class="modal-head">
+        <div>
+          <h2 id="editDeptTitle">编辑部门</h2>
+          <p id="editDeptText">当前部门：售后支持部</p>
+        </div>
+        <button class="modal-close" id="editDeptClose">×</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>部门名称</span>
+          <input class="input" id="editDeptNameInput" value="售后支持部">
+        </label>
+        <label class="field">
+          <span>负责人</span>
+          <select class="input">
+            <option selected>王主管</option>
+            <option>张三</option>
+            <option>李四</option>
+            <option>暂不设置</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>状态</span>
+          <select class="input">
+            <option selected>启用</option>
+            <option>停用</option>
+          </select>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="editDeptCancel">取消</button>
+        <button class="btn primary" id="editDeptConfirm">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const modal = document.getElementById('createDeptModal')
+    const addMemberModal = document.getElementById('addMemberModal')
+    const moveDeptModal = document.getElementById('moveDeptModal')
+    const editDeptModal = document.getElementById('editDeptModal')
+    const parentDeptText = document.getElementById('parentDeptText')
+    const deptNameInput = document.getElementById('deptNameInput')
+    const addMemberDeptText = document.getElementById('addMemberDeptText')
+    const selectedMemberSummary = document.getElementById('selectedMemberSummary')
+    const moveDeptText = document.getElementById('moveDeptText')
+    const editDeptText = document.getElementById('editDeptText')
+    const editDeptNameInput = document.getElementById('editDeptNameInput')
+
+    function openCreateModal(parentName) {
+      parentDeptText.textContent = parentName === '顶级部门' ? '新建位置：顶级部门' : `上级部门：${parentName}`
+      deptNameInput.value = ''
+      modal.classList.add('open')
+      setTimeout(() => deptNameInput.focus(), 30)
+    }
+
+    function closeCreateModal() {
+      modal.classList.remove('open')
+    }
+
+    function updateSelectedMemberSummary() {
+      const selectedCount = document.querySelectorAll('[data-member-option]:checked').length
+      selectedMemberSummary.textContent = `已选择 ${selectedCount} 人`
+      document.querySelectorAll('[data-member-option]').forEach((checkbox) => {
+        const status = checkbox.closest('.candidate-row').querySelector('[data-member-status]')
+        status.textContent = checkbox.checked ? '已选择' : '可添加'
+        status.classList.toggle('blue', checkbox.checked)
+        status.classList.toggle('green', !checkbox.checked)
+      })
+    }
+
+    function openAddMemberModal() {
+      const deptName = document.getElementById('deptTitle').textContent || '当前部门'
+      addMemberDeptText.textContent = `加入部门：${deptName}`
+      updateSelectedMemberSummary()
+      addMemberModal.classList.add('open')
+    }
+
+    function closeAddMemberModal() {
+      addMemberModal.classList.remove('open')
+    }
+
+    function openMoveDeptModal() {
+      const deptName = document.getElementById('deptTitle').textContent || '当前部门'
+      moveDeptText.textContent = `当前部门：${deptName}`
+      moveDeptModal.classList.add('open')
+    }
+
+    function closeMoveDeptModal() {
+      moveDeptModal.classList.remove('open')
+    }
+
+    function openEditDeptModal() {
+      const deptName = document.getElementById('deptTitle').textContent || '当前部门'
+      editDeptText.textContent = `当前部门：${deptName}`
+      editDeptNameInput.value = deptName
+      editDeptModal.classList.add('open')
+      setTimeout(() => editDeptNameInput.focus(), 30)
+    }
+
+    function closeEditDeptModal() {
+      editDeptModal.classList.remove('open')
+    }
+
+    document.querySelectorAll('[data-open-create]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation()
+        openCreateModal(button.dataset.openCreate)
+      })
+    })
+
+    document.getElementById('modalClose').addEventListener('click', closeCreateModal)
+    document.getElementById('modalCancel').addEventListener('click', closeCreateModal)
+    modal.addEventListener('click', (event) => {
+      if (event.target === modal) closeCreateModal()
+    })
+    document.getElementById('modalCreate').addEventListener('click', () => {
+      closeCreateModal()
+    })
+    document.getElementById('openAddMember').addEventListener('click', openAddMemberModal)
+    document.getElementById('addMemberClose').addEventListener('click', closeAddMemberModal)
+    document.getElementById('addMemberCancel').addEventListener('click', closeAddMemberModal)
+    document.getElementById('addMemberConfirm').addEventListener('click', closeAddMemberModal)
+    addMemberModal.addEventListener('click', (event) => {
+      if (event.target === addMemberModal) closeAddMemberModal()
+    })
+    document.querySelectorAll('[data-member-option]').forEach((checkbox) => {
+      checkbox.addEventListener('change', updateSelectedMemberSummary)
+    })
+    document.getElementById('openMoveDept').addEventListener('click', openMoveDeptModal)
+    document.getElementById('moveDeptClose').addEventListener('click', closeMoveDeptModal)
+    document.getElementById('moveDeptCancel').addEventListener('click', closeMoveDeptModal)
+    document.getElementById('moveDeptConfirm').addEventListener('click', closeMoveDeptModal)
+    moveDeptModal.addEventListener('click', (event) => {
+      if (event.target === moveDeptModal) closeMoveDeptModal()
+    })
+    document.getElementById('openEditDept').addEventListener('click', openEditDeptModal)
+    document.getElementById('editDeptClose').addEventListener('click', closeEditDeptModal)
+    document.getElementById('editDeptCancel').addEventListener('click', closeEditDeptModal)
+    document.getElementById('editDeptConfirm').addEventListener('click', () => {
+      const nextName = editDeptNameInput.value.trim()
+      if (nextName) {
+        document.getElementById('deptTitle').textContent = nextName
+        document.getElementById('deptPath').textContent = `客服中心 / ${nextName}`
+      }
+      closeEditDeptModal()
+    })
+    editDeptModal.addEventListener('click', (event) => {
+      if (event.target === editDeptModal) closeEditDeptModal()
+    })
+
+    document.querySelectorAll('.tree-row:not(.disabled)').forEach((row) => {
+      row.addEventListener('click', () => {
+        document.querySelectorAll('.tree-row').forEach((item) => item.classList.remove('active'))
+        row.classList.add('active')
+        const name = row.querySelector('strong')?.textContent || '部门'
+        document.getElementById('deptTitle').textContent = name
+        document.getElementById('deptPath').textContent = name === '客服中心' ? '客服中心' : `客服中心 / ${name}`
+      })
+    })
+  </script>
+</body>
+</html>

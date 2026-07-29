@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.role;
 import com.ntn.fziot.mailtrace.application.bizservice.role.RoleManagementService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.PermissionTreeNodeVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleListResponse;
@@ -36,6 +37,7 @@ public class RoleController {
 
     @Operation(summary = "角色列表")
     @GetMapping
+    @RequirePermission(value = "role:read", message = "无权查看角色管理")
     public BasicResult<RoleListResponse> listRoles(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
@@ -45,6 +47,7 @@ public class RoleController {
 
     @Operation(summary = "权限树")
     @GetMapping("/permissions")
+    @RequirePermission(value = "role:read", message = "无权查看角色管理")
     public BasicResult<List<PermissionTreeNodeVO>> listPermissionTree(
             @AuthenticationPrincipal CurrentUserPrincipal principal) {
         return BasicResult.ok(roleManagementService.listPermissionTree(principal));
@@ -52,6 +55,7 @@ public class RoleController {
 
     @Operation(summary = "新建角色")
     @PostMapping
+    @RequirePermission(value = "role:create", message = "无权新建角色")
     public BasicResult<RoleVO> createRole(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody RoleSaveRequest request) {
@@ -60,6 +64,7 @@ public class RoleController {
 
     @Operation(summary = "编辑角色")
     @PutMapping("/{id}")
+    @RequirePermission(value = "role:update", message = "无权编辑角色")
     public BasicResult<RoleVO> updateRole(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -69,6 +74,7 @@ public class RoleController {
 
     @Operation(summary = "启用或停用角色")
     @PatchMapping("/{id}/enabled")
+    @RequirePermission(value = "role:enable", message = "无权启停角色")
     public BasicResult<RoleVO> updateEnabled(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -78,6 +84,7 @@ public class RoleController {
 
     @Operation(summary = "保存角色权限和默认数据范围")
     @PutMapping("/{id}/permissions")
+    @RequirePermission(value = "role:permission_update", message = "无权配置角色权限")
     public BasicResult<RoleVO> saveRolePermissions(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,

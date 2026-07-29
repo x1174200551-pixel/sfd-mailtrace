@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.calendar;
 import com.ntn.fziot.mailtrace.application.bizservice.calendar.WorkCalendarService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarDefaultRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarSaveRequest;
@@ -33,6 +34,7 @@ public class WorkCalendarController {
 
     @Operation(summary = "工作日历列表")
     @GetMapping
+    @RequirePermission(value = "work_calendar:read", message = "无权查看工作日历")
     public BasicResult<WorkCalendarListResponse> listCalendars(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
@@ -42,6 +44,7 @@ public class WorkCalendarController {
 
     @Operation(summary = "新建工作日历")
     @PostMapping
+    @RequirePermission(value = "work_calendar:create", message = "无权新建工作日历")
     public BasicResult<WorkCalendarVO> createCalendar(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody WorkCalendarSaveRequest request) {
@@ -50,6 +53,7 @@ public class WorkCalendarController {
 
     @Operation(summary = "编辑工作日历")
     @PutMapping("/{id}")
+    @RequirePermission(value = "work_calendar:update", message = "无权编辑工作日历")
     public BasicResult<WorkCalendarVO> updateCalendar(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -59,6 +63,7 @@ public class WorkCalendarController {
 
     @Operation(summary = "设置默认工作日历")
     @PatchMapping("/{id}/default")
+    @RequirePermission(value = "work_calendar:default", message = "无权设置默认工作日历")
     public BasicResult<WorkCalendarVO> updateDefault(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -68,6 +73,7 @@ public class WorkCalendarController {
 
     @Operation(summary = "删除工作日历")
     @DeleteMapping("/{id}")
+    @RequirePermission(value = "work_calendar:delete", message = "无权删除工作日历")
     public BasicResult<Void> deleteCalendar(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id) {

@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -37,12 +38,16 @@ public class CustomerReadonlyService {
         long pageSize = normalizeSize(size);
         String normalizedKeyword = normalize(keyword);
         boolean allAccess = dataScopeService.isAdmin(principal);
-        long total = customerMapper.countReadonlyCustomers(normalizedKeyword, allAccess, principal.id());
+        Set<Long> scopeAssigneeIds = allAccess ? null : dataScopeService.resolveTicketScopeUserIds(principal);
+        if (!allAccess && scopeAssigneeIds.isEmpty()) {
+            return new CustomerPageResponse(List.of(), 0L, currentPage, pageSize, 0L);
+        }
+        long total = customerMapper.countReadonlyCustomers(normalizedKeyword, allAccess, scopeAssigneeIds, principal.id());
         long pages = total == 0 ? 0 : (long) Math.ceil((double) total / pageSize);
         long offset = (currentPage - 1) * pageSize;
 
         // 3、查询最近来信、工单数等只读字段。
-        List<CustomerVO> records = customerMapper.selectReadonlyCustomers(normalizedKeyword, offset, pageSize, allAccess, principal.id())
+        List<CustomerVO> records = customerMapper.selectReadonlyCustomers(normalizedKeyword, offset, pageSize, allAccess, scopeAssigneeIds, principal.id())
                 .stream()
                 .map(this::toVO)
                 .toList();
@@ -64,7 +69,11 @@ public class CustomerReadonlyService {
 
         // 2、按邮箱合并客户档案和历史工单聚合详情。
         boolean allAccess = dataScopeService.isAdmin(principal);
-        CustomerReadonlyRow row = customerMapper.selectReadonlyCustomerByEmail(normalizedEmail, allAccess, principal.id());
+        Set<Long> scopeAssigneeIds = allAccess ? null : dataScopeService.resolveTicketScopeUserIds(principal);
+        if (!allAccess && scopeAssigneeIds.isEmpty()) {
+            throw new BusinessException(CODE_NOT_FOUND, "客户不存在");
+        }
+        CustomerReadonlyRow row = customerMapper.selectReadonlyCustomerByEmail(normalizedEmail, allAccess, scopeAssigneeIds, principal.id());
         if (row == null) {
             throw new BusinessException(CODE_NOT_FOUND, "客户不存在");
         }

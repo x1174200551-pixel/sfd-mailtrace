@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.mailsend;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendLogBizService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.log.MailSendLogPageResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,18 +27,23 @@ public class MailSendLogController {
 
     @Operation(summary = "发送日志统计概览")
     @GetMapping("/logs/stats")
-    public BasicResult<MailSendLogBizService.SendLogStats> stats() {
+    @RequirePermission(value = "mail_send_log:read", message = "无权访问发送日志")
+    public BasicResult<MailSendLogBizService.SendLogStats> stats(
+            @AuthenticationPrincipal CurrentUserPrincipal principal) {
         return BasicResult.ok(mailSendLogBizService.stats());
     }
 
     @Operation(summary = "待处理数量统计（菜单角标）")
     @GetMapping("/logs/pending-count")
-    public BasicResult<Long> pendingCount() {
+    @RequirePermission(value = "mail_send_log:read", message = "无权访问发送日志")
+    public BasicResult<Long> pendingCount(
+            @AuthenticationPrincipal CurrentUserPrincipal principal) {
         return BasicResult.ok(mailSendLogBizService.pendingCount());
     }
 
     @Operation(summary = "发送日志分页查询")
     @GetMapping("/logs")
+    @RequirePermission(value = "mail_send_log:read", message = "无权访问发送日志")
     public BasicResult<MailSendLogPageResponse> pageSendLogs(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) Long mailboxId,

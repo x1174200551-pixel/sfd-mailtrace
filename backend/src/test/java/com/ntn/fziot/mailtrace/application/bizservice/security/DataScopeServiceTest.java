@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.department.DepartmentMemberService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -78,16 +79,17 @@ class DataScopeServiceTest {
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> dataScopeService.assertAgentOrAdmin(customer));
 
-        assertTrue(ex.getMessage().contains("仅管理员和处理人"));
+        assertTrue(ex.getMessage().contains("仅管理员、主管和处理人"));
     }
 
     @Test
     void applyTicketScope_whenCustomRoleHasSelfScope_shouldLimitToOwnOrUnassignedTickets() {
         PermissionService permissionService = mock(PermissionService.class);
+        DepartmentMemberService departmentMemberService = mock(DepartmentMemberService.class);
         when(permissionService.getCurrentPermissions(custom)).thenReturn(
                 new PermissionService.PermissionContext(4L, Set.of("AUTHQA_VIEWER"), Set.of("ticket:read"),
                         Map.of("TICKET", Set.of("SELF"))));
-        DataScopeService rbacDataScopeService = new DataScopeService(permissionService);
+        DataScopeService rbacDataScopeService = new DataScopeService(permissionService, departmentMemberService);
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<>();
 
         rbacDataScopeService.applyTicketScope(wrapper, custom);
@@ -95,6 +97,54 @@ class DataScopeServiceTest {
         String sqlSegment = wrapper.getSqlSegment();
         assertTrue(sqlSegment.contains("assignee_id"));
         assertTrue(sqlSegment.contains("IS NULL"));
+    }
+
+    @Test
+    void applyTicketScope_whenCustomRoleHasDeptScope_shouldLimitToDeptMemberIds() {
+        PermissionService permissionService = mock(PermissionService.class);
+        DepartmentMemberService departmentMemberService = mock(DepartmentMemberService.class);
+        when(permissionService.getCurrentPermissions(custom)).thenReturn(
+                new PermissionService.PermissionContext(4L, Set.of("SUPERVISOR"), Set.of("ticket:read"),
+                        Map.of("TICKET", Set.of("DEPT_AND_CHILDREN"))));
+        when(departmentMemberService.resolveDeptAndChildrenMemberIds(4L)).thenReturn(Set.of(2L, 4L, 5L));
+        DataScopeService rbacDataScopeService = new DataScopeService(permissionService, departmentMemberService);
+        LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<>();
+
+        rbacDataScopeService.applyTicketScope(wrapper, custom);
+
+        String sqlSegment = wrapper.getSqlSegment();
+        assertTrue(sqlSegment.contains("IN"));
+        assertTrue(sqlSegment.contains("IS NULL"));
+    }
+
+    @Test
+    void assertTicketVisible_whenDeptScopeOtherDeptMember_shouldReject() {
+        PermissionService permissionService = mock(PermissionService.class);
+        DepartmentMemberService departmentMemberService = mock(DepartmentMemberService.class);
+        when(permissionService.getCurrentPermissions(custom)).thenReturn(
+                new PermissionService.PermissionContext(4L, Set.of("SUPERVISOR"), Set.of("ticket:read"),
+                        Map.of("TICKET", Set.of("DEPT_AND_CHILDREN"))));
+        when(departmentMemberService.resolveDeptAndChildrenMemberIds(4L)).thenReturn(Set.of(2L, 4L, 5L));
+        DataScopeService rbacDataScopeService = new DataScopeService(permissionService, departmentMemberService);
+
+        // assigneeId=6L 不在部门成员中
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> rbacDataScopeService.assertTicketVisible(custom, ticket(6L)));
+        assertTrue(ex.getMessage().contains("无权查看"));
+    }
+
+    @Test
+    void assertTicketOperable_whenDeptScopeDeptMember_shouldAllow() {
+        PermissionService permissionService = mock(PermissionService.class);
+        DepartmentMemberService departmentMemberService = mock(DepartmentMemberService.class);
+        when(permissionService.getCurrentPermissions(custom)).thenReturn(
+                new PermissionService.PermissionContext(4L, Set.of("SUPERVISOR"), Set.of("ticket:reply"),
+                        Map.of("TICKET", Set.of("DEPT_AND_CHILDREN"))));
+        when(departmentMemberService.resolveDeptAndChildrenMemberIds(4L)).thenReturn(Set.of(2L, 4L, 5L));
+        DataScopeService rbacDataScopeService = new DataScopeService(permissionService, departmentMemberService);
+
+        // assigneeId=2L 在部门成员中，应该可以操作
+        assertDoesNotThrow(() -> rbacDataScopeService.assertTicketOperable(custom, ticket(2L)));
     }
 
     private TicketEntity ticket(Long assigneeId) {

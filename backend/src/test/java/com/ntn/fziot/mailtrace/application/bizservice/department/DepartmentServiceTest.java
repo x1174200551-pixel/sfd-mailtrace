@@ -1,19 +1,20 @@
 package com.ntn.fziot.mailtrace.application.bizservice.department;
 
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.department.DepartmentCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.department.DepartmentEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.department.DepartmentVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.DepartmentEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserDepartmentEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.DepartmentMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserDepartmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,7 +44,11 @@ class DepartmentServiceTest {
     @Mock
     private UserMapper userMapper;
     @Mock
-    private OperationLogMapper operationLogMapper;
+    private UserRoleMapper userRoleMapper;
+    @Mock
+    private RoleMapper roleMapper;
+    @Mock
+    private OperationLogService operationLogService;
     @Mock
     private PermissionService permissionService;
 
@@ -57,7 +63,9 @@ class DepartmentServiceTest {
                 departmentMapper,
                 userDepartmentMapper,
                 userMapper,
-                operationLogMapper,
+                userRoleMapper,
+                roleMapper,
+                operationLogService,
                 permissionService
         );
     }
@@ -125,7 +133,7 @@ class DepartmentServiceTest {
         assertEquals(30, inserted.getSortOrder());
         assertTrue(inserted.getEnabled());
         assertEquals("主管", created.leaderDisplayName());
-        verify(operationLogMapper).insert(any(OperationLogEntity.class));
+        verify(operationLogService).record(any(), eq("DEPARTMENT"), any(), any(), any());
     }
 
     @Test

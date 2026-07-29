@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>邮件工单系统 · 组织架构 · 高保真原型</title>
+<style>
+/* ============================================================
+   Ant Design Design Tokens (v5)
+   ============================================================ */
+:root {
+  --color-primary: #1677ff;
+  --color-primary-hover: #4096ff;
+  --color-primary-active: #0958d9;
+  --color-primary-bg: #e6f4ff;
+  --color-primary-bg-hover: #bae0ff;
+  --color-success: #52c41a;
+  --color-warning: #faad14;
+  --color-error: #ff4d4f;
+  --color-info: #1677ff;
+
+  --text-primary: rgba(0, 0, 0, 0.88);
+  --text-secondary: rgba(0, 0, 0, 0.65);
+  --text-tertiary: rgba(0, 0, 0, 0.45);
+  --text-disabled: rgba(0, 0, 0, 0.25);
+
+  --border-color: #d9d9d9;
+  --border-color-split: #f0f0f0;
+  --border-color-light: #f5f5f5;
+  --bg-layout: #f5f7fa;
+  --bg-card: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-disabled: rgba(0, 0, 0, 0.04);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px 0 rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05);
+  --shadow-drawer: -6px 0 16px 0 rgba(0, 0, 0, 0.08), -3px 0 6px -4px rgba(0, 0, 0, 0.12), -9px 0 28px 8px rgba(0, 0, 0, 0.05);
+
+  --radius-sm: 4px;
+  --radius-base: 6px;
+  --radius-lg: 8px;
+
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  font-family: var(--font-family);
+  font-size: 14px;
+  line-height: 1.5715;
+  color: var(--text-primary);
+  background: var(--bg-layout);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button { font-family: inherit; }
+
+/* ============================================================
+   Layout
+   ============================================================ */
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  background: #001529;
+  color: rgba(255, 255, 255, 0.85);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.sidebar-logo .logo-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-base);
+  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.5px;
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.4);
+}
+
+.sidebar-logo .logo-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.sidebar-menu {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.sidebar-menu::-webkit-scrollbar { width: 6px; }
+.sidebar-menu::-webkit-scrollbar-track { background: transparent; }
+.sidebar-menu::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+
+.menu-group {
+  padding: 8px 0 4px;
+}
+
+.menu-group-title {
+  padding: 8px 20px 4px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 500;
+  letter-spacing: 0.4px;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 16px 0 12px;
+  margin: 2px 8px;
+  border-radius: var(--radius-base);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13.5px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.menu-item:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.menu-item.active {
+  color: #fff;
+  background: var(--color-primary);
+  box-shadow: 0 4px 10px rgba(22, 119, 255, 0.35);
+}
+
+.menu-item.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: #fff;
+  border-radius: 0 2px 2px 0;
+}
+
+.menu-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: -0.3px;
+}
+
+.menu-icon.icon-h { background: linear-gradient(135deg, #1677ff, #4096ff); }
+.menu-icon.icon-t { background: linear-gradient(135deg, #13c2c2, #36cfc9); }
+.menu-icon.icon-u { background: linear-gradient(135deg, #fa8c16, #ffa940); }
+.menu-icon.icon-p { background: linear-gradient(135deg, #722ed1, #9254de); }
+.menu-icon.icon-r { background: linear-gradient(135deg, #f5222d, #ff4d4f); }
+.menu-icon.icon-c { background: linear-gradient(135deg, #52c41a, #73d13d); }
+.menu-icon.icon-b { background: linear-gradient(135deg, #2f54eb, #597ef7); }
+.menu-icon.icon-s { background: linear-gradient(135deg, #eb2f96, #f759ab); }
+.menu-icon.icon-g { background: linear-gradient(135deg, #fa541c, #ff7a45); }
+.menu-icon.icon-n { background: linear-gradient(135deg, #1890ff, #40a9ff); }
+.menu-icon.icon-a { background: linear-gradient(135deg, #faad14, #ffd666); }
+
+.menu-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: #ff4d4f;
+  padding: 0 6px;
+  height: 16px;
+  line-height: 16px;
+  border-radius: 8px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.menu-badge.badge-orange { background: #fa8c16; }
+.menu-badge.badge-blue { background: #1677ff; }
+
+.sidebar-footer {
+  padding: 12px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  transition: color 0.2s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-footer:hover { color: rgba(255, 255, 255, 0.85); }
+
+/* Main area */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg-layout);
+}
+
+/* Top header */
+.topbar {
+  height: 56px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-color-split);
+  flex-shrink: 0;
+  gap: 24px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.breadcrumb .crumb-item {
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.breadcrumb .crumb-item:hover { color: var(--color-primary); }
+.breadcrumb .crumb-item.current { color: var(--text-primary); font-weight: 500; }
+.breadcrumb .separator { color: var(--text-tertiary); }
+
+.topbar-search {
+  flex: 1;
+  max-width: 320px;
+  position: relative;
+  margin-left: 40px;
+}
+
+.topbar-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 36px 0 36px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: #fafafa;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.topbar-search input::placeholder { color: var(--text-tertiary); }
+
+.topbar-search input:focus {
+  border-color: var(--color-primary);
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+}
+
+.topbar-search .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+}
+
+.topbar-search .kbd {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 0 4px;
+  height: 18px;
+  line-height: 16px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.topbar-right .icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.topbar-right .icon-btn:hover { background: var(--bg-hover); color: var(--color-primary); }
+
+.topbar-right .icon-btn .dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--color-error);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  min-width: 16px;
+  text-align: center;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-base);
+  transition: background 0.2s ease;
+}
+
+.topbar-user:hover { background: var(--bg-hover); }
+
+.topbar-user .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-user .user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.3;
+}
+
+.topbar-user .user-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.topbar-user .user-role { font-size: 11px; color: var(--text-tertiary); }
+
+/* Content */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+}
+
+.content::-webkit-scrollbar { width: 8px; }
+.content::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 4px; }
+
+.page-header {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  padding: 18px 22px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.page-header .title-block h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.page-header .title-block .subtitle {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.page-header .actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: #fff;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
+
+.btn.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+  font-weight: 500;
+  box-shadow: 0 2px 0 rgba(5, 145, 255, 0.08);
+}
+
+.btn.btn-primary:hover { background: var(--color-primary-hover); border-color: var(--color-primary-hover); color: #fff; }
+.btn.btn-primary:active { background: var(--color-primary-active); border-color: var(--color-primary-active); }
+
+.btn .arrow-down {
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: 0.85;
+}
+
+/* 3-column grid */
+.org-grid {
+  display: grid;
+  grid-template-columns: 280px 1fr 480px;
+  gap: 16px;
+  align-items: stretch;
+  height: calc(100vh - 56px - 40px - 16px - 64px - 16px);
+  /* 56(topbar) + 40(content padding) + 16(header+gap) + 64(header) + 16(bottom) */
+  min-height: 680px;
+}
+
+.card {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color-split);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.card-header .title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card-header .count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.card-body {
+  padding: 16px 18px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-body::-webkit-scrollbar { width: 6px; }
+.card-body::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 3px; }
+
+/* ============================================================
+   LEFT — Department Tree
+   ============================================================ */
+.tree-search {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.tree-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px 0 32px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.tree-search input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+}
+
+.tree-search .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+}
+
+.tree {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 13.5px;
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.tree-node:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.tree-node.selected {
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.tree-node.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: var(--color-primary);
+  border-radius: 0 2px 2px 0;
+}
+
+.tree-add-child {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--color-primary);
+  opacity: 0;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tree-node:hover .tree-add-child { opacity: 1; }
+.tree-add-child:hover { background: var(--color-primary-bg); color: var(--color-primary-hover); }
+
+.tree-caret {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.tree-caret.expanded { transform: rotate(90deg); }
+
+.tree-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-count { font-size: 11px; color: var(--text-tertiary); flex-shrink: 0; }
+
+.tree-toolbar {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color-split);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tree-toolbar .add-btn {
+  flex: 1;
+  height: 36px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-base);
+  background: #fafafa;
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.tree-toolbar .add-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+}
+
+/* ============================================================
+   MIDDLE — Department Detail
+   ============================================================ */
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border-color-split);
+}
+
+.detail-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #1677ff, #4096ff);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.25);
+}
+
+.detail-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-title h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-title .desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.detail-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.detail-actions .icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-base);
+  background: transparent;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.detail-actions .icon-btn:hover { background: var(--bg-hover); color: var(--color-primary); }
+
+.detail-stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--border-color-split);
+  border-bottom: 1px solid var(--border-color-split);
+}
+
+.detail-stat {
+  padding: 14px 16px;
+  background: #fff;
+}
+
+.detail-stat .label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+
+.detail-stat .value {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.detail-stat .value.mono {
+  font-family: ui-monospace, 'SF Mono', Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-disabled);
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--border-color-split);
+}
+
+.tab {
+  padding: 14px 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  position: relative;
+  font-weight: 400;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tab .tab-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.tab.active {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 2px 2px 0 0;
+}
+
+.tab .badge {
+  font-size: 11px;
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 2px;
+  font-weight: 500;
+}
+
+.tab-bar-actions {
+  margin-left: auto;
+  padding: 8px 22px 8px 0;
+}
+
+.detail-tab-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Search row in detail */
+.member-search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 22px;
+}
+
+.member-search {
+  position: relative;
+  flex: 1;
+  max-width: 300px;
+}
+
+.member-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px 0 32px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+
+.member-search .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+}
+
+.filter-select {
+  height: 32px;
+  padding: 0 30px 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: #fff url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+  -webkit-appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Member table */
+.member-table {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0 22px;
+}
+
+table.member-table {
+  width: calc(100% - 44px);
+  border-collapse: collapse;
+}
+
+.member-table thead th {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  text-align: left;
+  padding: 10px 12px;
+  background: #fafafa;
+  border-bottom: 1px solid var(--border-color-split);
+  white-space: nowrap;
+}
+
+.member-table tbody td {
+  padding: 12px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color-split);
+  white-space: nowrap;
+}
+
+.member-table tbody tr:hover { background: #fafafa; }
+
+.member-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.member-cell .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.avatar.color-1 { background: linear-gradient(135deg, #1677ff, #4096ff); }
+.avatar.color-2 { background: linear-gradient(135deg, #13c2c2, #36cfc9); }
+.avatar.color-3 { background: linear-gradient(135deg, #722ed1, #9254de); }
+.avatar.color-4 { background: linear-gradient(135deg, #eb2f96, #f759ab); }
+.avatar.color-5 { background: linear-gradient(135deg, #fa8c16, #ffa940); }
+.avatar.color-6 { background: linear-gradient(135deg, #52c41a, #73d13d); }
+
+.member-account {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  border: 1px solid;
+  line-height: 20px;
+}
+
+.tag.tag-blue {
+  color: var(--color-primary);
+  background: var(--color-primary-bg);
+  border-color: #91caff;
+}
+
+.tag.tag-cyan {
+  color: #13c2c2;
+  background: #e6fffb;
+  border-color: #87e8de;
+}
+
+.tag.tag-purple {
+  color: #722ed1;
+  background: #f9f0ff;
+  border-color: #d3adf7;
+}
+
+.tag.tag-orange {
+  color: #fa8c16;
+  background: #fff7e6;
+  border-color: #ffd591;
+}
+
+.tag.tag-green {
+  color: var(--color-success);
+  background: #f6ffed;
+  border-color: #b7eb8f;
+}
+
+.tag.tag-grey {
+  color: var(--text-secondary);
+  background: #fafafa;
+  border-color: var(--border-color);
+}
+
+.tag.tag-red {
+  color: var(--color-error);
+  background: #fff2f0;
+  border-color: #ffccc7;
+}
+
+.row-link {
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.row-link:hover { color: var(--color-primary-hover); }
+.row-link + .row-link { margin-left: 8px; }
+
+/* Pagination */
+.detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 22px;
+  border-top: 1px solid var(--border-color-split);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pagination .pg-btn {
+  min-width: 30px;
+  height: 30px;
+  border: 1px solid var(--border-color);
+  background: #fff;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+
+.pagination .pg-btn.active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: #fff;
+}
+
+.pagination .pg-btn:hover:not(.active) { border-color: var(--color-primary); color: var(--color-primary); }
+
+.pagination .pg-size {
+  border: 1px solid var(--border-color);
+  background: #fff;
+  border-radius: var(--radius-sm);
+  height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ============================================================
+   RIGHT — Drawer
+   ============================================================ */
+.drawer {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-drawer);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.drawer-handle {
+  position: absolute;
+  top: 64px;
+  left: -3px;
+  width: 6px;
+  height: 60px;
+  background: linear-gradient(180deg, var(--color-primary), var(--color-primary-hover));
+  border-radius: 0 4px 4px 0;
+  box-shadow: 1px 0 6px rgba(22, 119, 255, 0.4);
+}
+
+.drawer-header {
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--border-color-split);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.drawer-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.drawer-header .close {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-base);
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 18px;
+  transition: all 0.2s ease;
+}
+
+.drawer-header .close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px 100px 22px;
+}
+
+.drawer-body::-webkit-scrollbar { width: 6px; }
+.drawer-body::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 3px; }
+
+.form-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-section-title::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  background: var(--color-primary);
+  border-radius: 2px;
+}
+
+.form-field { margin-bottom: 16px; }
+
+.form-field .field-label {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.form-field .field-label .req { color: var(--color-error); margin-right: 4px; }
+
+.form-field .field-wrap { position: relative; }
+
+.form-field input[type='text'],
+.form-field input[type='number'],
+.form-field select,
+.form-field textarea {
+  width: 100%;
+  height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-base);
+  background: #fff;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.form-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  padding-right: 28px;
+  cursor: pointer;
+}
+
+.form-field textarea {
+  height: 78px;
+  padding: 8px 11px;
+  resize: vertical;
+}
+
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+}
+
+.form-field input::placeholder,
+.form-field textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.form-field .field-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.form-field .help-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+.form-field .char-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.form-section + .form-section { margin-top: 8px; padding-top: 18px; border-top: 1px dashed var(--border-color-split); }
+
+.radio-group {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+
+.radio input[type='radio'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  position: relative;
+  cursor: pointer;
+  margin: 0;
+}
+
+.radio input[type='radio']:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+.radio input[type='radio']:checked::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.radio-group.variant .radio .check-bg {
+  display: inline-block;
+  width: 32px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--color-primary);
+  position: relative;
+}
+
+.radio-group.variant .radio:first-child::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  margin-left: 16px;
+  margin-top: 1px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.drawer-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 22px;
+  background: #fff;
+  border-top: 1px solid var(--border-color-split);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  z-index: 10;
+  box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.02);
+}
+
+.drawer-footer .btn { min-width: 64px; }
+.drawer-footer .btn-primary { min-width: 80px; }
+
+/* Annotation / fidelity review markers */
+.fidelity-marker {
+  position: relative;
+}
+
+.fidelity-marker::after {
+  content: '✓';
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 16px;
+  height: 16px;
+  background: var(--color-success);
+  color: #fff;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
+
+/* Mini tech tags inline */
+.tech-tag {
+  display: inline-block;
+  font-size: 10.5px;
+  background: #f5f5f5;
+  color: var(--text-tertiary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  margin-left: 6px;
+}
+</style>
+</head>
+<body>
+
+<div class="app-layout">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">M</div>
+      <span class="logo-text">邮件工单系统</span>
+    </div>
+
+    <div class="sidebar-menu">
+
+      <div class="menu-group">
+        <div class="menu-group-title">工作台</div>
+        <div class="menu-item">
+          <span class="menu-icon icon-h">H</span>
+          <span class="menu-label">工作台</span>
+        </div>
+      </div>
+
+      <div class="menu-group">
+        <div class="menu-group-title">工单中心</div>
+        <div class="menu-item">
+          <span class="menu-icon icon-t">T</span>
+          <span class="menu-label">全部工单</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-u">U</span>
+          <span class="menu-label">我的工单</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-r">R</span>
+          <span class="menu-label">待处理</span>
+          <span class="menu-badge">35</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-c">C</span>
+          <span class="menu-label">待客户回复</span>
+          <span class="menu-badge badge-orange">16</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon" style="background: linear-gradient(135deg, #666, #999);">·</span>
+          <span class="menu-label">已关闭</span>
+        </div>
+      </div>
+
+      <div class="menu-group">
+        <div class="menu-group-title">邮箱管理</div>
+        <div class="menu-item">
+          <span class="menu-icon icon-b">B</span>
+          <span class="menu-label">邮箱配置</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-n">N</span>
+          <span class="menu-label">收件记录</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-s">S</span>
+          <span class="menu-label">发件记录</span>
+          <span class="menu-badge badge-blue">3</span>
+        </div>
+      </div>
+
+      <div class="menu-group">
+        <div class="menu-group-title">组织权限</div>
+        <div class="menu-item active">
+          <span class="menu-icon icon-c" style="background: linear-gradient(135deg, #1677ff, #4096ff);">组</span>
+          <span class="menu-label">组织架构</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-s">S</span>
+          <span class="menu-label">角色管理</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-r">R</span>
+          <span class="menu-label">权限管理</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-c" style="background: linear-gradient(135deg, #f5222d, #ff4d4f);">C</span>
+          <span class="menu-label">数据权限</span>
+        </div>
+      </div>
+
+      <div class="menu-group">
+        <div class="menu-group-title">系统管理</div>
+        <div class="menu-item">
+          <span class="menu-icon icon-g">G</span>
+          <span class="menu-label">系统设置</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-n">N</span>
+          <span class="menu-label">操作日志</span>
+        </div>
+        <div class="menu-item">
+          <span class="menu-icon icon-a">A</span>
+          <span class="menu-label">通知模板</span>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="sidebar-footer">
+      <span style="font-size: 14px;">⇤</span>
+      <span>收起菜单</span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <nav class="breadcrumb">
+        <span class="crumb-item">组织管理</span>
+        <span class="separator">/</span>
+        <span class="crumb-item current">组织架构</span>
+      </nav>
+
+      <div class="topbar-search">
+        <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="7"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" placeholder="搜索员工、部门、岗位">
+        <span class="kbd">⌘ K</span>
+      </div>
+
+      <div class="topbar-right">
+        <span class="icon-btn" title="帮助">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </span>
+        <span class="icon-btn" title="通知">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 01-3.46 0"/>
+          </svg>
+          <span class="dot">10</span>
+        </span>
+        <div class="topbar-user">
+          <div class="avatar">李</div>
+          <div class="user-info">
+            <span class="user-name">李工</span>
+            <span class="user-role">客服管理员</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <section class="content">
+
+      <!-- Page header -->
+      <div class="page-header">
+        <div class="title-block">
+          <h1>组织架构</h1>
+          <p class="subtitle">管理企业组织架构、部门、岗位及人员信息</p>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary">+ 新增 <span class="arrow-down">▾</span></button>
+        </div>
+      </div>
+
+      <!-- 3-column grid -->
+      <div class="org-grid">
+
+        <!-- LEFT: Department Tree -->
+        <div class="card">
+          <div class="card-header">
+            <span class="title">部门</span>
+            <span class="count">12 个部门</span>
+          </div>
+          <div class="card-body">
+
+            <div class="tree-search">
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="7"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input type="text" placeholder="搜索部门名称">
+            </div>
+
+            <div class="tree">
+              <div class="tree-node">
+                <span class="tree-caret expanded">▶</span>
+                <span class="tree-label">邮件工单系统有限公司</span>
+                <span class="tree-add-child" title="新建子部门">+</span>
+              </div>
+
+              <div style="margin-left: 16px;">
+                <div class="tree-node" style="padding-left: 4px;">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">总经办</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+
+                <div class="tree-node">
+                  <span class="tree-caret expanded">▶</span>
+                  <span class="tree-label">客服中心</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+
+                <div style="margin-left: 16px;">
+                  <div class="tree-node selected">
+                    <span class="tree-caret" style="visibility: hidden;">·</span>
+                    <span class="tree-label">客户支持部</span>
+                    <span class="tree-add-child" title="新建子部门">+</span>
+                  </div>
+                  <div class="tree-node" style="padding-left: 4px;">
+                    <span class="tree-caret" style="visibility: hidden;">·</span>
+                    <span class="tree-label">售前组</span>
+                    <span class="tree-add-child" title="新建子部门">+</span>
+                  </div>
+                  <div class="tree-node" style="padding-left: 4px;">
+                    <span class="tree-caret" style="visibility: hidden;">·</span>
+                    <span class="tree-label">售后组</span>
+                    <span class="tree-add-child" title="新建子部门">+</span>
+                  </div>
+                </div>
+
+                <div class="tree-node" style="padding-left: 4px;">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">技术支持部</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+                <div class="tree-node">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">运营部</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+                <div class="tree-node">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">产品部</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+                <div class="tree-node">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">市场部</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+                <div class="tree-node">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">人力资源部</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+                <div class="tree-node">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">财务部</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+                <div class="tree-node">
+                  <span class="tree-caret">▶</span>
+                  <span class="tree-label">行政部</span>
+                  <span class="tree-add-child" title="新建子部门">+</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-toolbar">
+              <button class="add-btn">＋ 新增子部门</button>
+              <button class="icon-btn" style="width:30px;height:30px;border-radius:6px;background:transparent;border:none;cursor:pointer;color:#999;display:flex;align-items:center;justify-content:center;" title="设置">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- MIDDLE: Department Detail -->
+        <div class="card">
+          <div class="detail-header">
+            <div class="detail-icon">⚙</div>
+            <div class="detail-title">
+              <h2>客户支持部</h2>
+              <p class="desc">负责客户咨询、问题处理及售后支持服务</p>
+            </div>
+            <div class="detail-actions">
+              <button class="icon-btn" title="编辑">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+              <span class="icon-btn" style="color: var(--color-primary); font-size: 13px; padding: 0 8px; width: auto;">编辑部门</span>
+              <button class="icon-btn" title="更多">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="detail-stats">
+            <div class="detail-stat">
+              <div class="label">部门编码</div>
+              <div class="value mono">CS001</div>
+            </div>
+            <div class="detail-stat">
+              <div class="label">上级部门</div>
+              <div class="value">客服中心</div>
+            </div>
+            <div class="detail-stat">
+              <div class="label">负责人</div>
+              <div class="value">张伟</div>
+            </div>
+            <div class="detail-stat">
+              <div class="label">员工数</div>
+              <div class="value">12</div>
+            </div>
+            <div class="detail-stat">
+              <div class="label">创建时间</div>
+              <div class="value">2024-01-15</div>
+            </div>
+          </div>
+
+          <nav class="tabs">
+            <span class="tab active">部门成员 <span class="badge">12</span></span>
+            <span class="tab">岗位 <span class="tab-count">(3)</span></span>
+            <span class="tab">子部门 <span class="tab-count">(2)</span></span>
+          </nav>
+
+          <div class="detail-tab-body">
+            <div class="member-search-row">
+              <div class="member-search">
+                <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="7"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" placeholder="搜索成员姓名">
+              </div>
+              <select class="filter-select"><option>全部状态</option><option>在职</option><option>离职</option></select>
+              <select class="filter-select"><option>全部岗位</option><option>客服经理</option><option>客服专员</option></select>
+            </div>
+
+            <table class="member-table">
+              <thead>
+                <tr>
+                  <th style="width: 24%;">姓名</th>
+                  <th style="width: 22%;">账号</th>
+                  <th style="width: 14%;">岗位</th>
+                  <th style="width: 14%;">角色</th>
+                  <th style="width: 10%;">状态</th>
+                  <th style="width: 16%;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div class="member-cell">
+                      <span class="avatar color-1">张</span>
+                      <span>张伟</span>
+                    </div>
+                  </td>
+                  <td class="member-account">zhangwei@test.com</td>
+                  <td><span class="tag tag-blue">客服经理</span></td>
+                  <td><span class="tag tag-cyan">客服管理员</span></td>
+                  <td><span class="tag tag-green">在职</span></td>
+                  <td><span class="row-link">编辑</span><span class="row-link">更多</span></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="member-cell">
+                      <span class="avatar color-2">李</span>
+                      <span>李工</span>
+                    </div>
+                  </td>
+                  <td class="member-account">ligong@test.com</td>
+                  <td><span class="tag tag-blue">高级客服</span></td>
+                  <td><span class="tag tag-purple">客服专员</span></td>
+                  <td><span class="tag tag-green">在职</span></td>
+                  <td><span class="row-link">编辑</span><span class="row-link">更多</span></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="member-cell">
+                      <span class="avatar color-3">王</span>
+                      <span>王芳</span>
+                    </div>
+                  </td>
+                  <td class="member-account">wangfang@test.com</td>
+                  <td><span class="tag tag-blue">客服专员</span></td>
+                  <td><span class="tag tag-purple">客服专员</span></td>
+                  <td><span class="tag tag-green">在职</span></td>
+                  <td><span class="row-link">编辑</span><span class="row-link">更多</span></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="member-cell">
+                      <span class="avatar color-4">刘</span>
+                      <span>刘洋</span>
+                    </div>
+                  </td>
+                  <td class="member-account">liuyang@test.com</td>
+                  <td><span class="tag tag-blue">客服专员</span></td>
+                  <td><span class="tag tag-purple">客服专员</span></td>
+                  <td><span class="tag tag-green">在职</span></td>
+                  <td><span class="row-link">编辑</span><span class="row-link">更多</span></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="member-cell">
+                      <span class="avatar color-5">陈</span>
+                      <span>陈晨</span>
+                    </div>
+                  </td>
+                  <td class="member-account">chenchen@test.com</td>
+                  <td><span class="tag tag-blue">客服专员</span></td>
+                  <td><span class="tag tag-purple">客服专员</span></td>
+                  <td><span class="tag tag-orange">离职</span></td>
+                  <td><span class="row-link">编辑</span><span class="row-link">更多</span></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="detail-footer">
+              <span>共 12 条</span>
+              <div class="pagination">
+                <button class="pg-btn">‹</button>
+                <button class="pg-btn active">1</button>
+                <button class="pg-btn">2</button>
+                <button class="pg-btn">›</button>
+                <select class="pg-size"><option>10 条/页</option><option>20 条/页</option><option>50 条/页</option></select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Drawer — New Department -->
+        <div class="drawer">
+          <div class="drawer-handle"></div>
+
+          <div class="drawer-header">
+            <h3>新增部门</h3>
+            <button class="close" aria-label="关闭">×</button>
+          </div>
+
+          <div class="drawer-body">
+            <div class="form-section">
+              <div class="form-section-title">基础信息</div>
+
+              <div class="form-field">
+                <label class="field-label"><span class="req">*</span>部门名称</label>
+                <div class="field-wrap">
+                  <input type="text" placeholder="请输入部门名称" maxlength="50">
+                  <div class="field-meta">
+                    <span></span>
+                    <span class="char-count">0/50</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label"><span class="req">*</span>上级部门</label>
+                <select><option>请选择上级部门</option></select>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">部门编码</label>
+                <input type="text" placeholder="自动生成，可自定义" maxlength="20">
+                <div class="help-text">空缺将自动生成；填写后不可修改</div>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">部门负责人</label>
+                <select><option>请选择负责人</option></select>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">部门描述</label>
+                <textarea placeholder="请输入部门描述" maxlength="200"></textarea>
+                <div class="field-meta">
+                  <span></span>
+                  <span class="char-count">0/200</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">高级设置</div>
+
+              <div class="form-field">
+                <label class="field-label">部门类型</label>
+                <select><option>请选择部门类型</option><option>公司</option><option>部门</option><option>小组</option></select>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">部门状态</label>
+                <div class="radio-group">
+                  <label class="radio">
+                    <input type="radio" name="enabled" checked>
+                    <span>启用</span>
+                  </label>
+                  <label class="radio">
+                    <input type="radio" name="enabled">
+                    <span>禁用</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label class="field-label">数据权限</label>
+                <select><option>继承上级部门权限</option><option>仅本部门</option><option>本部门及下级</option><option>全部数据</option></select>
+              </div>
+            </div>
+          </div>
+
+          <div class="drawer-footer">
+            <button class="btn">取消</button>
+            <button class="btn btn-primary">保存</button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </main>
+
+</div>
+
+<!-- ==============================
+     自我审阅 / Fidelity Self-Review
+     关闭此区域查看完整原型
+     ============================== -->
+<details style="position: fixed; bottom: 16px; right: 16px; z-index: 99; background: rgba(255,255,255,0.96); border: 1px solid #d9d9d9; border-radius: 8px; padding: 8px 12px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); font-size: 12px; color: #333; max-width: 360px; backdrop-filter: blur(6px);">
+<summary style="cursor: pointer; font-weight: 600;">📐 还原度自审</summary>
+<div style="margin-top: 8px; line-height: 1.7; padding-top: 8px; border-top: 1px dashed #eee;">
+<strong>侧边栏 ✅</strong>：深色 + 5 个分组（工作台/工单中心/邮箱管理/组织权限/系统管理）+ 折叠 footer + 字母色块图标 + 红/橙/蓝 badge<br>
+<strong>顶栏 ✅</strong>：面包屑 + 中央搜索框 + ⌘K 提示 + 帮助/通知/用户胶囊（10 徽标）<br>
+<strong>页面头 ✅</strong>：左标题+描述 / 右新增按钮（主按钮带下拉箭头）<br>
+<strong>部门树卡片 ✅</strong>：搜索 → 顶级公司 → 8 个子部门 + 选中态（蓝条 + 浅蓝底） + 底部 + 新增子部门 / 设置<br>
+<strong>部门详情卡片 ✅</strong>：🏢 渐变图标 + 标题 + 描述 / 编辑部门蓝色文字链 + ⋯<br>
+<strong>统计条 ✅</strong>：5 列（编码/上级/负责人/员工数/创建时间），编码等宽灰底胶囊<br>
+<strong>Tabs ✅</strong>：部门成员(主蓝)·岗位(3)·子部门(2)，active 下方蓝条 + badge<br>
+<strong>成员工具栏 ✅</strong>：搜索框 + 2 个 select 筛选<br>
+<strong>成员表格 ✅</strong>：6 列；头像彩色渐变；岗位/角色/状态彩色标签；操作右对齐文字链；离职用橙色<br>
+<strong>分页 ✅</strong>：左总条数 / 右 < 1 2 > + 10 条/页 select<br>
+<strong>新增部门抽屉 ✅</strong>：标题 + ×；装饰蓝色 handle 在左侧边缘<br>
+<strong>基础信息 ✅</strong>：5 字段（名称0/50·上级·编码0/20·负责人·描述0/200），必填红星 + 字符计数 + 帮助文本<br>
+<strong>高级设置 ✅</strong>：类型·启停单选·数据权限下拉<br>
+<strong>底部按钮 ✅</strong>：固定底栏 取消 + 保存<br>
+<strong>视觉还原</strong>：AntD v5 色板（#1677ff）、圆角 6/8、卡片阴影 #00008%、间距 8 基数
+</div>
+</details>
+
+</body>
+</html>

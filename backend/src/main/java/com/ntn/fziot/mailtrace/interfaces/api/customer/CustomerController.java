@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.customer;
 import com.ntn.fziot.mailtrace.application.bizservice.customer.CustomerReadonlyService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -25,6 +26,7 @@ public class CustomerController {
 
     @Operation(summary = "客户分页查询")
     @GetMapping
+    @RequirePermission(value = "customer:read", message = "无权查看客户")
     public BasicResult<CustomerPageResponse> pageCustomers(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
@@ -35,6 +37,7 @@ public class CustomerController {
 
     @Operation(summary = "客户详情")
     @GetMapping("/{email}")
+    @RequirePermission(value = "customer:read", message = "无权查看客户")
     public BasicResult<CustomerVO> getCustomer(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable String email) {

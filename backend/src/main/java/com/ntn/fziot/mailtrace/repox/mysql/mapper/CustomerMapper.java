@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
+import java.util.Set;
 
 @Mapper
 public interface CustomerMapper extends BaseMapper<CustomerEntity> {
@@ -25,7 +26,18 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
                     SELECT DISTINCT customer_email AS email
                     FROM mt_ticket
                     WHERE is_deleted = 0
-                      AND (assignee_id = #{currentUserId} OR assignee_id IS NULL)
+                      AND (
+                          <choose>
+                              <when test="scopeAssigneeIds != null and !scopeAssigneeIds.isEmpty()">
+                                  assignee_id IN
+                                  <foreach collection="scopeAssigneeIds" item="uid" open="(" separator="," close=")">#{uid}</foreach>
+                                  OR assignee_id IS NULL
+                              </when>
+                              <otherwise>
+                                  1 = 0
+                              </otherwise>
+                          </choose>
+                      )
                 </if>
             ) source
             <where>
@@ -37,6 +49,7 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
             """)
     long countReadonlyCustomers(@Param("keyword") String keyword,
                                 @Param("allAccess") boolean allAccess,
+                                @Param("scopeAssigneeIds") Set<Long> scopeAssigneeIds,
                                 @Param("currentUserId") Long currentUserId);
 
     @Select("""
@@ -63,13 +76,35 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
                     SELECT DISTINCT customer_email AS email
                     FROM mt_ticket
                     WHERE is_deleted = 0
-                      AND (assignee_id = #{currentUserId} OR assignee_id IS NULL)
+                      AND (
+                          <choose>
+                              <when test="scopeAssigneeIds != null and !scopeAssigneeIds.isEmpty()">
+                                  assignee_id IN
+                                  <foreach collection="scopeAssigneeIds" item="uid" open="(" separator="," close=")">#{uid}</foreach>
+                                  OR assignee_id IS NULL
+                              </when>
+                              <otherwise>
+                                  1 = 0
+                              </otherwise>
+                          </choose>
+                      )
                 </if>
             ) source
             LEFT JOIN mt_customer c ON c.is_deleted = 0 AND c.email = source.email
             LEFT JOIN mt_ticket t ON t.is_deleted = 0 AND t.customer_email = source.email
                 <if test="!allAccess">
-                    AND (t.assignee_id = #{currentUserId} OR t.assignee_id IS NULL)
+                    AND (
+                        <choose>
+                            <when test="scopeAssigneeIds != null and !scopeAssigneeIds.isEmpty()">
+                                t.assignee_id IN
+                                <foreach collection="scopeAssigneeIds" item="uid" open="(" separator="," close=")">#{uid}</foreach>
+                                OR t.assignee_id IS NULL
+                            </when>
+                            <otherwise>
+                                1 = 0
+                            </otherwise>
+                        </choose>
+                    )
                 </if>
             <where>
                 <if test="keyword != null and keyword != ''">
@@ -85,6 +120,7 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
                                                       @Param("offset") long offset,
                                                       @Param("size") long size,
                                                       @Param("allAccess") boolean allAccess,
+                                                      @Param("scopeAssigneeIds") Set<Long> scopeAssigneeIds,
                                                       @Param("currentUserId") Long currentUserId);
 
     @Select("""
@@ -112,13 +148,35 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
                     FROM mt_ticket
                     WHERE is_deleted = 0
                       AND customer_email = #{email}
-                      AND (assignee_id = #{currentUserId} OR assignee_id IS NULL)
+                      AND (
+                          <choose>
+                              <when test="scopeAssigneeIds != null and !scopeAssigneeIds.isEmpty()">
+                                  assignee_id IN
+                                  <foreach collection="scopeAssigneeIds" item="uid" open="(" separator="," close=")">#{uid}</foreach>
+                                  OR assignee_id IS NULL
+                              </when>
+                              <otherwise>
+                                  1 = 0
+                              </otherwise>
+                          </choose>
+                      )
                 </if>
             ) source
             LEFT JOIN mt_customer c ON c.is_deleted = 0 AND c.email = source.email
             LEFT JOIN mt_ticket t ON t.is_deleted = 0 AND t.customer_email = source.email
                 <if test="!allAccess">
-                    AND (t.assignee_id = #{currentUserId} OR t.assignee_id IS NULL)
+                    AND (
+                        <choose>
+                            <when test="scopeAssigneeIds != null and !scopeAssigneeIds.isEmpty()">
+                                t.assignee_id IN
+                                <foreach collection="scopeAssigneeIds" item="uid" open="(" separator="," close=")">#{uid}</foreach>
+                                OR t.assignee_id IS NULL
+                            </when>
+                            <otherwise>
+                                1 = 0
+                            </otherwise>
+                        </choose>
+                    )
                 </if>
             GROUP BY source.email
             LIMIT 1
@@ -126,5 +184,6 @@ public interface CustomerMapper extends BaseMapper<CustomerEntity> {
             """)
     CustomerReadonlyRow selectReadonlyCustomerByEmail(@Param("email") String email,
                                                       @Param("allAccess") boolean allAccess,
+                                                      @Param("scopeAssigneeIds") Set<Long> scopeAssigneeIds,
                                                       @Param("currentUserId") Long currentUserId);
 }

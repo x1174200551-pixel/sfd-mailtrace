@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.mailbox;
 import com.ntn.fziot.mailtrace.application.bizservice.mailbox.MailboxService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxEnabledRequest;
@@ -35,6 +36,7 @@ public class MailboxController {
 
     @Operation(summary = "邮箱分页查询")
     @GetMapping
+    @RequirePermission(anyOf = {"mailbox:read", "menu:mailboxes"}, message = "无权查看邮箱配置")
     public BasicResult<MailboxPageResponse> pageMailboxes(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
@@ -47,6 +49,7 @@ public class MailboxController {
 
     @Operation(summary = "新建邮箱配置")
     @PostMapping
+    @RequirePermission(value = "mailbox:create", message = "无权新建邮箱配置")
     public BasicResult<MailboxVO> createMailbox(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody MailboxSaveRequest request) {
@@ -55,6 +58,7 @@ public class MailboxController {
 
     @Operation(summary = "编辑邮箱配置")
     @PutMapping("/{id}")
+    @RequirePermission(value = "mailbox:update", message = "无权编辑邮箱配置")
     public BasicResult<MailboxVO> updateMailbox(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -64,6 +68,7 @@ public class MailboxController {
 
     @Operation(summary = "启用或停用邮箱配置")
     @PatchMapping("/{id}/enabled")
+    @RequirePermission(value = "mailbox:enable", message = "无权启停邮箱配置")
     public BasicResult<MailboxVO> updateEnabled(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -73,6 +78,7 @@ public class MailboxController {
 
     @Operation(summary = "删除邮箱配置")
     @DeleteMapping("/{id}")
+    @RequirePermission(value = "mailbox:delete", message = "无权删除邮箱配置")
     public BasicResult<Void> deleteMailbox(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id) {
@@ -82,6 +88,7 @@ public class MailboxController {
 
     @Operation(summary = "测试已保存邮箱连接")
     @PostMapping("/{id}/test-connection")
+    @RequirePermission(value = "mailbox:test_connection", message = "无权测试邮箱连接")
     public BasicResult<MailboxConnectionTestResponse> testSavedMailbox(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -91,6 +98,7 @@ public class MailboxController {
 
     @Operation(summary = "测试邮箱草稿连接")
     @PostMapping("/test-connection")
+    @RequirePermission(value = "mailbox:test_connection", message = "无权测试邮箱连接")
     public BasicResult<MailboxConnectionTestResponse> testDraftMailbox(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody MailboxConnectionTestRequest request) {

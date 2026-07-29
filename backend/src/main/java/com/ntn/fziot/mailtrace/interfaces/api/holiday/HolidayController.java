@@ -4,6 +4,7 @@ import com.ntn.fziot.mailtrace.application.bizservice.holiday.HolidayService;
 import com.ntn.fziot.mailtrace.application.bizservice.holiday.NationalHolidayPresetService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.HolidayListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.HolidaySaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.holiday.HolidayVO;
@@ -37,6 +38,7 @@ public class HolidayController {
 
     @Operation(summary = "节假日列表")
     @GetMapping
+    @RequirePermission(value = "holiday:read", message = "无权查看节假日")
     public BasicResult<HolidayListResponse> listHolidays(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) Long calendarId,
@@ -48,6 +50,7 @@ public class HolidayController {
 
     @Operation(summary = "国家法定节假日模板")
     @GetMapping("/national-presets")
+    @RequirePermission(value = "holiday:import", message = "无权导入法定节假日模板")
     public BasicResult<NationalHolidayPresetResponse> nationalPresets(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam Integer year) {
@@ -56,6 +59,7 @@ public class HolidayController {
 
     @Operation(summary = "新建节假日")
     @PostMapping
+    @RequirePermission(value = "holiday:create", message = "无权新建节假日")
     public BasicResult<HolidayVO> createHoliday(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody HolidaySaveRequest request) {
@@ -64,6 +68,7 @@ public class HolidayController {
 
     @Operation(summary = "编辑节假日")
     @PutMapping("/{id}")
+    @RequirePermission(value = "holiday:update", message = "无权编辑节假日")
     public BasicResult<HolidayVO> updateHoliday(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -73,6 +78,7 @@ public class HolidayController {
 
     @Operation(summary = "删除节假日")
     @DeleteMapping("/{id}")
+    @RequirePermission(value = "holiday:delete", message = "无权删除节假日")
     public BasicResult<Void> deleteHoliday(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id) {

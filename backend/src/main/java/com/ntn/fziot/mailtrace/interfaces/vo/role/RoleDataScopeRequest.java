@@ -13,7 +13,7 @@ public class RoleDataScopeRequest {
     private String resourceType;
 
     @NotBlank(message = "请选择数据范围")
-    @Schema(description = "范围编码：ALL/SELF", example = "SELF")
+    @Schema(description = "范围编码：ALL/SELF/DEPT/DEPT_AND_CHILDREN", example = "SELF")
     private String scopeCode;
 
     @Schema(description = "范围说明")

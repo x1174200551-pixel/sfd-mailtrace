@@ -18,12 +18,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerReadonlyServiceTest {
@@ -52,8 +58,8 @@ class CustomerReadonlyServiceTest {
 
     @Test
     void pageCustomers_shouldReturnReadonlyRows() {
-        when(customerMapper.countReadonlyCustomers("vip", true, 1L)).thenReturn(2L);
-        when(customerMapper.selectReadonlyCustomers("vip", 0L, 10L, true, 1L)).thenReturn(List.of(
+        when(customerMapper.countReadonlyCustomers("vip", true, null, 1L)).thenReturn(2L);
+        when(customerMapper.selectReadonlyCustomers("vip", 0L, 10L, true, null, 1L)).thenReturn(List.of(
                 row(100L, "vip@example.com", "VIP 客户", 3L),
                 row(null, "only-ticket@example.com", null, 1L)
         ));
@@ -72,8 +78,9 @@ class CustomerReadonlyServiceTest {
 
     @Test
     void pageCustomers_whenAgent_shouldAllowAndNormalizePaging() {
-        when(customerMapper.countReadonlyCustomers("", false, 2L)).thenReturn(0L);
-        when(customerMapper.selectReadonlyCustomers("", 0L, 20L, false, 2L)).thenReturn(List.of());
+        Set<Long> scopeIds = Set.of(2L);
+        when(customerMapper.countReadonlyCustomers("", false, scopeIds, 2L)).thenReturn(0L);
+        when(customerMapper.selectReadonlyCustomers("", 0L, 20L, false, scopeIds, 2L)).thenReturn(List.of());
 
         CustomerPageResponse response = customerReadonlyService.pageCustomers(agent, null, 0, 0);
 
@@ -92,7 +99,7 @@ class CustomerReadonlyServiceTest {
 
     @Test
     void getCustomer_shouldReturnByEmail() {
-        when(customerMapper.selectReadonlyCustomerByEmail("vip@example.com", true, 1L))
+        when(customerMapper.selectReadonlyCustomerByEmail("vip@example.com", true, null, 1L))
                 .thenReturn(row(100L, "vip@example.com", "VIP 客户", 3L));
 
         CustomerVO vo = customerReadonlyService.getCustomer(admin, " vip@example.com ");
@@ -101,18 +108,54 @@ class CustomerReadonlyServiceTest {
         assertEquals("vip@example.com", vo.email());
         assertEquals("VIP 客户", vo.displayName());
         assertEquals(3L, vo.ticketCount());
-        verify(customerMapper).selectReadonlyCustomerByEmail("vip@example.com", true, 1L);
+        verify(customerMapper).selectReadonlyCustomerByEmail("vip@example.com", true, null, 1L);
     }
 
     @Test
     void getCustomer_whenAgent_shouldPassScopedMapperArguments() {
-        when(customerMapper.selectReadonlyCustomerByEmail("vip@example.com", false, 2L))
+        Set<Long> scopeIds = Set.of(2L);
+        when(customerMapper.selectReadonlyCustomerByEmail("vip@example.com", false, scopeIds, 2L))
                 .thenReturn(row(100L, "vip@example.com", "VIP 客户", 1L));
 
         CustomerVO vo = customerReadonlyService.getCustomer(agent, "vip@example.com");
 
         assertEquals("vip@example.com", vo.email());
-        verify(customerMapper).selectReadonlyCustomerByEmail("vip@example.com", false, 2L);
+        verify(customerMapper).selectReadonlyCustomerByEmail("vip@example.com", false, scopeIds, 2L);
+    }
+
+    @Test
+    void pageCustomers_whenScopedUserHasEmptyScope_shouldReturnEmptyWithoutSqlFallback() {
+        DataScopeService scopedDataScopeService = mock(DataScopeService.class);
+        CustomerReadonlyService scopedService = new CustomerReadonlyService(customerMapper, scopedDataScopeService, permissionService);
+        CurrentUserPrincipal scopedUser = new CurrentUserPrincipal(
+                8L, "scoped", "空范围用户", "scoped@example.com", "CUSTOM");
+        allowCustomerRead(scopedUser);
+        when(scopedDataScopeService.isAdmin(scopedUser)).thenReturn(false);
+        when(scopedDataScopeService.resolveTicketScopeUserIds(scopedUser)).thenReturn(Set.of());
+
+        CustomerPageResponse response = scopedService.pageCustomers(scopedUser, null, 1, 20);
+
+        assertEquals(0, response.total());
+        assertEquals(0, response.records().size());
+        verify(customerMapper, never()).countReadonlyCustomers(any(), anyBoolean(), any(), anyLong());
+        verify(customerMapper, never()).selectReadonlyCustomers(any(), anyLong(), anyLong(), anyBoolean(), any(), anyLong());
+    }
+
+    @Test
+    void getCustomer_whenScopedUserHasEmptyScope_shouldRejectWithoutSqlFallback() {
+        DataScopeService scopedDataScopeService = mock(DataScopeService.class);
+        CustomerReadonlyService scopedService = new CustomerReadonlyService(customerMapper, scopedDataScopeService, permissionService);
+        CurrentUserPrincipal scopedUser = new CurrentUserPrincipal(
+                8L, "scoped", "空范围用户", "scoped@example.com", "CUSTOM");
+        allowCustomerRead(scopedUser);
+        when(scopedDataScopeService.isAdmin(scopedUser)).thenReturn(false);
+        when(scopedDataScopeService.resolveTicketScopeUserIds(scopedUser)).thenReturn(Set.of());
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> scopedService.getCustomer(scopedUser, "vip@example.com"));
+
+        assertEquals(40401, ex.getCode());
+        verify(customerMapper, never()).selectReadonlyCustomerByEmail(any(), anyBoolean(), any(), anyLong());
     }
 
     @Test
@@ -125,7 +168,7 @@ class CustomerReadonlyServiceTest {
 
     @Test
     void getCustomer_whenNotExists_shouldReject() {
-        when(customerMapper.selectReadonlyCustomerByEmail("missing@example.com", true, 1L)).thenReturn(null);
+        when(customerMapper.selectReadonlyCustomerByEmail("missing@example.com", true, null, 1L)).thenReturn(null);
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> customerReadonlyService.getCustomer(admin, "missing@example.com"));
@@ -169,5 +212,20 @@ class CustomerReadonlyServiceTest {
                 || permissionCode.startsWith("ticket_attachment:")
                 || "customer:read".equals(permissionCode)
                 || "dashboard:read".equals(permissionCode));
+    }
+
+    private void allowCustomerRead(CurrentUserPrincipal allowedPrincipal) {
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String permissionCode = invocation.getArgument(1);
+            String message = invocation.getArgument(2);
+            if (principal != null && principal.id().equals(allowedPrincipal.id()) && "customer:read".equals(permissionCode)) {
+                return null;
+            }
+            throw new BusinessException(40302, message);
+        }).when(permissionService).assertPermission(
+                org.mockito.ArgumentMatchers.eq(allowedPrincipal),
+                org.mockito.ArgumentMatchers.eq("customer:read"),
+                org.mockito.ArgumentMatchers.any());
     }
 }

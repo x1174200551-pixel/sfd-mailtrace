@@ -2,19 +2,18 @@ package com.ntn.fziot.mailtrace.application.bizservice.user;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserUpdateRequest;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.DepartmentEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserDepartmentEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.DepartmentMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserDepartmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
@@ -46,7 +45,7 @@ class UserServiceTest {
     @Mock
     private UserMapper userMapper;
     @Mock
-    private OperationLogMapper operationLogMapper;
+    private OperationLogService operationLogService;
     @Mock
     private RoleMapper roleMapper;
     @Mock
@@ -72,7 +71,7 @@ class UserServiceTest {
         TableInfoHelper.initTableInfo(assistant, UserEntity.class);
         userService = new UserService(
                 userMapper,
-                operationLogMapper,
+                operationLogService,
                 roleMapper,
                 userRoleMapper,
                 departmentMapper,
@@ -154,9 +153,7 @@ class UserServiceTest {
         assertTrue(userRoleCaptor.getAllValues().get(0).getPrimaryRole());
         verify(userDepartmentMapper).physicalDeleteByUserId(99L);
         verify(userDepartmentMapper).insert(any(UserDepartmentEntity.class));
-        ArgumentCaptor<OperationLogEntity> logCaptor = ArgumentCaptor.forClass(OperationLogEntity.class);
-        verify(operationLogMapper).insert(logCaptor.capture());
-        assertEquals("UPDATE", logCaptor.getValue().getActionCode());
+        verify(operationLogService).record(any(), eq("USER"), eq("UPDATE"), any(), any());
     }
 
     @Test

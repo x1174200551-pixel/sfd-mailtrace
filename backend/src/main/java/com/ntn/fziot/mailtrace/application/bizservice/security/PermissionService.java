@@ -15,6 +15,9 @@ import com.ntn.fziot.mailtrace.repox.mysql.mapper.RolePermissionMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -22,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -30,6 +34,7 @@ import java.util.stream.Collectors;
 public class PermissionService {
 
     private static final int CODE_FORBIDDEN = 40302;
+    private static final String ATTR_PERMISSION_CONTEXT = PermissionService.class.getName() + ".PERMISSION_CONTEXT";
 
     private final RoleMapper roleMapper;
     private final PermissionMapper permissionMapper;
@@ -41,7 +46,17 @@ public class PermissionService {
         if (principal == null) {
             throw new BusinessException(CODE_FORBIDDEN, "未登录");
         }
-        return getUserPermissions(principal.id(), principal.roleCode());
+        RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
+        if (!(requestAttributes instanceof ServletRequestAttributes attributes)) {
+            return getUserPermissions(principal.id(), principal.roleCode());
+        }
+        Object cached = attributes.getRequest().getAttribute(ATTR_PERMISSION_CONTEXT);
+        if (cached instanceof PermissionContext context && Objects.equals(principal.id(), context.userId())) {
+            return context;
+        }
+        PermissionContext context = getUserPermissions(principal.id(), principal.roleCode());
+        attributes.getRequest().setAttribute(ATTR_PERMISSION_CONTEXT, context);
+        return context;
     }
 
     public PermissionContext getUserPermissions(Long userId, String fallbackRoleCode) {

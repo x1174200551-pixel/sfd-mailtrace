@@ -1,17 +1,16 @@
 package com.ntn.fziot.mailtrace.application.bizservice.role;
 
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleDataScopeRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RolePermissionSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleSaveRequest;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.PermissionEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleDataScopeEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RolePermissionEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.PermissionMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleDataScopeMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
@@ -50,7 +49,7 @@ class RoleManagementServiceTest {
     @Mock
     private UserRoleMapper userRoleMapper;
     @Mock
-    private OperationLogMapper operationLogMapper;
+    private OperationLogService operationLogService;
     @Mock
     private PermissionService permissionService;
 
@@ -67,7 +66,7 @@ class RoleManagementServiceTest {
                 rolePermissionMapper,
                 roleDataScopeMapper,
                 userRoleMapper,
-                operationLogMapper,
+                operationLogService,
                 permissionService
         );
     }
@@ -101,7 +100,7 @@ class RoleManagementServiceTest {
         assertEquals("工单质检", inserted.getRoleName());
         assertFalse(inserted.getSystemRole());
         assertEquals(30, inserted.getSortOrder());
-        verify(operationLogMapper).insert(any(OperationLogEntity.class));
+        verify(operationLogService).record(any(), eq("ROLE"), any(), any(), any());
     }
 
     @Test
@@ -145,7 +144,34 @@ class RoleManagementServiceTest {
         verify(roleDataScopeMapper).insert(dataScopeCaptor.capture());
         assertEquals("TICKET", dataScopeCaptor.getValue().getResourceType());
         assertEquals("SELF", dataScopeCaptor.getValue().getScopeCode());
-        verify(operationLogMapper).insert(any(OperationLogEntity.class));
+        verify(operationLogService).record(any(), eq("ROLE"), any(), any(), any());
+    }
+
+    @Test
+    void saveRolePermissions_whenDeptAndChildrenScope_shouldAllow() {
+        RolePermissionSaveRequest request = new RolePermissionSaveRequest();
+        request.setPermissionCodes(List.of("menu:tickets", "ticket:read"));
+        RoleDataScopeRequest ticketScope = new RoleDataScopeRequest();
+        ticketScope.setResourceType("TICKET");
+        ticketScope.setScopeCode("DEPT_AND_CHILDREN");
+        ticketScope.setScopeDesc("部门及下级工单");
+        request.setDataScopes(List.of(ticketScope));
+
+        when(roleMapper.selectById(30L)).thenReturn(role(30L, "QUALITY_CHECKER", "工单质检", false, true, 30));
+        when(permissionMapper.selectList(any())).thenReturn(List.of(
+                permission(101L, "menu:tickets", 21),
+                permission(102L, "ticket:read", 2010)
+        ));
+        when(rolePermissionMapper.selectList(any())).thenReturn(List.of());
+        when(roleDataScopeMapper.selectList(any())).thenReturn(List.of());
+        when(userRoleMapper.selectCount(any())).thenReturn(0L);
+
+        roleManagementService.saveRolePermissions(admin, 30L, request);
+
+        ArgumentCaptor<RoleDataScopeEntity> dataScopeCaptor = ArgumentCaptor.forClass(RoleDataScopeEntity.class);
+        verify(roleDataScopeMapper).insert(dataScopeCaptor.capture());
+        assertEquals("TICKET", dataScopeCaptor.getValue().getResourceType());
+        assertEquals("DEPT_AND_CHILDREN", dataScopeCaptor.getValue().getScopeCode());
     }
 
     @Test

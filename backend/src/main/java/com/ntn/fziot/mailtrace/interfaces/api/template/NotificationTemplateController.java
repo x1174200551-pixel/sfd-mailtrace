@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.api.template;
 import com.ntn.fziot.mailtrace.application.bizservice.template.NotificationTemplateService;
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.NotificationTemplateCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.NotificationTemplateListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.NotificationTemplateUpdateRequest;
@@ -33,6 +34,7 @@ public class NotificationTemplateController {
 
     @Operation(summary = "通知模板列表")
     @GetMapping
+    @RequirePermission(value = "notification_template:read", message = "无权查看通知模板")
     public BasicResult<NotificationTemplateListResponse> listTemplates(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
@@ -42,6 +44,7 @@ public class NotificationTemplateController {
 
     @Operation(summary = "新建通知模板")
     @PostMapping
+    @RequirePermission(value = "notification_template:create", message = "无权新建通知模板")
     public BasicResult<NotificationTemplateVO> createTemplate(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody NotificationTemplateCreateRequest request) {
@@ -50,6 +53,7 @@ public class NotificationTemplateController {
 
     @Operation(summary = "保存通知模板")
     @PutMapping("/{id}")
+    @RequirePermission(value = "notification_template:update", message = "无权编辑通知模板")
     public BasicResult<NotificationTemplateVO> updateTemplate(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id,
@@ -59,6 +63,7 @@ public class NotificationTemplateController {
 
     @Operation(summary = "通知模板预览")
     @PostMapping("/preview")
+    @RequirePermission(value = "notification_template:preview", message = "无权预览通知模板")
     public BasicResult<TemplatePreviewResponse> preview(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @Valid @RequestBody TemplatePreviewRequest request) {

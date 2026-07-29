@@ -11,9 +11,8 @@ public class DepartmentCreateRequest {
     @Schema(description = "父部门ID，根部门为空")
     private Long parentId;
 
-    @NotBlank(message = "请输入部门编码")
     @Size(max = 64, message = "部门编码最多64个字符")
-    @Schema(description = "部门编码", example = "CUSTOMER_SERVICE")
+    @Schema(description = "部门编码，不传时由后端自动生成", example = "CUSTOMER_SERVICE")
     private String deptCode;
 
     @NotBlank(message = "请输入部门名称")
