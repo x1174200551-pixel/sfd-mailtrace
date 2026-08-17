@@ -120,7 +120,7 @@ public class MailFetchBizService {
                         ticketBizService.handleCustomerFollowUp(
                                 existingTicketId, mail.subject(), mail.fromAddress(),
                                 mail.contentText(), mail.contentHtml(),
-                                mail.messageId(), mail.sentAt()
+                                mail.messageId(), mail.inReplyTo(), mail.references(), mail.sentAt()
                         );
                         log.info("客户追信回流 ticketId={} messageId={} subject={}",
                                 existingTicketId, mail.messageId(), mail.subject());

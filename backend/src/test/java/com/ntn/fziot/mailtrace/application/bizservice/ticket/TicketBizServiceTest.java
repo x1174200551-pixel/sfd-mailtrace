@@ -143,7 +143,7 @@ class TicketBizServiceTest {
         TicketEntity ticket = ticket(100L, TicketBizService.STATUS_PROCESSING);
         when(ticketMapper.selectById(100L)).thenReturn(ticket);
         when(mailSendService.sendRawMail(eq(11L), eq("customer@example.com"), any(), any(), eq("AGENT_REPLY")))
-                .thenReturn(new MailSendService.SendResult(true, "OK"));
+                .thenReturn(MailSendService.SendResult.ok("OK", "<smtp-reply@example.com>"));
 
         ticketBizService.replyTicket(admin, 100L,
                 new TicketReplyRequest("处理完成", "<p>处理完成</p>", false, List.of()));
@@ -157,6 +157,14 @@ class TicketBizServiceTest {
         List<String> eventTypes = eventCaptor.getAllValues().stream().map(TicketEventEntity::getEventType).toList();
         assertTrue(eventTypes.contains(TicketBizService.EVENT_FIRST_REPLY));
         assertTrue(eventTypes.contains(TicketBizService.EVENT_AGENT_REPLY));
+
+        ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper).insert(messageCaptor.capture());
+        assertTrue(messageCaptor.getValue().getSubject().contains(ticket.getTicketNo()));
+
+        ArgumentCaptor<TicketMessageEntity> messageUpdateCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper).updateById(messageUpdateCaptor.capture());
+        assertEquals("smtp-reply@example.com", messageUpdateCaptor.getValue().getMessageId());
     }
 
     @Test
@@ -279,12 +287,17 @@ class TicketBizServiceTest {
 
         ticketBizService.handleCustomerFollowUp(
                 105L, "Re: test", "customer@example.com", "追信", "<p>追信</p>",
-                "<msg-1@example.com>", mailSentAt);
+                "<msg-1@example.com>", "<parent@example.com>", "<root@example.com> <parent@example.com>", mailSentAt);
 
         ArgumentCaptor<TicketEntity> updateCaptor = ArgumentCaptor.forClass(TicketEntity.class);
         verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).updateById(updateCaptor.capture());
         assertTrue(updateCaptor.getAllValues().stream()
                 .anyMatch(update -> mailSentAt.equals(update.getLastCustomerMailAt())));
+
+        ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper).insert(messageCaptor.capture());
+        assertEquals("msg-1@example.com", messageCaptor.getValue().getMessageId());
+        assertEquals("parent@example.com", messageCaptor.getValue().getInReplyTo());
 
         ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
         verify(ticketEventMapper).insert(eventCaptor.capture());
@@ -300,7 +313,7 @@ class TicketBizServiceTest {
 
         ticketBizService.handleCustomerFollowUp(
                 107L, "Re: waiting", "customer@example.com", "已补充", "<p>已补充</p>",
-                "<msg-2@example.com>", mailSentAt);
+                "<msg-2@example.com>", null, null, mailSentAt);
 
         verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).update(eq(null), any());
         ArgumentCaptor<TicketEntity> updateCaptor = ArgumentCaptor.forClass(TicketEntity.class);
@@ -439,13 +452,42 @@ class TicketBizServiceTest {
     }
 
     @Test
+    void createTicket_whenAutoReplySucceeds_shouldPersistOutboundMessageId() {
+        when(mailboxMapper.selectById(11L)).thenReturn(mailbox());
+        when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-203");
+        when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
+            TicketEntity ticket = invocation.getArgument(0);
+            ticket.setId(203L);
+            return 1;
+        });
+        when(autoReplyService.sendAutoReply(203L, 11L))
+                .thenReturn(MailSendService.SendResult.ok("OK", "<auto-reply@example.com>"));
+
+        Long ticketId = ticketBizService.createTicket(
+                11L, "自动回执咨询", "customer@example.com", "客户",
+                "正文", "<p>正文</p>", "<inbound@example.com>",
+                null, null, LocalDateTime.now());
+
+        assertEquals(203L, ticketId);
+        ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper, org.mockito.Mockito.times(2)).insert(messageCaptor.capture());
+
+        List<TicketMessageEntity> messages = messageCaptor.getAllValues();
+        assertEquals(TicketBizService.DIRECTION_INBOUND, messages.get(0).getDirection());
+        assertEquals("inbound@example.com", messages.get(0).getMessageId());
+        assertEquals(TicketBizService.DIRECTION_OUTBOUND, messages.get(1).getDirection());
+        assertEquals("auto-reply@example.com", messages.get(1).getMessageId());
+        assertTrue(messages.get(1).getSubject().contains("TCK-20260727-203"));
+    }
+
+    @Test
     void createTicket_whenNoRuleMatches_shouldFallbackMailboxDefaultAssignee() {
         MailboxEntity mailbox = mailbox();
         mailbox.setDefaultAssigneeId(2L);
         when(mailboxMapper.selectById(11L)).thenReturn(mailbox);
         when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-201");
         when(mailSendService.sendRawMail(eq(11L), eq("agent@example.com"), any(), any(), eq("ASSIGN_NOTIFY")))
-                .thenReturn(new MailSendService.SendResult(true, "OK"));
+                .thenReturn(MailSendService.SendResult.ok("OK"));
         when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
             TicketEntity ticket = invocation.getArgument(0);
             ticket.setId(201L);

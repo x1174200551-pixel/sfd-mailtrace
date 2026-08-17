@@ -43,6 +43,13 @@ class MessageThreadServiceTest {
     // ========== 1. In-Reply-To 匹配 ==========
 
     @Test
+    void normalizeMessageId_shouldStripAngleBracketsAndWhitespace() {
+        assertEquals("reply@example.com", MessageThreadService.normalizeMessageId(" <reply@example.com> "));
+        assertEquals("reply@example.com", MessageThreadService.normalizeMessageId("reply@example.com"));
+        assertNull(MessageThreadService.normalizeMessageId(" "));
+    }
+
+    @Test
     void resolveByInReplyTo_shouldReturnTicketId() {
         ParsedMail mail = createMail("<new@test.com>", "<parent@test.com>", null, "回复：测试");
         TicketMessageEntity msg = new TicketMessageEntity();

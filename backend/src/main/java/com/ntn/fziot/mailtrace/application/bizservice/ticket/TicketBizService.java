@@ -156,8 +156,8 @@ public class TicketBizService {
         TicketMessageEntity msg = new TicketMessageEntity();
         msg.setTicketId(ticket.getId());
         msg.setDirection(DIRECTION_INBOUND);
-        msg.setMessageId(messageId);
-        msg.setInReplyTo(inReplyTo);
+        msg.setMessageId(MessageThreadService.normalizeMessageId(messageId));
+        msg.setInReplyTo(MessageThreadService.normalizeMessageId(inReplyTo));
         msg.setMailReferences(references);
         msg.setFromAddress(customerEmail);
         msg.setSubject(subject);
@@ -175,25 +175,28 @@ public class TicketBizService {
         autoAssignByRules(ticket, mailboxId, subject, customerEmail);
 
         // 6、发送自动回执（失败不影响工单）
-        autoReplyService.sendAutoReply(ticket.getId(), mailboxId);
+        MailSendService.SendResult autoReplyResult = autoReplyService.sendAutoReply(ticket.getId(), mailboxId);
 
         // 7、保存自动回执消息到会话（OUTBOUND）
-        try {
-            MailboxEntity mb = mailboxMapper.selectById(mailboxId);
-            String mailFrom = (mb != null && mb.getEmailAddress() != null) ? mb.getEmailAddress() : "system@mailtrace.local";
-            TicketMessageEntity autoReplyMsg = new TicketMessageEntity();
-            autoReplyMsg.setTicketId(ticket.getId());
-            autoReplyMsg.setDirection(DIRECTION_OUTBOUND);
-            autoReplyMsg.setFromAddress(mailFrom);
-            autoReplyMsg.setToAddress(customerEmail);
-            autoReplyMsg.setSubject("回复：" + subject);
-            autoReplyMsg.setContentText("系统已收到您的工单（" + ticketNo + "），自动回执已发送。客服人员将尽快处理您的问题。");
-            autoReplyMsg.setSentAt(LocalDateTime.now());
-            autoReplyMsg.setCreatedBy(OPERATOR_SYSTEM);
-            autoReplyMsg.setUpdatedBy(OPERATOR_SYSTEM);
-            ticketMessageMapper.insert(autoReplyMsg);
-        } catch (Exception e) {
-            log.warn("保存自动回执消息失败，不影响工单 ticketId={}", ticket.getId(), e);
+        if (autoReplyResult != null && autoReplyResult.success()) {
+            try {
+                MailboxEntity mb = mailboxMapper.selectById(mailboxId);
+                String mailFrom = (mb != null && mb.getEmailAddress() != null) ? mb.getEmailAddress() : "system@mailtrace.local";
+                TicketMessageEntity autoReplyMsg = new TicketMessageEntity();
+                autoReplyMsg.setTicketId(ticket.getId());
+                autoReplyMsg.setDirection(DIRECTION_OUTBOUND);
+                autoReplyMsg.setFromAddress(mailFrom);
+                autoReplyMsg.setToAddress(customerEmail);
+                autoReplyMsg.setSubject("您的工单已创建：" + ticketNo);
+                autoReplyMsg.setContentText("系统已收到您的工单（" + ticketNo + "），自动回执已发送。客服人员将尽快处理您的问题。");
+                autoReplyMsg.setMessageId(MessageThreadService.normalizeMessageId(autoReplyResult.messageId()));
+                autoReplyMsg.setSentAt(LocalDateTime.now());
+                autoReplyMsg.setCreatedBy(OPERATOR_SYSTEM);
+                autoReplyMsg.setUpdatedBy(OPERATOR_SYSTEM);
+                ticketMessageMapper.insert(autoReplyMsg);
+            } catch (Exception e) {
+                log.warn("保存自动回执消息失败，不影响工单 ticketId={}", ticket.getId(), e);
+            }
         }
 
         log.info("工单创建成功 id={} ticketNo={}", ticket.getId(), ticketNo);
@@ -217,11 +220,14 @@ public class TicketBizService {
      * @param contentText  纯文本正文
      * @param contentHtml  HTML 正文
      * @param messageId    邮件 Message-ID
+     * @param inReplyTo    In-Reply-To头
+     * @param references   References头
      * @param sentAt       邮件发送时间
      */
     public void handleCustomerFollowUp(Long ticketId, String subject, String fromAddress,
                                        String contentText, String contentHtml,
-                                       String messageId, LocalDateTime sentAt) {
+                                       String messageId, String inReplyTo, String references,
+                                       LocalDateTime sentAt) {
         TicketEntity ticket = ticketMapper.selectById(ticketId);
         if (ticket == null) {
             log.warn("客户追信跳过：工单不存在 ticketId={}", ticketId);
@@ -237,7 +243,9 @@ public class TicketBizService {
         msg.setSubject(subject);
         msg.setContentText(contentText);
         msg.setContentHtml(contentHtml);
-        msg.setMessageId(messageId);
+        msg.setMessageId(MessageThreadService.normalizeMessageId(messageId));
+        msg.setInReplyTo(MessageThreadService.normalizeMessageId(inReplyTo));
+        msg.setMailReferences(references);
         msg.setSentAt(sentAt != null ? sentAt : LocalDateTime.now());
         msg.setCreatedBy(OPERATOR_SYSTEM);
         msg.setUpdatedBy(OPERATOR_SYSTEM);
@@ -433,6 +441,7 @@ public class TicketBizService {
         }
 
         String direction = isInternal ? DIRECTION_INTERNAL : DIRECTION_OUTBOUND;
+        String messageSubject = isInternal ? ticket.getSubject() : buildAgentReplySubject(ticket);
 
         // 记录消息
         TicketMessageEntity message = new TicketMessageEntity();
@@ -440,7 +449,7 @@ public class TicketBizService {
         message.setDirection(direction);
         message.setFromAddress(null);
         message.setToAddress(ticket.getCustomerEmail());
-        message.setSubject(ticket.getSubject());
+        message.setSubject(messageSubject);
         message.setContentText(content);
         if (request.htmlContent() != null && !request.htmlContent().isBlank()) {
             message.setContentHtml(request.htmlContent());
@@ -494,12 +503,18 @@ public class TicketBizService {
             try {
                 MailboxEntity mailbox = mailboxMapper.selectById(ticket.getMailboxId());
                 if (mailbox != null) {
-                    String replySubject = "回复：" + ticket.getSubject();
                     String htmlContent = request.htmlContent() != null && !request.htmlContent().isBlank() ? request.htmlContent() : content;
                     MailSendService.SendResult sendResult = mailSendService.sendRawMail(
-                            mailbox.getId(), ticket.getCustomerEmail(), replySubject, htmlContent, "AGENT_REPLY");
+                            mailbox.getId(), ticket.getCustomerEmail(), messageSubject, htmlContent, "AGENT_REPLY");
                     if (sendResult.success()) {
-                        log.info("回复邮件已发送 ticketId={} to={}", ticket.getId(), ticket.getCustomerEmail());
+                        String sentMessageId = MessageThreadService.normalizeMessageId(sendResult.messageId());
+                        if (sentMessageId != null) {
+                            message.setMessageId(sentMessageId);
+                            message.setUpdatedBy(principal.account());
+                            ticketMessageMapper.updateById(message);
+                        }
+                        log.info("回复邮件已发送 ticketId={} to={} messageId={}",
+                                ticket.getId(), ticket.getCustomerEmail(), sentMessageId);
                     } else {
                         log.warn("回复邮件发送失败 ticketId={} reason={}", ticket.getId(), sendResult.message());
                     }
@@ -517,6 +532,12 @@ public class TicketBizService {
                 (isInternal ? "内部备注：" : "回复客户：") + truncateContent(content));
 
         return toDetailVO(ticketMapper.selectById(id));
+    }
+
+    private String buildAgentReplySubject(TicketEntity ticket) {
+        String ticketNo = ticket.getTicketNo() == null ? "" : ticket.getTicketNo();
+        String subject = ticket.getSubject() == null ? "" : ticket.getSubject();
+        return "关于工单 " + ticketNo + " 的回复：" + subject;
     }
 
     // ==================== 变更状态 ====================

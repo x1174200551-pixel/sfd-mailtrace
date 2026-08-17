@@ -89,10 +89,15 @@ public class MessageThreadService {
      * 从引用头中提取干净的消息 ID（去掉 <>）。
      */
     private String extractMessageId(String raw) {
+        return normalizeMessageId(raw);
+    }
+
+    public static String normalizeMessageId(String raw) {
         if (raw == null) return null;
         String trimmed = raw.trim();
+        if (trimmed.isBlank()) return null;
         if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
-            return trimmed.substring(1, trimmed.length() - 1);
+            return trimmed.substring(1, trimmed.length() - 1).trim();
         }
         return trimmed;
     }
@@ -111,10 +116,15 @@ public class MessageThreadService {
      * 根据 Message-ID 查 mt_ticket_message，返回 ticketId。
      */
     private Long findTicketIdByMessageId(String messageId) {
-        if (messageId == null || messageId.isBlank()) return null;
+        String normalized = normalizeMessageId(messageId);
+        if (normalized == null || normalized.isBlank()) return null;
+        String bracketed = "<" + normalized + ">";
         TicketMessageEntity msg = ticketMessageMapper.selectOne(
                 new LambdaQueryWrapper<TicketMessageEntity>()
-                        .eq(TicketMessageEntity::getMessageId, messageId)
+                        .and(wrapper -> wrapper
+                                .eq(TicketMessageEntity::getMessageId, normalized)
+                                .or()
+                                .eq(TicketMessageEntity::getMessageId, bracketed))
                         .last("LIMIT 1"));
         return msg != null ? msg.getTicketId() : null;
     }

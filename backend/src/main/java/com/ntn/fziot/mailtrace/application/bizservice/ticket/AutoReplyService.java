@@ -35,20 +35,20 @@ public class AutoReplyService {
      * @param ticketId 工单 ID
      * @param mailboxId 发件邮箱 ID
      */
-    public void sendAutoReply(Long ticketId, Long mailboxId) {
+    public MailSendService.SendResult sendAutoReply(Long ticketId, Long mailboxId) {
         try {
             // 1、查工单
             TicketEntity ticket = ticketMapper.selectById(ticketId);
             if (ticket == null) {
                 log.warn("自动回执跳过：工单不存在 ticketId={}", ticketId);
-                return;
+                return MailSendService.SendResult.fail("工单不存在：" + ticketId);
             }
 
             // 2、查邮箱配置是否启用了自动回执
             MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
             if (mailbox == null || !Boolean.TRUE.equals(mailbox.getAutoReplyEnabled())) {
                 log.info("自动回执跳过：邮箱未启用自动回执 ticketId={} mailboxId={}", ticketId, mailboxId);
-                return;
+                return MailSendService.SendResult.fail("邮箱未启用自动回执：" + mailboxId);
             }
 
             // 3、查 AUTO_REPLY 模板
@@ -58,7 +58,7 @@ public class AutoReplyService {
                             .last("LIMIT 1"));
             if (template == null || !Boolean.TRUE.equals(template.getEnabled())) {
                 log.warn("自动回执跳过：AUTO_REPLY 模板未找到或未启用 ticketId={}", ticketId);
-                return;
+                return MailSendService.SendResult.fail("AUTO_REPLY 模板未找到或未启用");
             }
 
             // 4、渲染模板
@@ -88,10 +88,12 @@ public class AutoReplyService {
                 log.warn("自动回执发送失败 ticketId={} reason={}", ticketId, result.message());
                 // 失败不回滚工单，仅记录日志
             }
+            return result;
 
         } catch (Exception e) {
             log.error("自动回执异常 ticketId={} mailboxId={}", ticketId, mailboxId, e);
             // 任何异常都不影响工单
+            return MailSendService.SendResult.fail("自动回执异常：" + e.getClass().getSimpleName());
         }
     }
 

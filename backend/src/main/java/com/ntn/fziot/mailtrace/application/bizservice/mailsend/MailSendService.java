@@ -130,6 +130,7 @@ public class MailSendService {
                 msg.setText(content, "UTF-8");
             }
             msg.saveChanges();
+            String messageId = msg.getMessageID();
 
             // 发送
             transport.sendMessage(msg, msg.getAllRecipients());
@@ -143,7 +144,7 @@ public class MailSendService {
             logEntity.setErrorMessage(null);
             mailSendLogMapper.updateById(logEntity);
 
-            return SendResult.ok("发送成功，耗时 " + elapsed + "ms");
+            return SendResult.ok("发送成功，耗时 " + elapsed + "ms", messageId);
 
         } catch (Exception e) {
             long elapsed = System.currentTimeMillis() - start;
@@ -209,6 +210,7 @@ public class MailSendService {
             msg.setSubject(logEntity.getSubject(), "UTF-8");
             msg.setText(logEntity.getContentBody() != null ? logEntity.getContentBody() : "", "UTF-8");
             msg.saveChanges();
+            String messageId = msg.getMessageID();
             transport.sendMessage(msg, msg.getAllRecipients());
             long elapsed = System.currentTimeMillis() - start;
             log.info("邮件重试成功 sendLogId={} to={} subject={} 耗时={}ms",
@@ -217,7 +219,7 @@ public class MailSendService {
             logEntity.setSentAt(LocalDateTime.now());
             logEntity.setErrorMessage(null);
             mailSendLogMapper.updateById(logEntity);
-            return SendResult.ok("重试发送成功，耗时 " + elapsed + "ms");
+            return SendResult.ok("重试发送成功，耗时 " + elapsed + "ms", messageId);
         } catch (Exception e) {
             long elapsed = System.currentTimeMillis() - start;
             String errorMsg = truncateError(e);
@@ -297,12 +299,16 @@ public class MailSendService {
 
     // ========== 内部结果类 ==========
 
-    public record SendResult(boolean success, String message) {
+    public record SendResult(boolean success, String message, String messageId) {
         public static SendResult ok(String message) {
-            return new SendResult(true, message);
+            return new SendResult(true, message, null);
+        }
+
+        public static SendResult ok(String message, String messageId) {
+            return new SendResult(true, message, messageId);
         }
         public static SendResult fail(String message) {
-            return new SendResult(false, message);
+            return new SendResult(false, message, null);
         }
     }
 }
