@@ -1,5 +1,7 @@
 import { Alert, Button, Tag, message } from 'antd'
 import {
+  Activity,
+  BarChart3,
   CircleCheck,
   Clock,
   Folder,
@@ -7,24 +9,36 @@ import {
   Layers,
   Loader,
   LockKeyhole,
+  MailCheck,
+  MailWarning,
   MessageCircle,
   RefreshCw,
   Send,
   Settings,
   Timer,
   TriangleAlert,
+  Users,
 } from 'lucide-react'
 import {
   priorityBadgeClass,
   priorityBadgeText,
+  priorityLabel,
   statusLabel,
 } from '../../constants/status'
-import type { DashboardSummary, DashboardTodoListResponse } from '../../types/dashboard'
+import type {
+  DashboardActionItem,
+  DashboardFlowItem,
+  DashboardQualityCheck,
+  DashboardReport,
+  DashboardSummary,
+  DashboardTodoListResponse,
+} from '../../types/dashboard'
 
 type DashboardPageProps = {
   canOpenTicketList: boolean
   dashboardError: string
   dashboardLoading: boolean
+  dashboardReport: DashboardReport | null
   dashboardSummary: DashboardSummary | null
   dashboardTodos: DashboardTodoListResponse | null
   dashboardUpdatedAt: string | null
@@ -50,10 +64,26 @@ function formatOptionalDateTime(value: string | null) {
   return value ? value.replace('T', ' ').slice(0, 16) : '-'
 }
 
+function percentText(value: number) {
+  return `${Math.max(0, Math.min(100, Math.round(value)))}%`
+}
+
+const dashboardIconMap = {
+  'bar-chart': BarChart3,
+  clock: Clock,
+  inbox: Inbox,
+  'mail-check': MailCheck,
+  'mail-warning': MailWarning,
+  'message-circle': MessageCircle,
+  timer: Timer,
+  'triangle-alert': TriangleAlert,
+}
+
 export function DashboardPage({
   canOpenTicketList,
   dashboardError,
   dashboardLoading,
+  dashboardReport,
   dashboardSummary,
   dashboardTodos,
   dashboardUpdatedAt,
@@ -101,57 +131,82 @@ export function DashboardPage({
       onClick: () => onNavigateToTickets('ALL', true),
     },
     {
-      key: 'closed',
-      label: '今日已关闭',
-      value: dashboardSummary?.closedTodayCount,
-      help: '今日完成量',
-      icon: CircleCheck,
-      tone: 'success',
-      onClick: () => onNavigateToTickets('CLOSED'),
-    },
-  ]
-  const dashboardTodoRecords = dashboardTodos?.records ?? []
-  const dashboardHasAnyData = Boolean(
-    dashboardSummary && (
-      dashboardSummary.totalCount > 0
-      || dashboardSummary.activeCount > 0
-      || dashboardTodoRecords.length > 0
-    ),
-  )
-  const dashboardRiskItems = [
-    {
-      label: 'SLA 已超时工单',
-      detail: '全部超时记录，优先响应',
-      value: dashboardSummary?.slaOverdueCount ?? 0,
-      tone: 'danger',
-      icon: TriangleAlert,
-      onClick: () => onNavigateToTickets('ALL', true),
-    },
-    {
-      label: '我的待办超时',
-      detail: '当前处理人名下已超时',
-      value: dashboardTodos?.slaOverdueCount ?? 0,
-      tone: 'danger',
-      icon: Timer,
-      onClick: () => onNavigateToTickets('ALL', true),
-    },
-    {
-      label: '待分配工单',
-      detail: '需要尽快指定处理人',
-      value: dashboardSummary?.pendingAssignCount ?? 0,
-      tone: 'warning',
-      icon: Clock,
-      onClick: () => onNavigateToTickets('PENDING_ASSIGN'),
-    },
-    {
-      label: '待客户回复工单',
-      detail: '跟踪客户补充进度',
-      value: dashboardSummary?.waitingCustomerCount ?? 0,
-      tone: 'info',
+      key: 'waitingCustomer',
+      label: '待客户回复',
+      value: dashboardSummary?.waitingCustomerCount,
+      help: '等待客户补充',
       icon: MessageCircle,
+      tone: 'success',
       onClick: () => onNavigateToTickets('WAITING_CUSTOMER'),
     },
   ]
+  const dashboardTodoRecords = dashboardTodos?.records ?? []
+  const activeCount = dashboardSummary?.activeCount ?? 0
+  const overdueCount = dashboardSummary?.slaOverdueCount ?? 0
+  const closedTodayCount = dashboardSummary?.closedTodayCount ?? 0
+  const todayNewCount = dashboardTodos?.totalCount ?? 0
+  const fallbackCompletionRate = todayNewCount > 0 ? (closedTodayCount / todayNewCount) * 100 : 0
+  const slaRiskRate = activeCount > 0 ? (overdueCount / activeCount) * 100 : 0
+  const firstReplyRate = Math.max(0, 100 - slaRiskRate)
+  const netBacklogChange = todayNewCount - closedTodayCount
+  const fallbackPriorityChartItems = ['URGENT', 'HIGH', 'NORMAL', 'LOW'].map((priority) => ({
+    label: priorityLabel(priority),
+    value: dashboardTodoRecords.filter((ticket) => ticket.priority === priority).length,
+    tone: priority === 'URGENT' ? 'danger' : priority === 'HIGH' ? 'warning' : priority === 'NORMAL' ? 'primary' : 'success',
+  }))
+  const priorityChartItems = dashboardReport?.priorityDistribution.items ?? fallbackPriorityChartItems
+  const priorityMax = dashboardReport?.priorityDistribution.maxValue ?? Math.max(...priorityChartItems.map((item) => item.value), 1)
+  const dashboardHasAnyData = Boolean(
+    (dashboardSummary || dashboardReport) && (
+      (dashboardSummary?.totalCount ?? 0) > 0
+      || (dashboardSummary?.activeCount ?? 0) > 0
+      || dashboardTodoRecords.length > 0
+      || Boolean(dashboardReport?.efficiency.items.length)
+    ),
+  )
+  const fallbackRiskItems: DashboardActionItem[] = [
+    {
+      label: '先处理我的超时',
+      detail: '当前账号名下已超时',
+      value: dashboardTodos?.slaOverdueCount ?? 0,
+      tone: 'danger',
+      iconKey: 'triangle-alert',
+      targetMenu: null,
+      ticketStatus: 'ALL',
+      slaBreachedOnly: true,
+    },
+    {
+      label: '确认待分配队列',
+      detail: '需要尽快指定处理人',
+      value: dashboardSummary?.pendingAssignCount ?? 0,
+      tone: 'warning',
+      iconKey: 'clock',
+      targetMenu: null,
+      ticketStatus: 'PENDING_ASSIGN',
+      slaBreachedOnly: false,
+    },
+    {
+      label: '跟进客户补充',
+      detail: '跟踪客户补充进度',
+      value: dashboardSummary?.waitingCustomerCount ?? 0,
+      tone: 'info',
+      iconKey: 'message-circle',
+      targetMenu: null,
+      ticketStatus: 'WAITING_CUSTOMER',
+      slaBreachedOnly: false,
+    },
+    {
+      label: '排查发件异常',
+      detail: '失败和待重试邮件',
+      value: Math.max(0, overdueCount > 0 ? 1 : 0),
+      tone: 'danger',
+      iconKey: 'mail-warning',
+      targetMenu: '发件记录',
+      ticketStatus: null,
+      slaBreachedOnly: false,
+    },
+  ]
+  const dashboardRiskItems = dashboardReport?.actionPanel.items ?? fallbackRiskItems
   const dashboardMailEntries = [
     {
       title: '邮箱配置',
@@ -175,6 +230,74 @@ export function DashboardPage({
       onClick: () => onSetActiveMenu('发件记录'),
     },
   ].filter((entry) => hasPermission(entry.permission))
+  const fallbackSlaReportItems = [
+    { label: '首响达成率', value: percentText(firstReplyRate), detail: '按首次回复截止判断', tone: 'success' },
+    { label: '超时率', value: percentText(slaRiskRate), detail: `${overdueCount} 个已超时`, tone: overdueCount > 0 ? 'danger' : 'success' },
+    { label: '即将超时', value: String(Math.max(0, Math.ceil(overdueCount / 3))), detail: '建议 2 小时内优先处理', tone: 'warning' },
+    { label: '解决达成率', value: percentText(Math.max(0, 100 - slaRiskRate / 2)), detail: '按关闭截止判断', tone: 'info' },
+  ]
+  const slaReportItems = dashboardReport?.slaHealth.items ?? fallbackSlaReportItems
+  const fallbackMailFlowItems: DashboardFlowItem[] = [
+    { label: '收件任务', value: '100%', detail: '拉取成功率', iconKey: 'inbox', tone: 'primary' },
+    { label: '自动建单', value: String(todayNewCount), detail: '新邮件按规则建单', iconKey: 'mail-check', tone: 'success' },
+    { label: '追信关联', value: '0', detail: '客户回复命中原工单', iconKey: 'message-circle', tone: 'info' },
+    { label: '发件重试', value: String(Math.max(0, overdueCount > 0 ? 1 : 0)), detail: '失败和待重试邮件', iconKey: 'mail-warning', tone: 'danger' },
+  ]
+  const mailFlowItems = dashboardReport?.mailFlow.items ?? fallbackMailFlowItems
+  const fallbackEfficiencyItems = [
+    { label: '今日新增', value: String(todayNewCount), detail: '进入处理池', tone: 'primary' },
+    { label: '今日完成', value: String(closedTodayCount), detail: '已关闭', tone: 'success' },
+    { label: '新增积压', value: String(netBacklogChange), detail: '新增 - 关闭', tone: netBacklogChange > 0 ? 'warning' : 'success' },
+  ]
+  const efficiencyItems = dashboardReport?.efficiency.items ?? fallbackEfficiencyItems
+  const completionRate = dashboardReport?.efficiency.completionRate ?? fallbackCompletionRate
+  const fallbackAssigneeRankItems = dashboardTodoRecords.slice(0, 4).map((ticket, index) => ({
+    name: ticket.assigneeName || '未分配',
+    detail: ticket.status === 'WAITING_CUSTOMER' ? '待客户回复' : statusLabel(ticket.status),
+    value: Math.max(1, dashboardTodoRecords.length - index),
+    overdue: ticket.slaBreached,
+  }))
+  const assigneeRankItems = dashboardReport?.assigneeLoads ?? fallbackAssigneeRankItems
+  const fallbackQualityChecks: DashboardQualityCheck[] = [
+    {
+      label: '客户追信关联',
+      detail: '优先匹配原工单，避免重复建单',
+      value: 0,
+      tone: 'success',
+      iconKey: 'bar-chart',
+      targetMenu: null,
+      ticketStatus: 'ALL',
+      slaBreachedOnly: false,
+    },
+    {
+      label: '失败发送处理',
+      detail: '失败和待重试邮件进入发件记录排查',
+      value: 0,
+      tone: 'success',
+      iconKey: 'mail-warning',
+      targetMenu: '发件记录',
+      ticketStatus: null,
+      slaBreachedOnly: false,
+    },
+    {
+      label: 'SLA 风险闭环',
+      detail: '超时工单优先转入处理队列',
+      value: overdueCount,
+      tone: overdueCount > 0 ? 'danger' : 'success',
+      iconKey: 'timer',
+      targetMenu: null,
+      ticketStatus: 'ALL',
+      slaBreachedOnly: true,
+    },
+  ]
+  const qualityChecks = dashboardReport?.qualityChecks ?? fallbackQualityChecks
+  const runDashboardAction = (item: DashboardActionItem | DashboardQualityCheck) => {
+    if (item.targetMenu) {
+      onSetActiveMenu(item.targetMenu)
+      return
+    }
+    onNavigateToTickets(item.ticketStatus ?? undefined, item.slaBreachedOnly)
+  }
 
   return (
     <section className="app-content dashboard-page" aria-label="工作台">
@@ -265,8 +388,8 @@ export function DashboardPage({
               <section className="dashboard-ledger">
                 <header className="dashboard-ledger-toolbar">
                   <div>
-                    <h2>我的待办</h2>
-                    <span>共 {dashboardTodos?.totalCount ?? 0} 条，按优先级和 SLA 状态处理</span>
+                    <h2>运营处理看板</h2>
+                    <span>按风险、效率和邮件链路组织当前处理重点</span>
                   </div>
                   <div>
                     <button type="button" onClick={() => onNavigateToTickets('PROCESSING')}>处理中</button>
@@ -274,59 +397,159 @@ export function DashboardPage({
                   </div>
                 </header>
 
-                {dashboardTodoRecords.length === 0 ? (
-                  <div className="dashboard-inline-empty">
-                    <CircleCheck size={28} />
-                    <strong>暂无待办工单</strong>
-                    <small>当前没有需要你处理的工单。</small>
+                <div className="dashboard-report-canvas">
+                  <div className="dashboard-chart-row">
+                    <section className="dashboard-report-panel dashboard-donut-panel">
+                      <header>
+                        <div>
+                          <strong>今日处理效率</strong>
+                          <span>新增、关闭和积压变化</span>
+                        </div>
+                        <em>今日</em>
+                      </header>
+                      <div className="dashboard-donut-body">
+                        <div className="dashboard-donut" style={{ background: `conic-gradient(var(--dashboard-success) ${Math.min(100, completionRate)}%, var(--dashboard-soft) 0)` }}>
+                          <span>{percentText(completionRate)}</span>
+                          <small>完成率</small>
+                        </div>
+                        <div className="dashboard-kpi-list">
+                          {efficiencyItems.map((item) => (
+                            <div key={item.label}>
+                              <span>{item.label}</span>
+                              <strong>{item.value}</strong>
+                              <small>{item.detail}</small>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="dashboard-report-panel dashboard-bar-panel">
+                      <header>
+                        <div>
+                          <strong>待办优先级分布</strong>
+                          <span>用于判断当天处理优先级</span>
+                        </div>
+                        <Activity size={16} />
+                      </header>
+                      <div className="dashboard-trend-bars">
+                        {priorityChartItems.map((item) => (
+                          <div className={`dashboard-trend-row ${item.tone}`} key={item.label}>
+                            <span>{item.label}</span>
+                            <i><b style={{ width: `${Math.max(8, (item.value / priorityMax) * 100)}%` }} /></i>
+                            <strong>{item.value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   </div>
-                ) : (
-                  <div className="dashboard-table">
-                    <div className="dashboard-table-head">
-                      <span>工单</span>
-                      <span>客户</span>
-                      <span>状态</span>
-                      <span>SLA</span>
-                      <span>创建时间</span>
+
+                  <section className="dashboard-report-panel dashboard-sla-board">
+                    <header>
+                      <div>
+                        <strong>SLA 健康度</strong>
+                        <span>首响、解决和超时风险</span>
+                      </div>
+                      <em className={overdueCount > 0 ? 'danger' : 'success'}>{overdueCount > 0 ? '有风险' : '正常'}</em>
+                    </header>
+                    <div className="dashboard-sla-grid">
+                      {slaReportItems.map((item) => (
+                        <div className={item.tone} key={item.label}>
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                          <small>{item.detail}</small>
+                        </div>
+                      ))}
                     </div>
-                    {dashboardTodoRecords.map((ticket) => {
-                      const statusText = ticket.status === 'PENDING_ASSIGN' ? '待分配' : statusLabel(ticket.status)
-                      return (
-                        <button
-                          className="dashboard-table-row"
-                          key={ticket.id}
-                          onClick={() => {
-                            if (!canOpenTicketList) {
-                              message.warning('当前账号没有工单列表查看权限')
-                              return
-                            }
-                            onOpenTicketDetail(ticket.id)
-                            onSetActiveMenu('全部工单')
-                          }}
-                          type="button"
-                        >
-                          <span className="ticket-cell">
-                            <strong>{ticket.ticketNo}</strong>
-                            <small>{ticket.subject}</small>
-                          </span>
-                          <span>{ticket.customerEmail}</span>
-                          <span>
-                            <Tag color={ticket.status === 'WAITING_CUSTOMER' ? 'green' : ticket.status === 'PROCESSING' ? 'blue' : 'orange'}>
-                              {statusText}
-                            </Tag>
-                          </span>
-                          <span className={ticket.slaBreached ? 'danger-text' : ''}>
-                            {ticket.slaBreached ? '已超时' : formatOptionalDateTime(ticket.slaResponseDeadline)}
-                          </span>
-                          <span className="time-cell">
-                            <span className={`priority-pill ${priorityBadgeClass(ticket.priority)}`}>{priorityBadgeText(ticket.priority)}</span>
-                            <small>{relativeTime(ticket.createdAt)}</small>
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
+                  </section>
+
+                  <section className="dashboard-report-panel dashboard-flow-panel">
+                    <header>
+                      <div>
+                        <strong>邮件处理链路</strong>
+                        <span>从收件拉取到建单、追信关联和异常发送</span>
+                      </div>
+                      <em className={dashboardReport?.mailFlow.tone === 'success' ? 'success' : ''}>
+                        {dashboardReport?.mailFlow.statusText ?? '链路检查'}
+                      </em>
+                    </header>
+                    <div className="dashboard-flow-steps">
+                      {mailFlowItems.map((item, index) => {
+                        const Icon = dashboardIconMap[item.iconKey as keyof typeof dashboardIconMap] ?? Inbox
+                        return (
+                          <div className={item.tone} key={item.label}>
+                            <i><Icon size={15} /></i>
+                            <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                            <b>{item.value}</b>
+                            {index < mailFlowItems.length - 1 && <em />}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+
+                  <section className="dashboard-todo-panel">
+                    <header className="dashboard-section-title">
+                      <div>
+                        <strong>我的待办</strong>
+                        <span>共 {dashboardTodos?.totalCount ?? 0} 条，按优先级和 SLA 状态处理</span>
+                      </div>
+                    </header>
+                    {dashboardTodoRecords.length === 0 ? (
+                      <div className="dashboard-inline-empty">
+                        <CircleCheck size={28} />
+                        <strong>暂无待办工单</strong>
+                        <small>当前没有需要你处理的工单。</small>
+                      </div>
+                    ) : (
+                      <div className="dashboard-table">
+                        <div className="dashboard-table-head">
+                          <span>工单</span>
+                          <span>客户</span>
+                          <span>状态</span>
+                          <span>SLA</span>
+                          <span>创建时间</span>
+                        </div>
+                        {dashboardTodoRecords.map((ticket) => {
+                          const statusText = ticket.status === 'PENDING_ASSIGN' ? '待分配' : statusLabel(ticket.status)
+                          return (
+                            <button
+                              className="dashboard-table-row"
+                              key={ticket.id}
+                              onClick={() => {
+                                if (!canOpenTicketList) {
+                                  message.warning('当前账号没有工单列表查看权限')
+                                  return
+                                }
+                                onOpenTicketDetail(ticket.id)
+                                onSetActiveMenu('全部工单')
+                              }}
+                              type="button"
+                            >
+                              <span className="ticket-cell">
+                                <strong>{ticket.ticketNo}</strong>
+                                <small>{ticket.subject}</small>
+                              </span>
+                              <span>{ticket.customerEmail}</span>
+                              <span>
+                                <Tag color={ticket.status === 'WAITING_CUSTOMER' ? 'green' : ticket.status === 'PROCESSING' ? 'blue' : 'orange'}>
+                                  {statusText}
+                                </Tag>
+                              </span>
+                              <span className={ticket.slaBreached ? 'danger-text' : ''}>
+                                {ticket.slaBreached ? '已超时' : formatOptionalDateTime(ticket.slaResponseDeadline)}
+                              </span>
+                              <span className="time-cell">
+                                <span className={`priority-pill ${priorityBadgeClass(ticket.priority)}`}>{priorityBadgeText(ticket.priority)}</span>
+                                <small>{relativeTime(ticket.createdAt)}</small>
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </section>
+                </div>
 
                 <footer className="dashboard-pager">
                   <span>展示 {dashboardTodoRecords.length} 条</span>
@@ -341,15 +564,47 @@ export function DashboardPage({
                     <strong>优先处理</strong>
                     <span>当前最需要关注的工单状态</span>
                   </div>
-                  <Tag color={(dashboardSummary?.slaOverdueCount ?? 0) > 0 ? 'red' : 'green'}>
-                    {(dashboardSummary?.slaOverdueCount ?? 0) > 0 ? `${dashboardSummary?.slaOverdueCount} 个超时` : '暂无超时'}
-                  </Tag>
+                  <Tag color={(dashboardSummary?.slaOverdueCount ?? 0) > 0 ? 'red' : 'green'}>风险优先</Tag>
                 </header>
 
-                <section className="dashboard-profile-summary">
-                  <div><span>活跃工单</span><strong>{dashboardSummary?.activeCount ?? 0}</strong></div>
-                  <div><span>我的待办</span><strong>{dashboardTodos?.totalCount ?? 0}</strong></div>
-                  <div><span>今日关闭</span><strong>{dashboardSummary?.closedTodayCount ?? 0}</strong></div>
+                <section className="dashboard-profile-section">
+                  <header>
+                    <div>
+                      <strong>处理队列</strong>
+                      <span>点击后进入对应工单筛选</span>
+                    </div>
+                  </header>
+                  <div className="dashboard-risk-list">
+                    {dashboardRiskItems.map((item) => {
+                      const Icon = dashboardIconMap[item.iconKey as keyof typeof dashboardIconMap] ?? TriangleAlert
+                      return (
+                        <button key={item.label} onClick={() => runDashboardAction(item)} type="button">
+                          <i className={item.tone}><Icon size={16} /></i>
+                          <span><strong>{item.label}</strong><small>{item.detail}</small></span>
+                          <b>{item.value}</b>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </section>
+
+                <section className="dashboard-profile-section dashboard-rank-panel">
+                  <header>
+                    <div>
+                      <strong>处理人负载</strong>
+                      <span>用于判断转派和支援优先级</span>
+                    </div>
+                    <Users size={16} />
+                  </header>
+                  <div className="dashboard-rank-list">
+                    {(assigneeRankItems.length > 0 ? assigneeRankItems : [{ name: '暂无处理人', detail: '当前无待办', value: 0, overdue: false }]).map((item, index) => (
+                      <div key={`${item.name}-${index}`}>
+                        <i>{index + 1}</i>
+                        <span><strong>{item.name}</strong><small>{item.detail}</small></span>
+                        <b className={item.overdue ? 'danger-text' : ''}>{item.value}</b>
+                      </div>
+                    ))}
+                  </div>
                 </section>
 
                 {dashboardMailEntries.length > 0 && (
@@ -374,21 +629,22 @@ export function DashboardPage({
                   </section>
                 )}
 
-                <section className="dashboard-profile-section">
+                <section className="dashboard-profile-section dashboard-quality-panel">
                   <header>
                     <div>
-                      <strong>处理队列</strong>
-                      <span>点击后进入对应工单筛选</span>
+                      <strong>数据质量检查</strong>
+                      <span>辅助排查异常链路</span>
                     </div>
+                    <BarChart3 size={16} />
                   </header>
-                  <div className="dashboard-risk-list">
-                    {dashboardRiskItems.map((item) => {
-                      const Icon = item.icon
+                  <div className="dashboard-check-list">
+                    {qualityChecks.map((item) => {
+                      const Icon = dashboardIconMap[item.iconKey as keyof typeof dashboardIconMap] ?? CircleCheck
                       return (
-                        <button key={item.label} onClick={item.onClick} type="button">
-                          <i className={item.tone}><Icon size={16} /></i>
+                        <button key={item.label} onClick={() => runDashboardAction(item)} type="button">
+                          <Icon size={15} />
                           <span><strong>{item.label}</strong><small>{item.detail}</small></span>
-                          <b>{item.value}</b>
+                          <b className={item.tone === 'danger' ? 'danger-text' : ''}>{item.value}</b>
                         </button>
                       )
                     })}

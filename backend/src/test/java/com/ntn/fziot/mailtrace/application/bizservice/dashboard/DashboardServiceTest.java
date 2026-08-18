@@ -7,11 +7,16 @@ import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardReportVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardTodoListResponse;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailFetchLogEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailSendLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailFetchLogMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailSendLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
@@ -46,6 +51,10 @@ class DashboardServiceTest {
     @Mock
     private MailboxMapper mailboxMapper;
     @Mock
+    private MailFetchLogMapper mailFetchLogMapper;
+    @Mock
+    private MailSendLogMapper mailSendLogMapper;
+    @Mock
     private PermissionService permissionService;
     @Spy
     private DataScopeService dataScopeService = new DataScopeService();
@@ -69,6 +78,8 @@ class DashboardServiceTest {
     static void initMybatisPlusTableInfo() {
         MybatisConfiguration configuration = new MybatisConfiguration();
         initTableInfo(configuration, "DashboardServiceTest.TicketEntity", TicketEntity.class);
+        initTableInfo(configuration, "DashboardServiceTest.MailFetchLogEntity", MailFetchLogEntity.class);
+        initTableInfo(configuration, "DashboardServiceTest.MailSendLogEntity", MailSendLogEntity.class);
     }
 
     @Test
@@ -184,6 +195,38 @@ class DashboardServiceTest {
         assertTrue(ex.getMessage().contains("无权查看工作台"));
     }
 
+    @Test
+    void report_shouldReturnDashboardReportFromBackendMetrics() {
+        when(ticketMapper.selectCount(any())).thenReturn(
+                5L, 3L, 10L, 2L, 1L, 4L, 1L, 2L,
+                10L, 1L, 1L, 5L, 1L,
+                1L, 2L, 5L, 0L
+        );
+        when(mailFetchLogMapper.selectList(any())).thenReturn(List.of(
+                fetchLog(true, 8, 5, 2),
+                fetchLog(false, 2, 0, 1)
+        ));
+        when(mailSendLogMapper.selectCount(any())).thenReturn(1L);
+        when(ticketMapper.selectList(any())).thenReturn(List.of(
+                ticket(100L, "PROCESSING"),
+                ticket(101L, "WAITING_CUSTOMER")
+        ));
+        when(userMapper.selectById(2L)).thenReturn(user(2L, "张三"));
+
+        DashboardReportVO report = dashboardService.report(agent);
+
+        assertEquals(60, report.efficiency().completionRate());
+        assertEquals("5", report.efficiency().items().get(0).value());
+        assertEquals("普通", report.priorityDistribution().items().get(2).label());
+        assertEquals(5L, report.priorityDistribution().items().get(2).value());
+        assertEquals("80%", report.slaHealth().items().get(0).value());
+        assertEquals("50%", report.mailFlow().items().get(0).value());
+        assertEquals("5", report.mailFlow().items().get(1).value());
+        assertEquals(1L, report.actionPanel().items().get(3).value());
+        assertEquals("张三", report.assigneeLoads().get(0).name());
+        assertEquals(2L, report.qualityChecks().get(0).value());
+    }
+
     private TicketEntity ticket(Long id, String status) {
         TicketEntity ticket = new TicketEntity();
         ticket.setId(id);
@@ -213,6 +256,15 @@ class DashboardServiceTest {
         mailbox.setId(id);
         mailbox.setMailboxName(mailboxName);
         return mailbox;
+    }
+
+    private MailFetchLogEntity fetchLog(boolean success, int fetchedCount, int createdTicketCount, int linkedCount) {
+        MailFetchLogEntity log = new MailFetchLogEntity();
+        log.setSuccess(success);
+        log.setFetchedCount(fetchedCount);
+        log.setCreatedTicketCount(createdTicketCount);
+        log.setLinkedCount(linkedCount);
+        return log;
     }
 
     private static void initTableInfo(MybatisConfiguration configuration, String namespace, Class<?> entityClass) {

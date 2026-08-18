@@ -1,5 +1,5 @@
 import { requestApi } from '../shared/api/request'
-import type { DashboardSummary, DashboardTodoListResponse } from '../types/dashboard'
+import type { DashboardReport, DashboardSummary, DashboardTodoListResponse } from '../types/dashboard'
 
 export const dashboardApi = {
   summary() {
@@ -8,5 +8,9 @@ export const dashboardApi = {
 
   myTodos(limit = 5) {
     return requestApi<DashboardTodoListResponse>(`/api/v1/dashboard/my-todos?limit=${limit}`)
+  },
+
+  report() {
+    return requestApi<DashboardReport>('/api/v1/dashboard/report')
   },
 }

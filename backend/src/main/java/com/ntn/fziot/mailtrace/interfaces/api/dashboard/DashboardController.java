@@ -4,6 +4,7 @@ import com.ntn.fziot.mailtrace.application.bizservice.dashboard.DashboardService
 import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
+import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardReportVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardTodoListResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -37,5 +38,12 @@ public class DashboardController {
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) Integer limit) {
         return BasicResult.ok(dashboardService.myTodos(principal, limit));
+    }
+
+    @Operation(summary = "工作台运营报表")
+    @GetMapping("/report")
+    @RequirePermission(value = "dashboard:read", message = "无权查看工作台")
+    public BasicResult<DashboardReportVO> report(@AuthenticationPrincipal CurrentUserPrincipal principal) {
+        return BasicResult.ok(dashboardService.report(principal));
     }
 }

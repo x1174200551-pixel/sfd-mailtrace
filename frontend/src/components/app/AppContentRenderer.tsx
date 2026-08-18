@@ -122,6 +122,7 @@ type AppContentModelKey =
   | 'customersLoading'
   | 'dashboardError'
   | 'dashboardLoading'
+  | 'dashboardReport'
   | 'dashboardSummary'
   | 'dashboardTodos'
   | 'dashboardUpdatedAt'
@@ -556,6 +557,7 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             canOpenTicketList={m.canOpenTicketList}
             dashboardError={m.dashboardError}
             dashboardLoading={m.dashboardLoading}
+            dashboardReport={m.dashboardReport}
             dashboardSummary={m.dashboardSummary}
             dashboardTodos={m.dashboardTodos}
             dashboardUpdatedAt={m.dashboardUpdatedAt}

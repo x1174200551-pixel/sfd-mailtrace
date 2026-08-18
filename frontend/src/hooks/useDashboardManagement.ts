@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import { dashboardApi } from '../api/dashboard'
 import { ApiError } from '../shared/api/error-handler'
-import type { DashboardSummary, DashboardTodoListResponse } from '../types/dashboard'
+import type { DashboardReport, DashboardSummary, DashboardTodoListResponse } from '../types/dashboard'
 
 type UseDashboardManagementParams = {
   activeMenu: string
@@ -19,6 +19,7 @@ export function useDashboardManagement({
 }: UseDashboardManagementParams) {
   const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null)
   const [dashboardTodos, setDashboardTodos] = useState<DashboardTodoListResponse | null>(null)
+  const [dashboardReport, setDashboardReport] = useState<DashboardReport | null>(null)
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<string | null>(null)
@@ -28,18 +29,21 @@ export function useDashboardManagement({
     if (!canReadDashboard) {
       setDashboardSummary(null)
       setDashboardTodos(null)
+      setDashboardReport(null)
       setDashboardError('当前账号没有工作台查看权限')
       return
     }
     setDashboardLoading(true)
     setDashboardError('')
     try {
-      const [summary, todos] = await Promise.all([
+      const [summary, todos, report] = await Promise.all([
         dashboardApi.summary(),
         dashboardApi.myTodos(5),
+        dashboardApi.report(),
       ])
       setDashboardSummary(summary)
       setDashboardTodos(todos)
+      setDashboardReport(report)
       setDashboardUpdatedAt(dayjs().format('YYYY-MM-DD HH:mm'))
     } catch (error) {
       if (handleAuthExpired(error)) return
@@ -58,6 +62,7 @@ export function useDashboardManagement({
   return {
     dashboardError,
     dashboardLoading,
+    dashboardReport,
     dashboardSummary,
     dashboardTodos,
     dashboardUpdatedAt,

@@ -469,6 +469,7 @@ function App() {
   const {
     dashboardError,
     dashboardLoading,
+    dashboardReport,
     dashboardSummary,
     dashboardTodos,
     dashboardUpdatedAt,
@@ -828,6 +829,7 @@ function App() {
     customersLoading,
     dashboardError,
     dashboardLoading,
+    dashboardReport,
     dashboardSummary,
     dashboardTodos,
     dashboardUpdatedAt,
