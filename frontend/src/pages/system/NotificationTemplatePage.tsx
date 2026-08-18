@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Bell, Check, Plus, RefreshCw, Search, ShieldCheck } from 'lucide-react'
+import { Bell, Braces, Check, CircleOff, FileText, Plus, RefreshCw, Search, ShieldCheck } from 'lucide-react'
 import { templateSceneLabel } from '../../constants/notification-templates'
 import type {
   NotificationTemplate,
@@ -79,18 +79,22 @@ export function NotificationTemplatePage({
   return (
     <>
       <section className="app-content template-page" aria-label="通知模板">
-        <div className="content-title">
-          <div>
-            <h1>通知模板</h1>
-            <p>维护自动回执、分配通知、处理人回复和 SLA 提醒模板；支持变量插入、预览和保存。</p>
+        <header className="template-topbar">
+          <div className="template-title-block">
+            <h2>通知模板</h2>
+            <span>维护自动回执、分配通知、处理人回复和 SLA 提醒模板</span>
           </div>
-          <div className="content-actions">
+          <div className="template-top-actions">
             <button disabled={templatesLoading} onClick={onFetchTemplates} type="button">
               <RefreshCw size={16} />
               刷新
             </button>
+            <button className="primary-action" onClick={onOpenCreateTemplate} type="button">
+              <Plus size={16} />
+              新建模板
+            </button>
           </div>
-        </div>
+        </header>
 
         {!canReadTemplates ? (
           <div className="permission-state">
@@ -100,26 +104,46 @@ export function NotificationTemplatePage({
           </div>
         ) : (
           <>
-            <div className="user-metrics">
-              <div className="user-metric">
-                <span>模板总数</span>
+            <div className="user-summary-strip template-summary-strip">
+              <div className="user-summary-item active">
+                <span className="user-summary-icon">
+                  <FileText size={17} />
+                </span>
+                <span className="user-summary-copy">
+                  <span>模板总数</span>
+                  <small>按业务场景唯一编码</small>
+                </span>
                 <strong>{templatesData?.summary.totalTemplates ?? '--'}</strong>
-                <small>按业务场景唯一编码</small>
               </div>
-              <div className="user-metric">
-                <span>启用模板</span>
+              <div className="user-summary-item">
+                <span className="user-summary-icon success">
+                  <Check size={17} />
+                </span>
+                <span className="user-summary-copy">
+                  <span>启用模板</span>
+                  <small>可参与自动通知</small>
+                </span>
                 <strong>{templatesData?.summary.enabledTemplates ?? '--'}</strong>
-                <small>可参与自动通知</small>
               </div>
-              <div className="user-metric">
-                <span>停用模板</span>
+              <div className="user-summary-item">
+                <span className="user-summary-icon warning">
+                  <CircleOff size={17} />
+                </span>
+                <span className="user-summary-copy">
+                  <span>停用模板</span>
+                  <small>保留配置但不发送</small>
+                </span>
                 <strong>{templatesData?.summary.disabledTemplates ?? '--'}</strong>
-                <small>保留配置但不发送</small>
               </div>
-              <div className="user-metric">
-                <span>可用变量</span>
+              <div className="user-summary-item">
+                <span className="user-summary-icon info">
+                  <Braces size={17} />
+                </span>
+                <span className="user-summary-copy">
+                  <span>可用变量</span>
+                  <small>工单、客户、处理人信息</small>
+                </span>
                 <strong>{templatesData?.summary.availableVariables ?? '--'}</strong>
-                <small>工单、客户、处理人信息</small>
               </div>
             </div>
 
@@ -129,10 +153,7 @@ export function NotificationTemplatePage({
               <aside className="template-panel template-list-panel">
                 <div className="template-panel__head">
                   <strong>模板列表</strong>
-                  <button className="template-head-action primary" onClick={onOpenCreateTemplate} type="button">
-                    <Plus size={14} />
-                    新建
-                  </button>
+                  <span>{templatesData?.records.length ?? 0} 条</span>
                 </div>
                 <label className="template-search">
                   <Search size={15} />
@@ -244,20 +265,12 @@ export function NotificationTemplatePage({
                     </label>
                     <label className="full">
                       <span>邮件正文</span>
-                      <div className="template-toolbar">
-                        <button type="button">B</button>
-                        <button type="button">I</button>
-                        <button type="button">列表</button>
-                        <button type="button">链接</button>
-                        <button type="button">撤销</button>
-                        <button type="button">重做</button>
-                      </div>
                       <textarea
                         onChange={(event) => onUpdateTemplateForm({ contentTpl: event.target.value })}
                         ref={templateContentRef}
                         value={templateForm.contentTpl}
                       />
-                      <small>第一版可降级为纯文本编辑；工具栏保留交互位，保存时写入正文模板。</small>
+                      <small>正文支持变量占位符，点击右侧变量可插入到光标位置。</small>
                     </label>
                   </div>
                 </div>
@@ -267,12 +280,16 @@ export function NotificationTemplatePage({
                 <section className="template-panel">
                   <div className="template-panel__head">
                     <strong>变量面板</strong>
-                    <span className="template-code-pill">点击插入</span>
+                    <span>{templatesData?.variables.length ?? 0} 个</span>
                   </div>
                   <div className="template-vars">
                     {(templatesData?.variables || []).map((variable) => (
-                      <button key={variable.key} onClick={() => insertVariable(variable.key)} type="button">
-                        <code>{variable.key}</code>
+                      <button
+                        aria-label={`插入变量：${variable.label}`}
+                        key={variable.key}
+                        onClick={() => insertVariable(variable.key)}
+                        type="button"
+                      >
                         <span>{variable.label}</span>
                         <small>示例：{variable.sampleValue}</small>
                       </button>

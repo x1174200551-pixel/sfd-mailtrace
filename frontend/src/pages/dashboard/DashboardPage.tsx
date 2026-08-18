@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Send,
   Settings,
+  Timer,
   TriangleAlert,
 } from 'lucide-react'
 import {
@@ -91,15 +92,6 @@ export function DashboardPage({
       onClick: () => onNavigateToTickets('PROCESSING'),
     },
     {
-      key: 'waiting',
-      label: '待客户回复',
-      value: dashboardSummary?.waitingCustomerCount,
-      help: '等待补充信息',
-      icon: MessageCircle,
-      tone: 'success',
-      onClick: () => onNavigateToTickets('WAITING_CUSTOMER'),
-    },
-    {
       key: 'overdue',
       label: 'SLA 已超时',
       value: dashboardSummary?.slaOverdueCount,
@@ -129,10 +121,18 @@ export function DashboardPage({
   const dashboardRiskItems = [
     {
       label: 'SLA 已超时工单',
-      detail: '筛选全部超时记录',
+      detail: '全部超时记录，优先响应',
       value: dashboardSummary?.slaOverdueCount ?? 0,
       tone: 'danger',
       icon: TriangleAlert,
+      onClick: () => onNavigateToTickets('ALL', true),
+    },
+    {
+      label: '我的待办超时',
+      detail: '当前处理人名下已超时',
+      value: dashboardTodos?.slaOverdueCount ?? 0,
+      tone: 'danger',
+      icon: Timer,
       onClick: () => onNavigateToTickets('ALL', true),
     },
     {
@@ -181,7 +181,7 @@ export function DashboardPage({
       <header className="dashboard-topbar">
         <div className="dashboard-title-block">
           <h1>工作台</h1>
-          <span>工单处理状态、SLA 风险与邮件运行入口</span>
+          <span>聚焦待处理工单、SLA 风险与今日处理状态</span>
         </div>
         <div className="dashboard-top-actions">
           <button type="button" disabled>
@@ -266,7 +266,7 @@ export function DashboardPage({
                 <header className="dashboard-ledger-toolbar">
                   <div>
                     <h2>我的待办</h2>
-                    <span>共 {dashboardTodos?.totalCount ?? 0} 条，优先处理临近或已超时工单</span>
+                    <span>共 {dashboardTodos?.totalCount ?? 0} 条，按优先级和 SLA 状态处理</span>
                   </div>
                   <div>
                     <button type="button" onClick={() => onNavigateToTickets('PROCESSING')}>处理中</button>
@@ -338,8 +338,8 @@ export function DashboardPage({
               <aside className="dashboard-profile">
                 <header className="dashboard-profile-head">
                   <div>
-                    <strong>工单处理概览</strong>
-                    <span>当前账号可见范围</span>
+                    <strong>优先处理</strong>
+                    <span>当前最需要关注的工单状态</span>
                   </div>
                   <Tag color={(dashboardSummary?.slaOverdueCount ?? 0) > 0 ? 'red' : 'green'}>
                     {(dashboardSummary?.slaOverdueCount ?? 0) > 0 ? `${dashboardSummary?.slaOverdueCount} 个超时` : '暂无超时'}
@@ -352,11 +352,33 @@ export function DashboardPage({
                   <div><span>今日关闭</span><strong>{dashboardSummary?.closedTodayCount ?? 0}</strong></div>
                 </section>
 
+                {dashboardMailEntries.length > 0 && (
+                  <section className="dashboard-profile-section dashboard-entry-panel">
+                    <header>
+                      <div>
+                        <strong>常用入口</strong>
+                        <span>邮件运行相关页面</span>
+                      </div>
+                    </header>
+                    <div className="dashboard-entry-actions">
+                      {dashboardMailEntries.map((entry) => {
+                        const Icon = entry.icon
+                        return (
+                          <button key={entry.title} onClick={entry.onClick} type="button">
+                            <Icon size={16} />
+                            <span><strong>{entry.title}</strong><small>{entry.detail}</small></span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
+
                 <section className="dashboard-profile-section">
                   <header>
                     <div>
-                      <strong>SLA 风险</strong>
-                      <span>按风险状态快速进入工单列表</span>
+                      <strong>处理队列</strong>
+                      <span>点击后进入对应工单筛选</span>
                     </div>
                   </header>
                   <div className="dashboard-risk-list">
@@ -372,28 +394,6 @@ export function DashboardPage({
                     })}
                   </div>
                 </section>
-
-                {dashboardMailEntries.length > 0 && (
-                  <section className="dashboard-profile-section">
-                    <header>
-                      <div>
-                        <strong>邮件运行入口</strong>
-                        <span>按当前菜单权限展示</span>
-                      </div>
-                    </header>
-                    <div className="dashboard-entry-list">
-                      {dashboardMailEntries.map((entry) => {
-                        const Icon = entry.icon
-                        return (
-                          <button key={entry.title} onClick={entry.onClick} type="button">
-                            <Icon size={16} />
-                            <span><strong>{entry.title}</strong><small>{entry.detail}</small></span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </section>
-                )}
               </aside>
             </main>
           )}

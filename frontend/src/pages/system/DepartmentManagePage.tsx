@@ -33,12 +33,12 @@ export function DepartmentManagePage({
 
   return (
     <section className="app-content dept-page" aria-label="组织架构管理">
-      <div className="content-title">
-        <div>
-          <h1>组织架构管理</h1>
-          <p>维护部门层级、部门成员、部门负责人，并预览数据权限范围。</p>
+      <header className="dept-topbar">
+        <div className="dept-title-block">
+          <h2>组织架构管理</h2>
+          <span>维护部门层级、部门成员、负责人和数据权限范围</span>
         </div>
-        <div className="content-actions">
+        <div className="dept-top-actions">
           <button disabled={state.orgTreeLoading || state.orgStatsLoading} onClick={actions.refresh} type="button">
             <RefreshCw size={16} />
             刷新
@@ -50,7 +50,7 @@ export function DepartmentManagePage({
             </button>
           )}
         </div>
-      </div>
+      </header>
 
       {state.orgError ? (
         <div className="permission-state">

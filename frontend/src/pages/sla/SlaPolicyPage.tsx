@@ -1,6 +1,6 @@
-import { Alert, Button, Card, Col, Descriptions, Empty, Input, Row, Select, Space, Switch, Table, Tag, Timeline, Typography } from 'antd'
+import { Alert, Button, Empty, Input, Select, Space, Switch, Table, Tag, Timeline, Typography } from 'antd'
 import { DeleteOutlined, SearchOutlined } from '@ant-design/icons'
-import { Plus, RefreshCw, ShieldCheck } from 'lucide-react'
+import { BellRing, CalendarDays, CheckCircle2, Plus, RefreshCw, ShieldCheck, TimerReset } from 'lucide-react'
 import { hoursLabel } from '../../constants/sla-policies'
 import type {
   SlaPolicy,
@@ -99,31 +99,62 @@ export function SlaPolicyPage({
 }: SlaPolicyPageProps) {
   const records = policiesData?.records ?? []
   const summary = policiesData?.summary
+  const selectedCalendarText = selectedWorkCalendar
+    ? `${selectedWorkCalendar.calendarName} / ${workdayLabel(selectedWorkCalendar.workdays)}`
+    : '未选择日历'
+  const summaryItems = [
+    {
+      icon: TimerReset,
+      tone: 'primary',
+      label: '策略总数',
+      value: summary?.totalCount ?? '--',
+      detail: `启用 ${summary?.enabledCount ?? '--'} / 停用 ${summary?.disabledCount ?? '--'}`,
+    },
+    {
+      icon: CheckCircle2,
+      tone: 'success',
+      label: '启用策略',
+      value: summary?.enabledCount ?? '--',
+      detail: '参与后续新工单 SLA 计算',
+    },
+    {
+      icon: BellRing,
+      tone: 'warning',
+      label: '默认策略',
+      value: summary?.defaultCount ?? '--',
+      detail: '默认策略必须保持启用',
+    },
+    {
+      icon: CalendarDays,
+      tone: 'primary',
+      label: '工作日历',
+      value: calendarCount || '--',
+      detail: selectedCalendarText,
+    },
+  ]
 
   return (
     <>
-      <section className="app-content" aria-label="SLA策略">
-        <div className="content-title">
-          <div>
-            <h1>SLA策略</h1>
-            <p>维护首次响应、解决时限、预警阈值和升级阈值，绑定工作日历后按工作时间计算截止时间。</p>
+      <section className="app-content sla-page" aria-label="SLA策略">
+        <header className="sla-topbar">
+          <div className="sla-title-block">
+            <h2>SLA策略</h2>
+            <span>维护首次响应、解决时限、预警阈值和升级阈值</span>
           </div>
-          <div className="content-actions">
-            <button disabled={policiesLoading} onClick={onFetchSlaPolicies} type="button">
-              <RefreshCw size={16} />
+          <div className="sla-top-actions">
+            <Button disabled={policiesLoading} icon={<RefreshCw size={16} />} onClick={onFetchSlaPolicies}>
               刷新
-            </button>
-            <button
-              className="primary-action"
+            </Button>
+            <Button
+              type="primary"
               disabled={!canCreateSlaPolicies}
+              icon={<Plus size={16} />}
               onClick={onOpenCreatePolicy}
-              type="button"
             >
-              <Plus size={16} />
               新建策略
-            </button>
+            </Button>
           </div>
-        </div>
+        </header>
 
         {!canReadSlaPolicies ? (
           <div className="permission-state">
@@ -133,90 +164,71 @@ export function SlaPolicyPage({
           </div>
         ) : (
           <>
-            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-              <Col xs={24} md={12} xl={6}>
-                <Card>
-                  <Typography.Text type="secondary">策略总数</Typography.Text>
-                  <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{summary?.totalCount ?? '--'}</Typography.Title>
-                  <Typography.Text type="secondary">启用 {summary?.enabledCount ?? '--'} 条，停用 {summary?.disabledCount ?? '--'} 条</Typography.Text>
-                </Card>
-              </Col>
-              <Col xs={24} md={12} xl={6}>
-                <Card>
-                  <Typography.Text type="secondary">启用策略</Typography.Text>
-                  <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{summary?.enabledCount ?? '--'}</Typography.Title>
-                  <Typography.Text type="secondary">仅启用策略参与新工单 SLA 计算</Typography.Text>
-                </Card>
-              </Col>
-              <Col xs={24} md={12} xl={6}>
-                <Card>
-                  <Typography.Text type="secondary">默认策略</Typography.Text>
-                  <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{summary?.defaultCount ?? '--'}</Typography.Title>
-                  <Typography.Text type="secondary">默认策略必须启用，不能停用或删除</Typography.Text>
-                </Card>
-              </Col>
-              <Col xs={24} md={12} xl={6}>
-                <Card>
-                  <Typography.Text type="secondary">绑定日历</Typography.Text>
-                  <Typography.Title level={2} style={{ margin: '6px 0 0' }}>{calendarCount || '--'}</Typography.Title>
-                  <Typography.Text type="secondary">策略保存时必须选择工作日历</Typography.Text>
-                </Card>
-              </Col>
-            </Row>
+            <section className="sla-summary-strip" aria-label="SLA策略统计">
+              {summaryItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <div key={item.label} className={`sla-summary-item sla-summary-item--${item.tone}`}>
+                    <span className="sla-summary-icon"><Icon size={17} /></span>
+                    <span className="sla-summary-copy">
+                      <span>{item.label}</span>
+                      <small>{item.detail}</small>
+                    </span>
+                    <strong>{item.value}</strong>
+                  </div>
+                )
+              })}
+            </section>
 
             <Alert
               showIcon
-              type="info"
-              style={{ marginBottom: 16 }}
-              title="默认策略只影响后续新建工单；历史工单已有的响应截止、解决截止不自动重算。"
+              type={policiesError ? 'error' : 'info'}
+              className="sla-inline-alert"
+              message={policiesError || '默认策略只影响后续新建工单；历史工单已有的响应截止、解决截止不自动重算。'}
+              action={policiesError ? <Button size="small" onClick={onFetchSlaPolicies}>重试</Button> : undefined}
             />
 
-            {policiesError && (
-              <Alert
-                showIcon
-                type="error"
-                style={{ marginBottom: 16 }}
-                title={policiesError}
-                action={<Button size="small" onClick={onFetchSlaPolicies}>重试</Button>}
-              />
-            )}
+            <main className="sla-workspace">
+              <section className="sla-panel sla-ledger">
+                <header className="sla-panel-head">
+                  <div>
+                    <h3>策略列表</h3>
+                    <span>按当前筛选展示策略，点击行进入编辑</span>
+                  </div>
+                  <Tag color="blue">{records.length} 条</Tag>
+                </header>
 
-            <Row gutter={[16, 16]}>
-              <Col xs={24} xl={10}>
-                <Card title="策略列表">
-                  <Space wrap style={{ width: '100%', marginBottom: 16 }}>
-                    <Input
-                      allowClear
-                      prefix={<SearchOutlined />}
-                      placeholder="策略名称"
-                      style={{ width: 190 }}
-                      value={keyword}
-                      onChange={(event) => onKeywordChange(event.target.value)}
-                      onPressEnter={() => void onFetchSlaPolicies()}
-                    />
-                    <Select
-                      style={{ width: 126 }}
-                      value={enabledFilter}
-                      onChange={onEnabledFilterChange}
-                      options={[
-                        { value: 'ALL', label: '全部状态' },
-                        { value: 'true', label: '启用' },
-                        { value: 'false', label: '停用' },
-                      ]}
-                    />
-                    <Select
-                      style={{ width: 126 }}
-                      value={defaultFilter}
-                      onChange={onDefaultFilterChange}
-                      options={[
-                        { value: 'ALL', label: '全部策略' },
-                        { value: 'true', label: '默认策略' },
-                        { value: 'false', label: '非默认' },
-                      ]}
-                    />
-                    <Button onClick={onResetFilters}>清空筛选</Button>
-                  </Space>
+                <section className="sla-inline-filters" aria-label="筛选条件">
+                  <Input
+                    allowClear
+                    prefix={<SearchOutlined />}
+                    placeholder="策略名称"
+                    value={keyword}
+                    onChange={(event) => onKeywordChange(event.target.value)}
+                    onPressEnter={() => void onFetchSlaPolicies()}
+                  />
+                  <Select
+                    value={enabledFilter}
+                    onChange={onEnabledFilterChange}
+                    options={[
+                      { value: 'ALL', label: '全部状态' },
+                      { value: 'true', label: '启用' },
+                      { value: 'false', label: '停用' },
+                    ]}
+                  />
+                  <Select
+                    value={defaultFilter}
+                    onChange={onDefaultFilterChange}
+                    options={[
+                      { value: 'ALL', label: '全部策略' },
+                      { value: 'true', label: '默认策略' },
+                      { value: 'false', label: '非默认' },
+                    ]}
+                  />
+                  <Button onClick={onResetFilters}>清空筛选</Button>
+                </section>
 
+                <div className="sla-table-shell">
                   <Table<SlaPolicy>
                     rowKey="id"
                     size="middle"
@@ -225,18 +237,13 @@ export function SlaPolicyPage({
                     pagination={false}
                     locale={{
                       emptyText: (
-                        <Empty
-                          description="还没有 SLA 策略"
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        >
+                        <Empty description="还没有 SLA 策略" image={Empty.PRESENTED_IMAGE_SIMPLE}>
                           <Button type="primary" onClick={onOpenCreatePolicy}>新建策略</Button>
                         </Empty>
                       ),
                     }}
                     rowClassName={(record) => record.id === form.id ? 'ant-table-row-selected' : ''}
-                    onRow={(record) => ({
-                      onClick: () => onSelectPolicy(record),
-                    })}
+                    onRow={(record) => ({ onClick: () => onSelectPolicy(record) })}
                     columns={[
                       {
                         title: '策略',
@@ -251,7 +258,7 @@ export function SlaPolicyPage({
                                 <Tag color={record.enabled ? 'green' : 'default'}>{record.enabled ? '启用' : '停用'}</Tag>
                               </Space>
                               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                绑定日历：{calendar?.calendarName || `#${record.calendarId}`}
+                                绑定日历：{calendar?.calendarName || '未找到日历'}
                                 {calendar ? ` · ${workdayLabel(calendar.workdays)} ${calendar.workStartTime}-${calendar.workEndTime}` : ''}
                               </Typography.Text>
                               <Space wrap size={[4, 4]}>
@@ -288,220 +295,177 @@ export function SlaPolicyPage({
                       },
                     ]}
                   />
-                </Card>
-              </Col>
+                </div>
+              </section>
 
-              <Col xs={24} xl={9}>
-                <Card
-                  title="新建/编辑策略"
-                  extra={
-                    policyDirty
-                      ? <Tag color="orange">有未保存修改</Tag>
-                      : selectedPolicy
-                        ? <Tag color="green">已保存</Tag>
-                        : <Tag>新建草稿</Tag>
-                  }
-                >
-                  <Row gutter={[12, 12]}>
-                    <Col span={24}>
-                      <Typography.Text strong>策略名称</Typography.Text>
-                      <Input
-                        value={form.policyName}
-                        onChange={(event) => onUpdateForm({ policyName: event.target.value })}
-                        placeholder="VIP 客户 2 小时响应"
-                        style={{ marginTop: 8 }}
-                      />
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>policyName，最多 64 字。</Typography.Text>
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Typography.Text strong>启用策略</Typography.Text>
-                      <Select
-                        value={String(form.enabled)}
-                        onChange={(value) => onUpdateForm({ enabled: value === 'true' })}
-                        options={[
-                          { value: 'true', label: '启用' },
-                          { value: 'false', label: '停用' },
-                        ]}
-                        style={{ width: '100%', marginTop: 8 }}
-                      />
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Typography.Text strong>默认策略</Typography.Text>
-                      <Select
-                        value={String(form.defaultPolicy)}
-                        onChange={(value) => onUpdateForm({ defaultPolicy: value === 'true' })}
-                        options={[
-                          { value: 'true', label: '设为默认' },
-                          { value: 'false', label: '非默认' },
-                        ]}
-                        style={{ width: '100%', marginTop: 8 }}
-                      />
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Typography.Text strong>首次响应时限（工作小时）</Typography.Text>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={9999}
-                        value={form.responseHours}
-                        onChange={(event) => onUpdateForm({ responseHours: Number(event.target.value || 1) })}
-                        style={{ marginTop: 8 }}
-                      />
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Typography.Text strong>解决时限（工作小时）</Typography.Text>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={9999}
-                        status={resolveHoursInvalid ? 'error' : undefined}
-                        value={form.resolveHours}
-                        onChange={(event) => onUpdateForm({ resolveHours: event.target.value })}
-                        placeholder="可空"
-                        style={{ marginTop: 8 }}
-                      />
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Typography.Text strong>预警阈值（剩余工作小时）</Typography.Text>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={9999}
-                        status={warningInvalid ? 'error' : undefined}
-                        value={form.warningRemainHours}
-                        onChange={(event) => onUpdateForm({ warningRemainHours: Number(event.target.value || 1) })}
-                        style={{ marginTop: 8 }}
-                      />
-                    </Col>
-                    <Col xs={24} md={12}>
-                      <Typography.Text strong>升级阈值（超时后工作小时）</Typography.Text>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={9999}
-                        value={form.escalateAfterBreachHours}
-                        onChange={(event) => onUpdateForm({ escalateAfterBreachHours: event.target.value })}
-                        placeholder="可空"
-                        style={{ marginTop: 8 }}
-                      />
-                    </Col>
-                    <Col span={24}>
-                      <Typography.Text strong>绑定日历</Typography.Text>
-                      <Select
-                        showSearch
-                        loading={workCalendarsLoading}
-                        value={form.calendarId || undefined}
-                        placeholder="请选择工作日历"
-                        optionFilterProp="label"
-                        options={calendarOptions}
-                        onChange={(value) => onUpdateForm({ calendarId: value })}
-                        style={{ width: '100%', marginTop: 8 }}
-                      />
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>deadline 计算以所选工作日历为准。</Typography.Text>
-                    </Col>
-                    <Col span={24}>
-                      <Alert
-                        type={resolveHoursInvalid || warningInvalid ? 'error' : 'info'}
-                        showIcon
-                        title={resolveHoursInvalid || warningInvalid ? '策略校验未通过' : '策略校验'}
-                        description={
-                          resolveHoursInvalid
-                            ? '解决时限不能小于首次响应时限。'
-                            : warningInvalid
-                              ? '预警阈值必须小于首次响应时限。'
-                              : form.defaultPolicy
-                                ? '默认策略必须保持启用，保存后其他策略会取消默认标记。'
-                                : '保存后配置立即生效，仅影响后续新建工单。'
-                        }
-                      />
-                    </Col>
-                  </Row>
+              <section className="sla-panel sla-editor-panel">
+                <header className="sla-panel-head">
+                  <div>
+                    <h3>策略编辑</h3>
+                    <span>配置截止时间、预警提醒和工作日历</span>
+                  </div>
+                  {policyDirty
+                    ? <Tag color="orange">有未保存修改</Tag>
+                    : selectedPolicy
+                      ? <Tag color="green">已保存</Tag>
+                      : <Tag>新建草稿</Tag>}
+                </header>
 
-                  <Space style={{ marginTop: 16 }} wrap>
-                    <Button onClick={onOpenCreatePolicy}>新建草稿</Button>
-                    <Button
-                      type="primary"
-                      loading={saving}
-                      disabled={
-                        !form.policyName.trim()
-                        || !form.calendarId
-                        || resolveHoursInvalid
-                        || warningInvalid
-                      }
-                      onClick={() => void onSavePolicy()}
-                    >
-                      保存策略
-                    </Button>
-                    <Button
-                      danger
-                      disabled={!selectedPolicy || selectedPolicy.defaultPolicy}
-                      icon={<DeleteOutlined />}
-                      onClick={() => selectedPolicy && onRequestDelete(selectedPolicy)}
-                    >
-                      删除
-                    </Button>
-                  </Space>
-                </Card>
-              </Col>
-
-              <Col xs={24} xl={5}>
-                <Card title="SLA 预览" extra={<Tag color="blue">前端估算</Tag>}>
-                  <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-                    <Descriptions
-                      bordered
-                      column={1}
-                      size="small"
-                      items={[
-                        { key: 'calendar', label: '绑定日历', children: selectedWorkCalendar?.calendarName || '未选择' },
-                        { key: 'timezone', label: '时区', children: selectedWorkCalendar?.timezone || '-' },
-                        { key: 'workdays', label: '工作日', children: workdayLabel(selectedWorkCalendar?.workdays) },
-                        {
-                          key: 'workTime',
-                          label: '工作时段',
-                          children: selectedWorkCalendar ? `${selectedWorkCalendar.workStartTime}-${selectedWorkCalendar.workEndTime}` : '-',
-                        },
+                <div className="sla-form-grid">
+                  <label className="sla-form-wide">
+                    <span>策略名称</span>
+                    <Input value={form.policyName} onChange={(event) => onUpdateForm({ policyName: event.target.value })} placeholder="VIP 客户 2 小时响应" />
+                  </label>
+                  <label>
+                    <span>启用策略</span>
+                    <Select
+                      value={String(form.enabled)}
+                      onChange={(value) => onUpdateForm({ enabled: value === 'true' })}
+                      options={[
+                        { value: 'true', label: '启用' },
+                        { value: 'false', label: '停用' },
                       ]}
                     />
-                    <Descriptions
-                      bordered
-                      column={1}
-                      size="small"
-                      items={[
-                        { key: 'created', label: '建单时间', children: previewBaseTime.format('YYYY-MM-DD HH:mm') },
-                        { key: 'response', label: '首次响应截止', children: preview.responseDeadline.format('YYYY-MM-DD HH:mm') },
-                        {
-                          key: 'resolve',
-                          label: '解决截止',
-                          children: preview.resolveDeadline ? preview.resolveDeadline.format('YYYY-MM-DD HH:mm') : '未配置',
-                        },
+                  </label>
+                  <label>
+                    <span>默认策略</span>
+                    <Select
+                      value={String(form.defaultPolicy)}
+                      onChange={(value) => onUpdateForm({ defaultPolicy: value === 'true' })}
+                      options={[
+                        { value: 'true', label: '设为默认' },
+                        { value: 'false', label: '非默认' },
                       ]}
                     />
-                    <Timeline
-                      items={[
-                        {
-                          color: 'blue',
-                          content: (
-                            <span>新建工单：写入策略 ID 与截止时间</span>
-                          ),
-                        },
-                        {
-                          color: 'orange',
-                          content: (
-                            <span>即将超时：{preview.warningAt.format('YYYY-MM-DD HH:mm')}</span>
-                          ),
-                        },
-                        {
-                          color: 'red',
-                          content: (
-                            <span>升级提醒：{preview.escalateAt ? preview.escalateAt.format('YYYY-MM-DD HH:mm') : '未配置'}</span>
-                          ),
-                        },
-                      ]}
+                  </label>
+                  <label>
+                    <span>首次响应时限</span>
+                    <Input type="number" min={1} max={9999} value={form.responseHours} onChange={(event) => onUpdateForm({ responseHours: Number(event.target.value || 1) })} suffix="工作小时" />
+                  </label>
+                  <label>
+                    <span>解决时限</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={9999}
+                      status={resolveHoursInvalid ? 'error' : undefined}
+                      value={form.resolveHours}
+                      onChange={(event) => onUpdateForm({ resolveHours: event.target.value })}
+                      placeholder="可空"
+                      suffix="工作小时"
                     />
-                  </Space>
-                </Card>
-              </Col>
-            </Row>
+                  </label>
+                  <label>
+                    <span>预警阈值</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={9999}
+                      status={warningInvalid ? 'error' : undefined}
+                      value={form.warningRemainHours}
+                      onChange={(event) => onUpdateForm({ warningRemainHours: Number(event.target.value || 1) })}
+                      suffix="剩余工作小时"
+                    />
+                  </label>
+                  <label>
+                    <span>升级阈值</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={9999}
+                      value={form.escalateAfterBreachHours}
+                      onChange={(event) => onUpdateForm({ escalateAfterBreachHours: event.target.value })}
+                      placeholder="可空"
+                      suffix="超时后工作小时"
+                    />
+                  </label>
+                  <label className="sla-form-wide">
+                    <span>绑定日历</span>
+                    <Select
+                      showSearch
+                      loading={workCalendarsLoading}
+                      value={form.calendarId || undefined}
+                      placeholder="请选择工作日历"
+                      optionFilterProp="label"
+                      options={calendarOptions}
+                      onChange={(value) => onUpdateForm({ calendarId: value })}
+                    />
+                  </label>
+                  <Alert
+                    className="sla-form-wide"
+                    type={resolveHoursInvalid || warningInvalid ? 'error' : 'info'}
+                    showIcon
+                    message={resolveHoursInvalid || warningInvalid ? '策略校验未通过' : '策略校验'}
+                    description={
+                      resolveHoursInvalid
+                        ? '解决时限不能小于首次响应时限。'
+                        : warningInvalid
+                          ? '预警阈值必须小于首次响应时限。'
+                          : form.defaultPolicy
+                            ? '默认策略必须保持启用，保存后其他策略会取消默认标记。'
+                            : '保存后配置立即生效，仅影响后续新建工单。'
+                    }
+                  />
+                </div>
+
+                <footer className="sla-panel-actions">
+                  <Button onClick={onOpenCreatePolicy}>新建草稿</Button>
+                  <Button
+                    type="primary"
+                    loading={saving}
+                    disabled={!form.policyName.trim() || !form.calendarId || resolveHoursInvalid || warningInvalid}
+                    onClick={() => void onSavePolicy()}
+                  >
+                    保存策略
+                  </Button>
+                  <Button danger disabled={!selectedPolicy || selectedPolicy.defaultPolicy} icon={<DeleteOutlined />} onClick={() => selectedPolicy && onRequestDelete(selectedPolicy)}>
+                    删除
+                  </Button>
+                </footer>
+              </section>
+
+              <aside className="sla-panel sla-preview-panel">
+                <header className="sla-panel-head">
+                  <div>
+                    <h3>SLA 预览</h3>
+                    <span>按当前表单配置估算截止时间</span>
+                  </div>
+                  <Tag color="blue">预览</Tag>
+                </header>
+
+                <div className="sla-preview-list">
+                  <div>
+                    <span>绑定日历</span>
+                    <strong>{selectedWorkCalendar?.calendarName || '未选择'}</strong>
+                  </div>
+                  <div>
+                    <span>工作时段</span>
+                    <strong>{selectedWorkCalendar ? `${workdayLabel(selectedWorkCalendar.workdays)} ${selectedWorkCalendar.workStartTime}-${selectedWorkCalendar.workEndTime}` : '-'}</strong>
+                  </div>
+                  <div>
+                    <span>建单时间</span>
+                    <strong>{previewBaseTime.format('YYYY-MM-DD HH:mm')}</strong>
+                  </div>
+                  <div>
+                    <span>首次响应截止</span>
+                    <strong>{preview.responseDeadline.format('YYYY-MM-DD HH:mm')}</strong>
+                  </div>
+                  <div>
+                    <span>解决截止</span>
+                    <strong>{preview.resolveDeadline ? preview.resolveDeadline.format('YYYY-MM-DD HH:mm') : '未配置'}</strong>
+                  </div>
+                </div>
+
+                <Timeline
+                  className="sla-preview-timeline"
+                  items={[
+                    { color: 'blue', content: <span>新建工单：写入策略和截止时间</span> },
+                    { color: 'orange', content: <span>即将超时：{preview.warningAt.format('YYYY-MM-DD HH:mm')}</span> },
+                    { color: 'red', content: <span>升级提醒：{preview.escalateAt ? preview.escalateAt.format('YYYY-MM-DD HH:mm') : '未配置'}</span> },
+                  ]}
+                />
+              </aside>
+            </main>
           </>
         )}
       </section>

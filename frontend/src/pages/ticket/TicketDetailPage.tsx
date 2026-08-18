@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { Button, Alert, Avatar, Card, Descriptions, Empty, Input, Segmented, Space, Tabs, Tag, Timeline } from 'antd'
+import { Alert, Button, Empty, Input, Segmented, Space, Tabs, Tag } from 'antd'
 import {
   ArrowLeftOutlined,
   CloseCircleOutlined,
@@ -13,7 +13,7 @@ import {
   StarTwoTone,
   SwapOutlined,
 } from '@ant-design/icons'
-import { UserPlus } from 'lucide-react'
+import { Clock3, Inbox, MessageCircle, ShieldCheck, TriangleAlert, UserPlus, UserRound } from 'lucide-react'
 import dayjs from 'dayjs'
 import TiptapRichEditor from '../../TiptapRichEditor'
 import {
@@ -84,6 +84,10 @@ function messageDirection(msg: TicketMessage) {
   return msg.direction || msg.messageDirection
 }
 
+function formatDetailDate(value: string | null | undefined) {
+  return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+}
+
 export function TicketDetailPage({
   canClaimCurrentTicket,
   canOperateCurrentTicket,
@@ -120,64 +124,124 @@ export function TicketDetailPage({
   uploadingFile,
 }: TicketDetailPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const inboundCount = detail.messages.filter((msg) => messageDirection(msg) === 'INBOUND').length
+  const outboundCount = detail.messages.filter((msg) => messageDirection(msg) === 'OUTBOUND').length
+  const visibleMessageCount = detail.messages.filter((msg) => messageDirection(msg) !== 'INTERNAL').length
+  const filteredMessages = [...detail.messages]
+    .filter((msg) => {
+      const dir = messageDirection(msg)
+      return msgFilter === 'ALL' ? dir !== 'INTERNAL' : dir === msgFilter
+    })
+    .sort((left, right) => {
+      const leftTime = left.sentAt || left.createdAt
+      const rightTime = right.sentAt || right.createdAt
+      if (!leftTime || !rightTime) return 0
+      return msgSortAsc
+        ? new Date(leftTime).getTime() - new Date(rightTime).getTime()
+        : new Date(rightTime).getTime() - new Date(leftTime).getTime()
+    })
+  const latestEvents = events.slice(0, 4)
+  const responseDeadline = formatDetailDate(detail.slaResponseDeadline)
+  const resolveDeadline = formatDetailDate(detail.slaResolveDeadline)
 
   return (
-    <div className="ticket-detail-page">
-      <div className="detail-topbar">
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBackToList} className="detail-back-btn">
-          返回列表
-        </Button>
-        <h2>工单详情</h2>
-      </div>
+    <section className="app-content ticket-detail-page" aria-label="工单详情">
+      <header className="detail-topbar">
+        <div className="detail-title-block">
+          <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBackToList} className="detail-back-btn">
+            返回列表
+          </Button>
+          <div>
+            <h2>工单详情</h2>
+            <span>{detail.ticketNo}</span>
+          </div>
+        </div>
+        <div className="detail-top-actions">
+          {canClaimCurrentTicket && (
+            <Button type="primary" size="small" icon={<UserPlus size={14} />} loading={claimSending} onClick={onClaimTicket}>
+              领取工单
+            </Button>
+          )}
+          <Button size="small" icon={<SwapOutlined />} disabled={!canOperateCurrentTicket} onClick={onOpenAssign}>转派</Button>
+          <Button size="small" icon={<FlagOutlined />} disabled={!canOperateCurrentTicket} onClick={onOpenPriority}>优先级</Button>
+          <Button size="small" disabled={!canOperateCurrentTicket} onClick={onOpenStatus}>状态</Button>
+          <Button size="small" icon={<CloseCircleOutlined />} disabled={!canOperateCurrentTicket} onClick={onCloseTicket}>关闭</Button>
+          <Button size="small" icon={<EllipsisOutlined />} disabled={!canOperateCurrentTicket}>更多</Button>
+        </div>
+      </header>
+
+      <section className="detail-summary-strip" aria-label="工单概览">
+        <div className="detail-summary-item active">
+          <span className="detail-summary-icon"><Inbox size={17} /></span>
+          <span className="detail-summary-copy">
+            <span>当前状态</span>
+            <small>{statusLabel(detail.status)}</small>
+          </span>
+          <strong>{detail.slaBreached ? '超时' : '正常'}</strong>
+        </div>
+        <div className="detail-summary-item detail-summary-item--info">
+          <span className="detail-summary-icon"><UserRound size={17} /></span>
+          <span className="detail-summary-copy">
+            <span>处理人</span>
+            <small>{detail.assigneeName || '暂未分配'}</small>
+          </span>
+          <strong>{detail.assigneeName ? '已分配' : '待分配'}</strong>
+        </div>
+        <div className="detail-summary-item detail-summary-item--success">
+          <span className="detail-summary-icon"><MessageCircle size={17} /></span>
+          <span className="detail-summary-copy">
+            <span>邮件会话</span>
+            <small>客户 {inboundCount} / 客服 {outboundCount}</small>
+          </span>
+          <strong>{visibleMessageCount}</strong>
+        </div>
+        <div className={`detail-summary-item ${detail.slaBreached ? 'detail-summary-item--danger' : 'detail-summary-item--warning'}`}>
+          <span className="detail-summary-icon">{detail.slaBreached ? <TriangleAlert size={17} /> : <Clock3 size={17} />}</span>
+          <span className="detail-summary-copy">
+            <span>SLA</span>
+            <small>首次响应 {responseDeadline}</small>
+          </span>
+          <strong>{detail.slaBreached ? '已超时' : '监控中'}</strong>
+        </div>
+      </section>
 
       <div className="detail-body">
-        <div className="detail-main">
-          <div className="detail-header-card">
+        <main className="detail-main">
+          <section className="detail-header-card">
             <div className="detail-header-top">
               <div className="detail-header-left">
-                <span className={`priority-pill ${priorityBadgeClass(detail.priority)}`}>
-                  {priorityBadgeText(detail.priority)}
-                </span>
-                <span style={{ fontSize: 14, fontWeight: 500, color: detail.priority === 'URGENT' ? '#dc2626' : detail.priority === 'HIGH' ? '#d97706' : '#6b7280', marginRight: 8 }}>
-                  {priorityLabel(detail.priority)}
-                </span>
-                <StarTwoTone twoToneColor="#f59e0b" style={{ fontSize: 16 }} />
+                <span className={`priority-pill ${priorityBadgeClass(detail.priority)}`}>{priorityBadgeText(detail.priority)}</span>
+                <span className={`detail-priority-text priority-${detail.priority.toLowerCase()}`}>{priorityLabel(detail.priority)}</span>
+                <StarTwoTone twoToneColor="#f59e0b" />
                 <span className="detail-ticket-no">{detail.ticketNo}</span>
-              </div>
-              <div className="detail-header-actions">
-                {canClaimCurrentTicket && (
-                  <Button type="primary" size="small" icon={<UserPlus size={14} />} loading={claimSending} onClick={onClaimTicket}>
-                    领取工单
-                  </Button>
-                )}
-                <Button size="small" icon={<SwapOutlined />} disabled={!canOperateCurrentTicket} onClick={onOpenAssign}>
-                  转派
-                </Button>
-                <Button size="small" icon={<FlagOutlined />} disabled={!canOperateCurrentTicket} onClick={onOpenPriority}>
-                  修改优先级
-                </Button>
-                <Button size="small" disabled={!canOperateCurrentTicket} onClick={onOpenStatus}>
-                  修改状态
-                </Button>
-                <Button size="small" icon={<CloseCircleOutlined />} disabled={!canOperateCurrentTicket} onClick={onCloseTicket}>
-                  关闭工单
-                </Button>
-                <Button size="small" icon={<EllipsisOutlined />} disabled={!canOperateCurrentTicket}>更多</Button>
+                <span className={`ticket-status-tag ${detail.slaBreached ? 'overdue' : detail.status === 'WAITING_CUSTOMER' ? 'waiting' : detail.status === 'CLOSED' ? 'closed' : 'processing'}`}>
+                  {statusLabel(detail.status)}
+                </span>
+                {detail.linkSuspect && <Tag color="warning">疑似断链</Tag>}
               </div>
             </div>
             <h1 className="detail-subject">{detail.subject}</h1>
-            <div className="detail-meta">
-              <span>来源：<b>{detail.mailboxName || '客户邮件'}</b></span>
-              <span>创建时间：<b>{dayjs(detail.createdAt).format('YYYY-MM-DD HH:mm')}</b></span>
-              <span>更新时间：<b>{dayjs(detail.updatedAt).format('YYYY-MM-DD HH:mm')}</b></span>
-              <Tag color={detail.slaBreached ? 'red' : detail.status === 'CLOSED' ? 'default' : 'blue'}>
-                {statusLabel(detail.status)}
-              </Tag>
-              {detail.linkSuspect && <Tag color="warning" style={{ marginLeft: 4 }}>疑似断链</Tag>}
+            <div className="detail-meta-grid">
+              <div>
+                <span>来源邮箱</span>
+                <strong>{detail.mailboxName || '客户邮件'}</strong>
+              </div>
+              <div>
+                <span>客户</span>
+                <strong>{detail.customerEmail}</strong>
+              </div>
+              <div>
+                <span>创建时间</span>
+                <strong>{formatDetailDate(detail.createdAt)}</strong>
+              </div>
+              <div>
+                <span>更新时间</span>
+                <strong>{formatDetailDate(detail.updatedAt)}</strong>
+              </div>
             </div>
-          </div>
+          </section>
 
-          <div className="detail-content-card">
+          <section className="detail-content-card">
             <Tabs
               activeKey={tab}
               onChange={onTabChange}
@@ -186,103 +250,84 @@ export function TicketDetailPage({
                   key: 'mail',
                   label: '邮件会话',
                   children: (
-                    <div className="detail-mail-conversation">
+                    <div className="detail-tab-scroll detail-mail-conversation">
                       {detail.messages.length > 0 && (
                         <div className="msg-filter-bar">
-                          <div className="msg-filter-left">
-                            <Segmented
-                              size="small"
-                              value={msgFilter}
-                              onChange={(value) => onMsgFilterChange(String(value))}
-                              options={[
-                                { label: `全部邮件 (${detail.messages.filter((msg) => messageDirection(msg) !== 'INTERNAL').length})`, value: 'ALL' },
-                                { label: `客户 (${detail.messages.filter((msg) => messageDirection(msg) === 'INBOUND').length})`, value: 'INBOUND' },
-                                { label: `客服 (${detail.messages.filter((msg) => messageDirection(msg) === 'OUTBOUND').length})`, value: 'OUTBOUND' },
-                              ]}
-                            />
-                          </div>
-                          <div className="msg-filter-right" onClick={() => onMsgSortAscChange(!msgSortAsc)}>
-                            <span>排序：</span>
-                            <span style={{ fontWeight: 500, color: '#1f2937', cursor: 'pointer' }}>
-                              {msgSortAsc ? '时间升序' : '时间降序'}
-                              <span style={{ marginLeft: 4, fontSize: 11, color: '#9ca3af' }}>
-                                {msgSortAsc ? '↑' : '↓'}
-                              </span>
-                            </span>
-                          </div>
+                          <Segmented
+                            size="small"
+                            value={msgFilter}
+                            onChange={(value) => onMsgFilterChange(String(value))}
+                            options={[
+                              { label: `全部邮件 (${visibleMessageCount})`, value: 'ALL' },
+                              { label: `客户 (${inboundCount})`, value: 'INBOUND' },
+                              { label: `客服 (${outboundCount})`, value: 'OUTBOUND' },
+                            ]}
+                          />
+                          <button className="msg-sort-button" onClick={() => onMsgSortAscChange(!msgSortAsc)} type="button">
+                            <span>排序</span>
+                            <strong>{msgSortAsc ? '时间升序' : '时间降序'}</strong>
+                          </button>
                         </div>
                       )}
 
                       {detail.messages.length === 0 ? (
-                        <Empty description="暂无邮件消息" style={{ padding: '40px 0' }} />
+                        <div className="detail-empty-block"><Empty description="暂无邮件消息" /></div>
                       ) : (
-                        [...detail.messages]
-                          .filter((msg) => {
-                            const dir = messageDirection(msg)
-                            return msgFilter === 'ALL' ? dir !== 'INTERNAL' : dir === msgFilter
-                          })
-                          .sort((left, right) => {
-                            const leftTime = left.sentAt || left.createdAt
-                            const rightTime = right.sentAt || right.createdAt
-                            if (!leftTime || !rightTime) return 0
-                            return msgSortAsc
-                              ? new Date(leftTime).getTime() - new Date(rightTime).getTime()
-                              : new Date(rightTime).getTime() - new Date(leftTime).getTime()
-                          })
-                          .map((msg) => {
-                            const dir = messageDirection(msg)
-                            const isAgent = dir === 'OUTBOUND'
-                            const isAuto = false
-                            const displayName = msg.displayName || (msg.fromAddress ? msg.fromAddress.split('@')[0] : '')
-                            const firstChar = displayName ? displayName[0].toUpperCase() : isAuto ? 'S' : 'C'
-                            const msgAttachments = ticketAttachments.filter((attachment) => attachment.messageId === msg.id)
+                        filteredMessages.map((msg) => {
+                          const dir = messageDirection(msg)
+                          const isAgent = dir === 'OUTBOUND'
+                          const isAuto = dir === 'INTERNAL'
+                          const displayName = msg.displayName || (msg.fromAddress ? msg.fromAddress.split('@')[0] : '')
+                          const firstChar = displayName ? displayName[0].toUpperCase() : isAuto ? 'S' : 'C'
+                          const msgAttachments = ticketAttachments.filter((attachment) => attachment.messageId === msg.id)
 
-                            return (
-                              <div key={msg.id} className={`msg-card ${isAuto ? 'msg-system' : isAgent ? 'msg-agent' : 'msg-customer'}`}>
-                                <div className="msg-avatar">
-                                  <div className={`msg-avatar-circle ${isAuto ? 'avatar-system' : isAgent ? 'avatar-agent' : 'avatar-customer'}`}>
-                                    {firstChar}
-                                  </div>
-                                </div>
-                                <div className="msg-content">
-                                  <div className="msg-header">
-                                    <div className="msg-header-left">
-                                      <span className="msg-from">{msg.fromAddress || '系统'}</span>
-                                      <span className={`msg-badge ${isAuto ? 'badge-system' : isAgent ? 'badge-agent' : 'badge-customer'}`}>
-                                        {isAuto ? '系统' : isAgent ? '客服' : '客户'}
-                                      </span>
-                                    </div>
-                                    <span className="msg-time">{msg.sentAt ? dayjs(msg.sentAt).format('YYYY-MM-DD HH:mm') : ''}</span>
-                                  </div>
-                                  {msg.toAddress && <div className="msg-to">收件人：{msg.toAddress}</div>}
-                                  <div className="msg-body">{msgBodyText(msg)}</div>
-                                  {msgAttachments.length > 0 && (
-                                    <div className="msg-attachments">
-                                      {msgAttachments.map((attachment) => (
-                                        <div key={attachment.id} className="msg-attachment-item">
-                                          <span className="msg-attachment-icon">📎</span>
-                                          <a href={attachment.downloadUrl || undefined} target="_blank" rel="noopener noreferrer" className="msg-attachment-link">
-                                            {attachment.fileName}
-                                          </a>
-                                          <span className="msg-attachment-size">({formatFileSize(attachment.fileSize)})</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
+                          return (
+                            <article key={msg.id} className={`msg-card ${isAuto ? 'msg-system' : isAgent ? 'msg-agent' : 'msg-customer'}`}>
+                              <div className={`msg-avatar-circle ${isAuto ? 'avatar-system' : isAgent ? 'avatar-agent' : 'avatar-customer'}`}>
+                                {firstChar}
                               </div>
-                            )
-                          })
+                              <div className="msg-content">
+                                <header className="msg-header">
+                                  <div className="msg-header-left">
+                                    <span className="msg-from">{msg.fromAddress || '系统'}</span>
+                                    <span className={`msg-badge ${isAuto ? 'badge-system' : isAgent ? 'badge-agent' : 'badge-customer'}`}>
+                                      {isAuto ? '系统' : isAgent ? '客服' : '客户'}
+                                    </span>
+                                  </div>
+                                  <span className="msg-time">{formatDetailDate(msg.sentAt || msg.createdAt)}</span>
+                                </header>
+                                {msg.toAddress && <div className="msg-to">收件人：{msg.toAddress}</div>}
+                                <div className="msg-body">{msgBodyText(msg)}</div>
+                                {msgAttachments.length > 0 && (
+                                  <div className="msg-attachments">
+                                    {msgAttachments.map((attachment) => (
+                                      <div key={attachment.id} className="msg-attachment-item">
+                                        <PaperClipOutlined />
+                                        <a href={attachment.downloadUrl || undefined} target="_blank" rel="noopener noreferrer" className="msg-attachment-link">
+                                          {attachment.fileName}
+                                        </a>
+                                        <span className="msg-attachment-size">({formatFileSize(attachment.fileSize)})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </article>
+                          )
+                        })
                       )}
 
-                      <div className="detail-editor">
-                        <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2937', marginBottom: 8 }}>回复客户</div>
+                      <section className="detail-editor">
+                        <header className="detail-editor-head">
+                          <strong>回复客户</strong>
+                          <span>{canOperateCurrentTicket ? '将通过邮件发送给客户' : '当前不可回复'}</span>
+                        </header>
                         {!canOperateCurrentTicket && !isCurrentTicketTerminal && (
                           <Alert
                             type="info"
                             showIcon
                             title={isCurrentTicketUnassigned ? '领取后即可处理该工单' : '当前账号不可操作该工单'}
-                            style={{ marginBottom: 10 }}
+                            className="detail-editor-alert"
                           />
                         )}
                         <TiptapRichEditor
@@ -291,10 +336,10 @@ export function TicketDetailPage({
                           onUpdate={onReplyUpdate}
                         />
                         {uploadedFiles.length > 0 && (
-                          <div style={{ margin: '6px 0', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                          <div className="uploaded-file-list">
                             {uploadedFiles.map((file) => (
-                              <Tag key={file.objectKey} closable onClose={() => onRemoveUploadedFile(file.objectKey)} style={{ fontSize: 12, margin: 0 }}>
-                                📎 {file.fileName} ({formatFileSize(file.fileSize)})
+                              <Tag key={file.objectKey} closable onClose={() => onRemoveUploadedFile(file.objectKey)}>
+                                <PaperClipOutlined /> {file.fileName} ({formatFileSize(file.fileSize)})
                               </Tag>
                             ))}
                           </div>
@@ -304,7 +349,7 @@ export function TicketDetailPage({
                             <input
                               type="file"
                               ref={fileInputRef}
-                              style={{ display: 'none' }}
+                              className="detail-file-input"
                               onChange={(event) => {
                                 const file = event.target.files?.[0]
                                 if (file) {
@@ -313,13 +358,7 @@ export function TicketDetailPage({
                                 }
                               }}
                             />
-                            <Button
-                              type="text"
-                              icon={<PaperClipOutlined />}
-                              loading={uploadingFile}
-                              disabled={!canOperateCurrentTicket}
-                              onClick={() => fileInputRef.current?.click()}
-                            >
+                            <Button type="text" icon={<PaperClipOutlined />} loading={uploadingFile} disabled={!canOperateCurrentTicket} onClick={() => fileInputRef.current?.click()}>
                               添加附件
                             </Button>
                             <Button type="text" icon={<FileTextOutlined />} disabled>插入模板</Button>
@@ -337,7 +376,7 @@ export function TicketDetailPage({
                             </Button>
                           </Space>
                         </div>
-                      </div>
+                      </section>
                     </div>
                   ),
                 },
@@ -345,64 +384,54 @@ export function TicketDetailPage({
                   key: 'log',
                   label: '工单日志',
                   children: events.length > 0 ? (
-                    <Timeline
-                      items={events.map((event) => ({
-                        color: 'blue',
-                        content: (
+                    <div className="detail-tab-scroll detail-event-list">
+                      {events.map((event) => (
+                        <div className="detail-event-item" key={event.id}>
+                          <i />
                           <div>
-                            <div style={{ fontWeight: 500, color: '#1f2937' }}>{event.eventContent}</div>
-                            <div style={{ fontSize: 12, color: '#9ca3af' }}>{event.operator} · {dayjs(event.eventAt).format('YYYY-MM-DD HH:mm')}</div>
+                            <strong>{event.eventContent}</strong>
+                            <span>{event.operator} · {formatDetailDate(event.eventAt)}</span>
                           </div>
-                        ),
-                      }))}
-                    />
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <Empty description="暂无工单日志" style={{ padding: '40px 0' }} />
+                    <div className="detail-empty-block"><Empty description="暂无工单日志" /></div>
                   ),
                 },
                 {
                   key: 'customer',
                   label: '客户信息',
                   children: (
-                    <Descriptions column={1} size="small" style={{ padding: '16px 0' }}>
-                      <Descriptions.Item label="客户邮箱">{detail.customerEmail}</Descriptions.Item>
-                      <Descriptions.Item label="来源邮箱">{detail.mailboxName || `#${detail.mailboxId}`}</Descriptions.Item>
-                    </Descriptions>
+                    <div className="detail-tab-scroll detail-info-list">
+                      <div><span>客户邮箱</span><strong>{detail.customerEmail}</strong></div>
+                      <div><span>来源邮箱</span><strong>{detail.mailboxName || `#${detail.mailboxId}`}</strong></div>
+                    </div>
                   ),
                 },
                 {
                   key: 'sla',
                   label: 'SLA',
                   children: (
-                    <Descriptions column={1} size="small" style={{ padding: '16px 0' }}>
-                      <Descriptions.Item label="SLA状态">
-                        <Tag color={detail.slaBreached ? 'red' : 'green'}>
-                          {detail.slaBreached ? '已超时' : '正常'}
-                        </Tag>
-                      </Descriptions.Item>
-                      <Descriptions.Item label="首次响应截止">
-                        {detail.slaResponseDeadline ? dayjs(detail.slaResponseDeadline).format('YYYY-MM-DD HH:mm') : '-'}
-                      </Descriptions.Item>
-                      <Descriptions.Item label="解决截止">
-                        {detail.slaResolveDeadline ? dayjs(detail.slaResolveDeadline).format('YYYY-MM-DD HH:mm') : '-'}
-                      </Descriptions.Item>
-                    </Descriptions>
+                    <div className="detail-tab-scroll detail-info-list">
+                      <div><span>SLA 状态</span><strong className={detail.slaBreached ? 'danger' : 'success'}>{detail.slaBreached ? '已超时' : '正常'}</strong></div>
+                      <div><span>首次响应截止</span><strong>{responseDeadline}</strong></div>
+                      <div><span>解决截止</span><strong>{resolveDeadline}</strong></div>
+                    </div>
                   ),
                 },
                 {
                   key: 'attachment',
                   label: `附件 (${ticketAttachments.length})`,
                   children: (
-                    <div className="detail-attachments">
+                    <div className="detail-tab-scroll detail-attachments">
                       {ticketAttachments.length === 0 ? (
-                        <Empty description="暂无附件" style={{ padding: '40px 0' }} />
+                        <div className="detail-empty-block"><Empty description="暂无附件" /></div>
                       ) : (
                         <div className="attachment-grid">
                           {ticketAttachments.map((attachment) => (
                             <div key={attachment.id} className="attachment-card">
-                              <div className="attachment-icon">
-                                {attachment.contentType?.startsWith('image/') ? '🖼' : '📄'}
-                              </div>
+                              <div className="attachment-icon"><FileTextOutlined /></div>
                               <div className="attachment-info">
                                 <div className="attachment-name" title={attachment.fileName}>{attachment.fileName}</div>
                                 <div className="attachment-meta">
@@ -432,79 +461,96 @@ export function TicketDetailPage({
                 },
               ]}
             />
-          </div>
-        </div>
+          </section>
+        </main>
 
         <aside className="detail-sidebar">
-          <Card size="small" title="工单信息">
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="负责人">
-                <Space>
-                  {detail.assigneeName ? <Avatar size="small" style={{ backgroundColor: '#10b981' }}>{detail.assigneeName[0]}</Avatar> : null}
+          <section className="detail-side-card">
+            <header>
+              <div>
+                <strong>工单信息</strong>
+                <span>处理上下文</span>
+              </div>
+            </header>
+            <div className="detail-side-list">
+              <div>
+                <span>负责人</span>
+                <strong>
+                  {detail.assigneeName ? <i className="detail-assignee-avatar">{detail.assigneeName[0]}</i> : null}
                   {detail.assigneeName || '未分配'}
-                </Space>
-              </Descriptions.Item>
-              <Descriptions.Item label="客户">{detail.customerEmail}</Descriptions.Item>
-              <Descriptions.Item label="优先级">{priorityLabel(detail.priority)}</Descriptions.Item>
-              <Descriptions.Item label="状态">{statusLabel(detail.status)}</Descriptions.Item>
-              <Descriptions.Item label="来源">{detail.mailboxName || '客户邮件'}</Descriptions.Item>
-              <Descriptions.Item label="备注">
-                <Input.TextArea
-                  rows={2}
-                  size="small"
-                  value={remarkDraft}
-                  onChange={(event) => setRemarkDraft(event.target.value)}
-                  disabled={!canOperateCurrentTicket}
-                  placeholder="点击添加备注..."
-                  style={{ fontSize: 12 }}
-                  onBlur={(event) => {
-                    if (!canOperateCurrentTicket) return
-                    const value = event.target.value.trim()
-                    if (value !== (detail.remark || '')) onSaveRemark(value)
-                  }}
-                />
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
+                </strong>
+              </div>
+              <div><span>客户</span><strong>{detail.customerEmail}</strong></div>
+              <div><span>优先级</span><strong>{priorityLabel(detail.priority)}</strong></div>
+              <div><span>状态</span><strong>{statusLabel(detail.status)}</strong></div>
+              <div><span>来源</span><strong>{detail.mailboxName || '客户邮件'}</strong></div>
+            </div>
+          </section>
 
-          <Card
-            size="small"
-            title="SLA 信息"
-            extra={(
-              <Tag color={detail.slaBreached ? 'red' : 'green'}>
-                {detail.slaBreached ? '已超时' : '正常'}
-              </Tag>
-            )}
-          >
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label="首次响应截止">
-                {detail.slaResponseDeadline ? dayjs(detail.slaResponseDeadline).format('YYYY-MM-DD HH:mm') : '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="解决截止">
-                {detail.slaResolveDeadline ? dayjs(detail.slaResolveDeadline).format('YYYY-MM-DD HH:mm') : '-'}
-              </Descriptions.Item>
-            </Descriptions>
-          </Card>
+          <section className="detail-side-card">
+            <header>
+              <div>
+                <strong>备注</strong>
+                <span>{canOperateCurrentTicket ? '失焦后自动保存' : '只读'}</span>
+              </div>
+            </header>
+            <Input.TextArea
+              rows={3}
+              size="small"
+              value={remarkDraft}
+              onChange={(event) => setRemarkDraft(event.target.value)}
+              disabled={!canOperateCurrentTicket}
+              placeholder="点击添加备注..."
+              className="detail-remark-input"
+              onBlur={(event) => {
+                if (!canOperateCurrentTicket) return
+                const value = event.target.value.trim()
+                if (value !== (detail.remark || '')) onSaveRemark(value)
+              }}
+            />
+          </section>
 
-          <Card size="small" title="工单生命周期">
-            {events.length > 0 ? (
-              <Timeline
-                items={events.map((event) => ({
-                  color: 'blue',
-                  content: (
-                    <div>
-                      <div style={{ fontWeight: 500, color: '#1f2937', fontSize: 13 }}>{event.eventContent}</div>
-                      <div style={{ fontSize: 11, color: '#9ca3af' }}>{dayjs(event.eventAt).format('YYYY-MM-DD HH:mm')}</div>
-                    </div>
-                  ),
-                }))}
-              />
+          <section className="detail-side-card">
+            <header>
+              <div>
+                <strong>SLA 信息</strong>
+                <span>{detail.slaBreached ? '已超时' : '监控中'}</span>
+              </div>
+              <Tag color={detail.slaBreached ? 'red' : 'green'}>{detail.slaBreached ? '已超时' : '正常'}</Tag>
+            </header>
+            <div className="detail-side-list">
+              <div><span>首次响应截止</span><strong>{responseDeadline}</strong></div>
+              <div><span>解决截止</span><strong>{resolveDeadline}</strong></div>
+              <div><span>首次回复</span><strong>{formatDetailDate(detail.firstReplyAt)}</strong></div>
+              <div><span>关闭时间</span><strong>{formatDetailDate(detail.closedAt)}</strong></div>
+            </div>
+          </section>
+
+          <section className="detail-side-card">
+            <header>
+              <div>
+                <strong>生命周期</strong>
+                <span>最近 {latestEvents.length} 条</span>
+              </div>
+            </header>
+            {latestEvents.length > 0 ? (
+              <div className="detail-mini-events">
+                {latestEvents.map((event) => (
+                  <div key={event.id}>
+                    <i />
+                    <span>
+                      <strong>{event.eventContent}</strong>
+                      <small>{formatDetailDate(event.eventAt)}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <Empty description="暂无记录" />
+              <div className="detail-empty-note"><ShieldCheck size={18} />暂无记录</div>
             )}
-          </Card>
+          </section>
         </aside>
       </div>
-    </div>
+    </section>
   )
 }

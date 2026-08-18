@@ -1,6 +1,16 @@
 import { Alert, Button, Empty, Input, Pagination, Select, Tag, Typography } from 'antd'
-import { ReloadOutlined } from '@ant-design/icons'
-import { CircleCheck, Layers, Loader, MessageCircle, TriangleAlert, UserPlus } from 'lucide-react'
+import {
+  CircleCheck,
+  Clock3,
+  Inbox,
+  Layers,
+  Loader,
+  MessageCircle,
+  RefreshCw,
+  Search,
+  TriangleAlert,
+  UserPlus,
+} from 'lucide-react'
 import {
   priorityBadgeClass,
   priorityBadgeText,
@@ -40,6 +50,10 @@ function relativeTicketTime(value: string) {
   return `${Math.floor(hours / 24)} 天前`
 }
 
+function formatOptionalDateTime(value: string | null) {
+  return value ? value.replace('T', ' ').slice(0, 16) : '-'
+}
+
 function ticketStatusClass(ticket: TicketSummary) {
   if (ticket.status === 'WAITING_CUSTOMER') return 'waiting'
   if (ticket.status === 'CLOSED') return 'closed'
@@ -67,166 +81,102 @@ export function TicketListPage({
   ticketsError,
 }: TicketListPageProps) {
   const total = ticketsData?.total ?? stats?.totalCount ?? 0
+  const currentRecords = ticketsData?.records ?? []
   const statusOptions = [
-    { key: 'ALL', label: '全部' },
-    { key: 'PENDING_ASSIGN', label: '待分配' },
-    { key: 'PROCESSING', label: '处理中' },
-    { key: 'WAITING_CUSTOMER', label: '待客户回复' },
-    { key: 'CLOSED', label: '已关闭' },
-  ]
-  const priorityOptions = [
-    { key: 'URGENT', label: '紧急', className: 'p1', badge: 'P1' },
-    { key: 'HIGH', label: '高', className: 'p2', badge: 'P2' },
-    { key: 'NORMAL', label: '普通', className: 'p3', badge: 'P3' },
+    { key: 'ALL', label: '全部', value: ticketsData?.total ?? stats?.totalCount ?? 0 },
+    { key: 'PENDING_ASSIGN', label: '待分配', value: stats?.pendingAssignCount ?? '-' },
+    { key: 'PROCESSING', label: '处理中', value: stats?.processingCount ?? '-' },
+    { key: 'WAITING_CUSTOMER', label: '待客户回复', value: stats?.waitingCustomerCount ?? '-' },
+    { key: 'CLOSED', label: '已关闭', value: '-' },
   ]
   const statsTabs = [
-    { label: '全部工单', value: stats?.totalCount ?? ticketsData?.total ?? 0, Icon: Layers, iconClass: 'total' },
-    { label: '待分配', value: stats?.pendingAssignCount ?? '-', Icon: UserPlus, iconClass: 'pending' },
-    { label: '处理中', value: stats?.processingCount ?? '-', Icon: Loader, iconClass: 'processing' },
-    { label: '待客户回复', value: stats?.waitingCustomerCount ?? '-', Icon: MessageCircle, iconClass: 'waiting' },
-    { label: '已超时', value: stats?.slaOverdueCount ?? '-', Icon: TriangleAlert, iconClass: 'sla-overdue' },
-    { label: '今日已关闭', value: stats?.closedTodayCount ?? '-', Icon: CircleCheck, iconClass: 'closed' },
+    { key: 'ALL', label: '全部工单', value: stats?.totalCount ?? ticketsData?.total ?? 0, Icon: Layers, tone: 'primary', onClick: () => onStatusChange('ALL') },
+    { key: 'PENDING_ASSIGN', label: '待分配', value: stats?.pendingAssignCount ?? '-', Icon: UserPlus, tone: 'warning', onClick: () => onStatusChange('PENDING_ASSIGN') },
+    { key: 'PROCESSING', label: '处理中', value: stats?.processingCount ?? '-', Icon: Loader, tone: 'info', onClick: () => onStatusChange('PROCESSING') },
+    { key: 'WAITING_CUSTOMER', label: '待客户回复', value: stats?.waitingCustomerCount ?? '-', Icon: MessageCircle, tone: 'success', onClick: () => onStatusChange('WAITING_CUSTOMER') },
+    { key: 'SLA_OVERDUE', label: 'SLA 已超时', value: stats?.slaOverdueCount ?? '-', Icon: TriangleAlert, tone: 'danger', onClick: onSelectSlaBreached },
+    { key: 'CLOSED_TODAY', label: '今日已关闭', value: stats?.closedTodayCount ?? '-', Icon: CircleCheck, tone: 'success', onClick: () => onStatusChange('CLOSED') },
   ]
+  const pageQualityStats = [
+    { key: 'link', label: '疑似断链', value: currentRecords.filter((ticket) => ticket.linkSuspect).length, detail: '需要核对邮件关联' },
+    { key: 'unassigned', label: '未分配', value: currentRecords.filter((ticket) => !ticket.assigneeName).length, detail: '可能影响响应时效' },
+    { key: 'unreplied', label: '未回复', value: currentRecords.filter((ticket) => !ticket.hasReplied).length, detail: '还没有人工回复记录' },
+  ]
+  const warningRecords = currentRecords
+    .filter((ticket) => ticket.slaBreached || ticket.priority === 'URGENT' || !ticket.assigneeName || ticket.linkSuspect)
+    .slice(0, 4)
+  const actionSuggestions = [
+    {
+      key: 'overdue',
+      title: (stats?.slaOverdueCount ?? 0) > 0 ? '先处理 SLA 已超时工单' : '当前没有超时工单',
+      detail: (stats?.slaOverdueCount ?? 0) > 0 ? '建议优先进入超时视图，避免继续扩大风险。' : '可以继续关注处理中和待客户回复工单。',
+      tone: (stats?.slaOverdueCount ?? 0) > 0 ? 'danger' : 'success',
+    },
+    {
+      key: 'pending',
+      title: (stats?.pendingAssignCount ?? 0) > 0 ? '待分配工单需要指定处理人' : '待分配队列为空',
+      detail: (stats?.pendingAssignCount ?? 0) > 0 ? '分配后才能进入明确责任人的处理链路。' : '当前分配链路暂时正常。',
+      tone: (stats?.pendingAssignCount ?? 0) > 0 ? 'warning' : 'success',
+    },
+    {
+      key: 'waiting',
+      title: (stats?.waitingCustomerCount ?? 0) > 0 ? '待客户回复工单可做跟进' : '暂无待客户回复压力',
+      detail: (stats?.waitingCustomerCount ?? 0) > 0 ? '可根据等待时间决定是否补发提醒。' : '客户等待队列较轻。',
+      tone: 'info',
+    },
+  ]
+  const activeFilterText = slaBreachedOnly
+    ? 'SLA 已超时'
+    : statusOptions.find((item) => item.key === statusTab)?.label ?? '全部'
 
   return (
-    <div className="tickets-page">
-      <div className="tickets-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <h2>全部工单</h2>
-            <div className="tickets-header-sub">
-              当前筛选共 {total} 个工单，统计卡片展示当前权限范围口径
-              {!isAdmin ? '；当前仅显示自己负责和未分配工单' : ''}
-            </div>
-          </div>
-          <div className="tickets-header-actions">
-            <Button icon={<ReloadOutlined />} onClick={onRefresh} loading={loading}>刷新</Button>
-            <Button>导出</Button>
-          </div>
+    <section className="app-content tickets-page" aria-label="全部工单">
+      <header className="tickets-topbar">
+        <div className="tickets-title-block">
+          <h2>全部工单</h2>
+          <span>
+            当前筛选共 {total} 个工单
+            {!isAdmin ? '，当前账号仅查看授权范围内数据' : '，统计为当前权限范围口径'}
+          </span>
         </div>
-
-        <div className="tickets-stat-tabs">
-          {statsTabs.map(({ Icon, iconClass, label, value }) => (
-            <div key={label} className="tickets-stat-tab">
-              <div className="stat-tab-info">
-                <div className="label">{label}</div>
-                <div className="value">{value}</div>
-              </div>
-              <div className={`stat-tab-icon ${iconClass}`}>
-                <Icon size={16} />
-              </div>
-            </div>
-          ))}
+        <div className="tickets-top-actions">
+          <Button icon={<RefreshCw size={15} />} onClick={onRefresh} loading={loading}>刷新</Button>
         </div>
-      </div>
+      </header>
 
-      <div className="tickets-body">
-        <div className="tickets-filter">
-          <Input.Search
-            allowClear
-            placeholder="搜索工单号、主题、客户..."
-            size="small"
-            value={keyword}
-            onChange={(event) => onKeywordChange(event.target.value)}
-            onSearch={onSearch}
-            style={{ marginBottom: 16 }}
-          />
+      <section className="tickets-summary-strip" aria-label="工单统计">
+        {statsTabs.map(({ Icon, key, label, onClick, tone, value }) => {
+          const active = key === 'SLA_OVERDUE' ? slaBreachedOnly : statusTab === key && !slaBreachedOnly
+          return (
+            <button
+              className={`tickets-summary-item tickets-summary-item--${tone} ${active ? 'active' : ''}`}
+              key={key}
+              onClick={onClick}
+              type="button"
+            >
+              <span className="tickets-summary-icon"><Icon size={17} /></span>
+              <span className="tickets-summary-copy">
+                <span>{label}</span>
+                <small>{key === 'SLA_OVERDUE' ? '点击筛选超时' : '点击筛选状态'}</small>
+              </span>
+              <strong>{value}</strong>
+            </button>
+          )
+        })}
+      </section>
 
-          <div style={{ marginBottom: 20 }}>
-            <div className="tickets-filter-title">我的视图</div>
-            {[
-              { icon: '★', label: '我的待处理', count: stats?.processingCount ?? 0, color: '#f59e0b' },
-              { icon: '◎', label: '我关注的', count: '-', color: '#9ca3af' },
-              { icon: '◷', label: '最近更新', count: '-', color: '#9ca3af' },
-            ].map((item) => (
-              <div key={item.label} className="tickets-filter-item">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: item.color, fontSize: 12 }}>{item.icon}</span>
-                  <span style={{ fontWeight: item.label === '我的待处理' ? 500 : 400 }}>{item.label}</span>
-                </div>
-                <span className="count">{item.count}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div className="tickets-filter-title">工单状态</div>
-            {statusOptions.map((item) => {
-              const active = statusTab === item.key && !slaBreachedOnly
-              return (
-                <div key={item.key} className={`tickets-filter-item ${active ? 'active' : ''}`} onClick={() => onStatusChange(item.key)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span
-                      style={{
-                        width: 14,
-                        height: 14,
-                        borderRadius: 3,
-                        border: active ? '2px solid #2563eb' : '2px solid #d1d5db',
-                        background: active ? '#2563eb' : 'transparent',
-                        display: 'inline-block',
-                      }}
-                    />
-                    <span>{item.label}</span>
-                  </div>
-                  <span className="count">
-                    {item.key === 'ALL' ? ticketsData?.total ?? '-' : ticketsData?.records?.filter((ticket) => ticket.status === item.key).length ?? '-'}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div className="tickets-filter-title">优先级</div>
-            {priorityOptions.map((priority) => (
-              <div key={priority.key} className="tickets-filter-item">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 14, height: 14, borderRadius: 3, border: '2px solid #d1d5db', display: 'inline-block' }} />
-                  <span className={`priority-pill ${priority.className}`}>{priority.badge}</span>
-                  <span>{priority.label}</span>
-                </div>
-                <span className="count">{ticketsData?.records?.filter((ticket) => ticket.priority === priority.key).length ?? '-'}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div className="tickets-filter-title">SLA状态</div>
-            {[
-              { label: '即将超时', color: '#f59e0b', count: '-', active: false, onClick: undefined },
-              { label: '已超时', color: '#ef4444', count: stats?.slaOverdueCount ?? '-', active: slaBreachedOnly, onClick: onSelectSlaBreached },
-              { label: '正常', color: '#10b981', count: '-', active: false, onClick: undefined },
-            ].map((item) => (
-              <div key={item.label} className={`tickets-filter-item ${item.active ? 'active' : ''}`} onClick={item.onClick}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: item.color, display: 'inline-block' }} />
-                  <span>{item.label}</span>
-                </div>
-                <span className="count">{item.count}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginBottom: 20 }}>
-            <div className="tickets-filter-title">负责人</div>
-            <div style={{ position: 'relative', marginBottom: 8 }}>
-              <Input.Search placeholder="搜索负责人" size="small" />
+      <main className="tickets-workspace">
+        <section className="tickets-ledger">
+          <header className="tickets-ledger-toolbar">
+            <div>
+              <h3>工单列表</h3>
+              <span>当前视图：{activeFilterText}</span>
             </div>
-          </div>
-
-          {ticketsError && <Alert title={ticketsError} type="error" showIcon style={{ marginBottom: 12 }} />}
-          <Button block size="small" onClick={onClearFilters}>清空筛选</Button>
-        </div>
-
-        <div className="tickets-list-panel">
-          <div className="tickets-list-head">
-            <div className="sort-label">
-              <span>排序：</span>
+            <div>
               <Select
                 size="small"
-                variant="borderless"
                 defaultValue="newest"
-                style={{ width: 110 }}
+                style={{ width: 116 }}
                 options={[
                   { value: 'newest', label: '最新更新' },
                   { value: 'priority', label: '优先级' },
@@ -234,49 +184,99 @@ export function TicketListPage({
                 ]}
               />
             </div>
-            <div>{ticketsData && <span style={{ fontSize: 12, color: '#9ca3af' }}>共 {ticketsData.total} 条</span>}</div>
+          </header>
+
+          <section className="tickets-inline-filters" aria-label="筛选条件">
+            <label className="tickets-search-box">
+              <Search size={14} />
+              <Input.Search
+                allowClear
+                bordered={false}
+                placeholder="搜索工单号、主题、客户"
+                size="small"
+                value={keyword}
+                onChange={(event) => onKeywordChange(event.target.value)}
+                onSearch={onSearch}
+              />
+            </label>
+
+            <div className="tickets-filter-chips" aria-label="工单状态">
+              {statusOptions.map((item) => {
+                const active = statusTab === item.key && !slaBreachedOnly
+                return (
+                  <button
+                    className={active ? 'active' : ''}
+                    key={item.key}
+                    onClick={() => onStatusChange(item.key)}
+                    type="button"
+                  >
+                    <span>{item.label}</span>
+                    <b>{item.value}</b>
+                  </button>
+                )
+              })}
+              <button className={slaBreachedOnly ? 'active danger' : ''} onClick={onSelectSlaBreached} type="button">
+                <span>SLA 已超时</span>
+                <b>{stats?.slaOverdueCount ?? '-'}</b>
+              </button>
+            </div>
+
+            <button className="tickets-reset-filter" type="button" onClick={onClearFilters}>重置</button>
+          </section>
+
+          <div className="tickets-table-shell">
+            {ticketsError && <Alert title={ticketsError} type="error" showIcon className="tickets-inline-alert" />}
+
+            <div className="tickets-table">
+              <div className="tickets-table-head">
+                <span>工单</span>
+                <span>客户</span>
+                <span>处理人</span>
+                <span>状态</span>
+                <span>SLA</span>
+                <span>创建时间</span>
+              </div>
+
+              {loading && !ticketsData ? (
+                <div className="tickets-table-state"><Typography.Text type="secondary">加载中...</Typography.Text></div>
+              ) : !ticketsData || currentRecords.length === 0 ? (
+                <div className="tickets-table-state"><Empty description="暂无工单" /></div>
+              ) : (
+                currentRecords.map((ticket) => (
+                  <button key={ticket.id} className="tickets-table-row" onClick={() => onOpenDetail(ticket.id)} type="button">
+                    <span className="ticket-main-cell">
+                      <span className={`priority-pill ${priorityBadgeClass(ticket.priority)}`}>{priorityBadgeText(ticket.priority)}</span>
+                      <span>
+                        <strong>{ticket.ticketNo}</strong>
+                        <small>{ticket.subject}</small>
+                      </span>
+                      {ticket.linkSuspect && <Tag color="warning">疑似断链</Tag>}
+                    </span>
+                    <span className="ticket-muted-cell">
+                      <strong>{ticket.customerEmail}</strong>
+                      <small>{ticket.mailboxName || '客户邮件'}</small>
+                    </span>
+                    <span>
+                      {ticket.assigneeName ? (
+                        <span className="ticket-assignee"><i>{ticket.assigneeName[0]}</i>{ticket.assigneeName}</span>
+                      ) : (
+                        <span className="ticket-unassigned">未分配</span>
+                      )}
+                    </span>
+                    <span><span className={`ticket-status-tag ${ticketStatusClass(ticket)}`}>{statusLabel(ticket.status)}</span></span>
+                    <span className={ticket.slaBreached ? 'ticket-sla-overdue' : 'ticket-sla-ok'}>
+                      {ticket.slaBreached ? '已超时' : formatOptionalDateTime(ticket.slaResponseDeadline)}
+                    </span>
+                    <span className="ticket-time-cell">{relativeTicketTime(ticket.createdAt)}</span>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
 
-          <div className="tickets-list-body">
-            {loading && !ticketsData ? (
-              <div style={{ padding: 60, textAlign: 'center' }}><Typography.Text type="secondary">加载中...</Typography.Text></div>
-            ) : !ticketsData || ticketsData.records.length === 0 ? (
-              <div style={{ padding: 60, textAlign: 'center' }}><Empty description="暂无工单" /></div>
-            ) : (
-              ticketsData.records.map((ticket) => (
-                <div key={ticket.id} className="ticket-row" onClick={() => onOpenDetail(ticket.id)}>
-                  <div style={{ flexShrink: 0, marginRight: 12, paddingTop: 2 }}>
-                    <span className={`priority-pill ${priorityBadgeClass(ticket.priority)}`}>{priorityBadgeText(ticket.priority)}</span>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                      <span className="ticket-no">{ticket.ticketNo}</span>
-                      <span className="ticket-subject">{ticket.subject}</span>
-                      {ticket.linkSuspect && <Tag color="warning" style={{ fontSize: 11, lineHeight: '18px', height: 20 }}>疑似断链</Tag>}
-                    </div>
-                    <div className="ticket-customer" style={{ marginBottom: 4 }}>{ticket.customerEmail}</div>
-                    <div><span className="ticket-source-tag">{ticket.mailboxName || '客户邮件'}</span></div>
-                  </div>
-                  <div style={{ flexShrink: 0, marginLeft: 12, textAlign: 'right' }}>
-                    <div className="ticket-time">{relativeTicketTime(ticket.createdAt)}</div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div className={ticket.slaBreached ? 'ticket-sla-overdue' : 'ticket-sla-ok'} style={{ marginBottom: 4 }}>
-                        {ticket.slaBreached ? 'SLA已超时' : 'SLA正常'}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end' }}>
-                        {ticket.assigneeName && <div className="assignee-avatar">{ticket.assigneeName[0]}</div>}
-                        {!ticket.assigneeName && <span style={{ fontSize: 12, color: '#9ca3af' }}>未分配</span>}
-                        <span className={`ticket-status-tag ${ticketStatusClass(ticket)}`}>{statusLabel(ticket.status)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {ticketsData && ticketsData.records.length > 0 && (
-            <div className="tickets-list-foot">
+          {ticketsData && currentRecords.length > 0 && (
+            <footer className="tickets-pager">
+              <span>展示 {currentRecords.length} 条</span>
               <Pagination
                 current={page}
                 pageSize={pageSize}
@@ -287,10 +287,98 @@ export function TicketListPage({
                 onChange={onPageChange}
                 size="small"
               />
-            </div>
+            </footer>
           )}
-        </div>
-      </div>
-    </div>
+        </section>
+
+        <aside className="tickets-profile">
+          <header className="tickets-profile-head">
+            <div>
+              <strong>处理辅助</strong>
+              <span>基于当前列表给出可执行信息</span>
+            </div>
+            <Tag color={slaBreachedOnly ? 'red' : 'blue'}>{activeFilterText}</Tag>
+          </header>
+
+          <section className="tickets-profile-section">
+            <header>
+              <div>
+                <strong>当前页预警</strong>
+                <span>从当前列表中自动挑出高风险项</span>
+              </div>
+            </header>
+            {warningRecords.length > 0 ? (
+              <div className="tickets-warning-list">
+                {warningRecords.map((ticket) => (
+                  <button key={ticket.id} onClick={() => onOpenDetail(ticket.id)} type="button">
+                    <i className={ticket.slaBreached ? 'danger' : ticket.priority === 'URGENT' ? 'warning' : 'info'}>
+                      {ticket.slaBreached ? <TriangleAlert size={16} /> : !ticket.assigneeName ? <UserPlus size={16} /> : <Inbox size={16} />}
+                    </i>
+                    <span>
+                      <strong>{ticket.ticketNo}</strong>
+                      <small>{ticket.slaBreached ? 'SLA 已超时' : !ticket.assigneeName ? '未分配处理人' : ticket.linkSuspect ? '疑似断链' : '紧急优先级'}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="tickets-empty-note">当前页没有明显风险项。</div>
+            )}
+          </section>
+
+          <section className="tickets-profile-section">
+            <header>
+              <div>
+                <strong>数据质量</strong>
+                <span>基于当前页列表检查</span>
+              </div>
+            </header>
+            <div className="tickets-quality-grid">
+              {pageQualityStats.map((item) => (
+                <div key={item.key}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small>{item.detail}</small>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="tickets-profile-section">
+            <header>
+              <div>
+                <strong>处理建议</strong>
+                <span>基于全局统计判断</span>
+              </div>
+            </header>
+            <div className="tickets-suggestion-list">
+              {actionSuggestions.map((item) => (
+                <div className={item.tone} key={item.key}>
+                  <strong>{item.title}</strong>
+                  <span>{item.detail}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="tickets-profile-section">
+            <header>
+              <div>
+                <strong>数据范围</strong>
+                <span>由当前账号权限决定</span>
+              </div>
+            </header>
+            <div className="tickets-scope-note">
+              <Inbox size={16} />
+              <span>{isAdmin ? '管理员可查看当前权限范围内全部工单。' : '非管理员仅查看授权范围内工单。'}</span>
+            </div>
+            <div className="tickets-scope-note">
+              <Clock3 size={16} />
+              <span>列表按当前接口返回结果展示，排序控件仅作为视图选择。</span>
+            </div>
+          </section>
+        </aside>
+      </main>
+    </section>
   )
 }

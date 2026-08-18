@@ -116,12 +116,12 @@ export function UserManagePage({
   return (
     <>
       <section className="app-content user-page" aria-label="用户管理">
-        <div className="content-title">
-          <div>
-            <h1>用户管理</h1>
-            <p>维护后台账号、角色和启停状态；菜单、按钮和数据范围由权限清单统一生效。</p>
+        <header className="user-topbar">
+          <div className="user-title-block">
+            <h2>用户管理</h2>
+            <span>维护后台账号、角色、主部门和启停状态</span>
           </div>
-          <div className="content-actions">
+          <div className="user-top-actions">
             <button disabled={usersLoading} onClick={onFetchUsers} type="button">
               <RefreshCw size={16} />
               刷新
@@ -131,7 +131,7 @@ export function UserManagePage({
               新建用户
             </button>
           </div>
-        </div>
+        </header>
 
         {!canReadUsers ? (
           <div className="permission-state">
@@ -141,55 +141,40 @@ export function UserManagePage({
           </div>
         ) : (
           <>
-            <div className="user-metrics">
-              <div className="user-metric">
-                <span>用户总数</span>
+            <section className="user-summary-strip" aria-label="用户统计">
+              <div className="user-summary-item active">
+                <span className="user-summary-icon"><Users size={17} /></span>
+                <span className="user-summary-copy">
+                  <span>用户总数</span>
+                  <small>后台账号总量</small>
+                </span>
                 <strong>{usersData?.summary.totalUsers ?? '--'}</strong>
-                <small>后台账号总量</small>
               </div>
-              <div className="user-metric">
-                <span>管理员</span>
+              <div className="user-summary-item">
+                <span className="user-summary-icon success"><ShieldCheck size={17} /></span>
+                <span className="user-summary-copy">
+                  <span>管理员</span>
+                  <small>全部菜单和数据范围</small>
+                </span>
                 <strong>{usersData?.summary.adminUsers ?? '--'}</strong>
-                <small>全部菜单和数据范围</small>
               </div>
-              <div className="user-metric">
-                <span>处理人</span>
+              <div className="user-summary-item">
+                <span className="user-summary-icon info"><Check size={17} /></span>
+                <span className="user-summary-copy">
+                  <span>处理人</span>
+                  <small>自己负责和未分配池</small>
+                </span>
                 <strong>{usersData?.summary.agentUsers ?? '--'}</strong>
-                <small>自己负责和未分配池</small>
               </div>
-              <div className="user-metric">
-                <span>权限项</span>
+              <div className="user-summary-item">
+                <span className="user-summary-icon warning"><LockKeyhole size={17} /></span>
+                <span className="user-summary-copy">
+                  <span>权限项</span>
+                  <small>当前内置权限清单</small>
+                </span>
                 <strong>{rolesPermissionTotal ?? roleProfiles.ADMIN.permissionCount}</strong>
-                <small>当前内置权限清单</small>
               </div>
-            </div>
-
-            <div className="role-overview">
-              {roleOptions.slice(0, 4).map((role) => {
-                const profile = getRoleProfile(role.value)
-                return (
-                  <div className={role.value === 'ADMIN' ? 'role-card admin' : 'role-card'} key={role.value}>
-                    <div className="role-card__head">
-                      <span className={role.value === 'ADMIN' ? 'role-pill admin' : 'role-pill'}>
-                        {profile.title}
-                      </span>
-                      <strong>{profile.permissionCount} 项权限</strong>
-                    </div>
-                    <p>{profile.subtitle}</p>
-                    <dl>
-                      <div>
-                        <dt>菜单范围</dt>
-                        <dd>{profile.menuScope}</dd>
-                      </div>
-                      <div>
-                        <dt>数据范围</dt>
-                        <dd>{profile.dataScope}</dd>
-                      </div>
-                    </dl>
-                  </div>
-                )
-              })}
-            </div>
+            </section>
 
             <div className="user-toolbar">
               <label className="user-search">

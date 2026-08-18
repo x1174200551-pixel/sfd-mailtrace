@@ -25,7 +25,7 @@ export function useTicketManagement({
   const [ticketSlaBreachedOnly, setTicketSlaBreachedOnly] = useState(false)
   const [ticketKeyword, setTicketKeyword] = useState('')
   const [ticketPage, setTicketPage] = useState(1)
-  const [ticketPageSize] = useState(20)
+  const [ticketPageSize] = useState(10)
   const [ticketsData, setTicketsData] = useState<TicketPageResponse | null>(null)
   const [ticketsLoading, setTicketsLoading] = useState(false)
   const [ticketsError, setTicketsError] = useState('')

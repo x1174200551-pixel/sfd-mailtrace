@@ -147,12 +147,12 @@ export function RoleManagePage({
 
   return (
     <section className="app-content role-management-page" aria-label="角色管理">
-      <div className="content-title">
-        <div>
-          <h1>角色管理</h1>
-          <p>创建业务角色，配置菜单权限、操作权限和默认数据范围；用户分配入口仍在用户管理。</p>
+      <header className="role-topbar">
+        <div className="role-title-block">
+          <h2>角色管理</h2>
+          <span>配置菜单权限、操作权限和默认数据范围</span>
         </div>
-        <div className="content-actions">
+        <div className="role-top-actions">
           <button disabled={rolesLoading} onClick={onFetchRoles} type="button">
             <RefreshCw size={16} />
             刷新
@@ -162,7 +162,7 @@ export function RoleManagePage({
             新建角色
           </button>
         </div>
-      </div>
+      </header>
 
       {!canReadRoles ? (
         <div className="permission-state">
@@ -172,28 +172,40 @@ export function RoleManagePage({
         </div>
       ) : (
         <>
-          <div className="user-metrics">
-            <div className="user-metric">
-              <span>角色总数</span>
+          <section className="user-summary-strip role-summary-strip" aria-label="角色统计">
+            <div className="user-summary-item active">
+              <span className="user-summary-icon"><UserCog size={17} /></span>
+              <span className="user-summary-copy">
+                <span>角色总数</span>
+                <small>{rolesData ? `${rolesData.systemCount} 个内置，${rolesData.customCount} 个自定义` : '后台角色总量'}</small>
+              </span>
               <strong>{rolesData?.total ?? '--'}</strong>
-              <small>{rolesData ? `${rolesData.systemCount} 个内置，${rolesData.customCount} 个自定义` : '后台角色总量'}</small>
             </div>
-            <div className="user-metric">
-              <span>启用角色</span>
+            <div className="user-summary-item">
+              <span className="user-summary-icon success"><Check size={17} /></span>
+              <span className="user-summary-copy">
+                <span>启用角色</span>
+                <small>可被分配给用户</small>
+              </span>
               <strong>{rolesData?.enabledCount ?? '--'}</strong>
-              <small>可被分配给用户</small>
             </div>
-            <div className="user-metric">
-              <span>权限项</span>
+            <div className="user-summary-item">
+              <span className="user-summary-icon warning"><ShieldCheck size={17} /></span>
+              <span className="user-summary-copy">
+                <span>权限项</span>
+                <small>菜单与操作统一清单</small>
+              </span>
               <strong>{(rolesData?.permissionTotal ?? flatPermissionNodes.length) || '--'}</strong>
-              <small>菜单与操作统一清单</small>
             </div>
-            <div className="user-metric">
-              <span>关联用户</span>
+            <div className="user-summary-item">
+              <span className="user-summary-icon info"><UserCog size={17} /></span>
+              <span className="user-summary-copy">
+                <span>关联用户</span>
+                <small>当前已分配角色用户</small>
+              </span>
               <strong>{rolesData?.userTotal ?? '--'}</strong>
-              <small>当前已分配角色用户</small>
             </div>
-          </div>
+          </section>
 
           <div className="role-management-grid">
             <section className="role-list-panel">
@@ -292,10 +304,6 @@ export function RoleManagePage({
                 </div>
               </div>
 
-              <div className="role-protect-note">
-                当前阶段只开放自定义角色配置；管理员、客服处理人等内置角色可查看，不允许删除或改成不可用。
-              </div>
-
               <div className="role-editor-form">
                 <label>
                   <span>角色名称</span>
@@ -338,7 +346,7 @@ export function RoleManagePage({
 
               <div className="role-section-title">
                 <strong>默认数据范围</strong>
-                <span>当前阶段不支持指定邮箱和客户标签</span>
+                <span>配置角色默认可见范围</span>
               </div>
               <div className="role-scope-grid">
                 {dataScopeResources.map((resourceType) => {

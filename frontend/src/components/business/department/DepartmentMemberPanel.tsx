@@ -120,7 +120,7 @@ export function DepartmentMemberPanel({
       <div className="org-card-head">
         <div>
           <div className="org-card-title"><Folder size={16} /> {selectedDeptNode?.deptName || '部门成员'}</div>
-          <p>{selectedDeptNode ? selectedDeptNode.deptName : '请选择部门'}</p>
+          <p>{selectedDeptNode ? `直属成员 ${selectedDeptNode.memberCount} 人` : '请选择部门'}</p>
         </div>
         {selectedDeptNode && (
           <div className="org-actions">

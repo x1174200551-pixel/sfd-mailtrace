@@ -1,4 +1,4 @@
-import { Check, RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { Bell, CalendarDays, Check, Hash, MailCheck, RefreshCw, Save, Settings, ShieldCheck, TriangleAlert } from 'lucide-react'
 import type { SystemGroup, SystemGroupKey, TicketNumberRule, TicketRuleFormState } from '../../types/system-config'
 
 type TicketNumberRulePageProps = {
@@ -45,13 +45,13 @@ export function TicketNumberRulePage({
   ticketRuleSaving,
 }: TicketNumberRulePageProps) {
   return (
-    <section className="app-content system-page" aria-label="编号规则配置">
-      <div className="content-title">
-        <div>
-          <h1>编号规则配置</h1>
-          <p>维护业务可理解的工单号生成规则；系统技术参数由管理员或运维在后台维护。</p>
+    <section className="app-content system-page ticket-number-rule-page" aria-label="编号规则配置">
+      <header className="system-topbar">
+        <div className="system-title-block">
+          <h2>编号规则配置</h2>
+          <span>维护工单号生成规则，保存后仅影响后续新建工单</span>
         </div>
-        <div className="content-actions">
+        <div className="system-top-actions">
           <button disabled={ticketRuleLoading} onClick={onFetchTicketRule} type="button">
             <RefreshCw size={16} />
             刷新
@@ -62,11 +62,11 @@ export function TicketNumberRulePage({
             onClick={onRequestSave}
             type="button"
           >
-            <Check size={16} />
+            <Save size={16} />
             保存修改
           </button>
         </div>
-      </div>
+      </header>
 
       {!canReadTicketNumberRule ? (
         <div className="permission-state">
@@ -76,45 +76,46 @@ export function TicketNumberRulePage({
         </div>
       ) : (
         <>
-          <div className="user-metrics">
-            <div className="user-metric">
-              <span>规则数量</span>
+          <section className="user-summary-strip system-summary-strip" aria-label="编号规则统计">
+            <div className="user-summary-item active">
+              <span className="user-summary-icon"><Hash size={17} /></span>
+              <span className="user-summary-copy">
+                <span>规则数量</span>
+                <small>当前启用工单编号规则</small>
+              </span>
               <strong>{ticketRule ? 1 : '--'}</strong>
-              <small>当前启用工单编号规则</small>
             </div>
-            <div className="user-metric">
-              <span>编号规则</span>
+            <div className="user-summary-item">
+              <span className="user-summary-icon success"><Check size={17} /></span>
+              <span className="user-summary-copy">
+                <span>启用状态</span>
+                <small>当前前缀 {ticketRuleForm.prefix || '--'}</small>
+              </span>
               <strong>{ticketRuleForm.enabled ? 1 : 0}</strong>
-              <small>当前前缀 {ticketRuleForm.prefix || '--'}</small>
             </div>
-            <div className="user-metric">
-              <span>未保存变更</span>
+            <div className="user-summary-item">
+              <span className="user-summary-icon warning"><Settings size={17} /></span>
+              <span className="user-summary-copy">
+                <span>未保存变更</span>
+                <small>{ticketRuleDirty ? '规则待确认' : '暂无待保存内容'}</small>
+              </span>
               <strong>{ticketRuleDirty ? 1 : 0}</strong>
-              <small>{ticketRuleDirty ? '规则待确认' : '暂无待保存内容'}</small>
             </div>
-            <div className="user-metric">
-              <span>当前流水</span>
+            <div className="user-summary-item">
+              <span className="user-summary-icon info"><CalendarDays size={17} /></span>
+              <span className="user-summary-copy">
+                <span>当前流水</span>
+                <small>下一号 {ticketRule?.nextSeq ?? '--'}</small>
+              </span>
               <strong>{ticketRule?.usedSeq ?? '--'}</strong>
-              <small>下一号 {ticketRule?.nextSeq ?? '--'}</small>
             </div>
-          </div>
+          </section>
 
-          <div className={ticketRuleError ? 'system-alert danger' : 'system-alert'}>
-            <span>
-              {ticketRuleError ||
-                ticketRuleMessage ||
-                (activeSystemGroup === 'ticket'
-                  ? '编号规则影响后续新建工单，历史工单号不会回写变更。'
-                  : `${activeSystemGroupConfig.title}当前不开放业务编辑，仅展示维护边界。`)}
-            </span>
-            <button
-              onClick={onPreviewTicketRule}
-              disabled={activeSystemGroup !== 'ticket' || ticketRulePreviewLoading}
-              type="button"
-            >
-              {ticketRulePreviewLoading ? '生成中...' : '生成预览'}
-            </button>
-          </div>
+          {(ticketRuleError || ticketRuleMessage) && (
+            <div className={ticketRuleError ? 'system-alert danger' : 'system-alert'}>
+              <span>{ticketRuleError || ticketRuleMessage}</span>
+            </div>
+          )}
 
           <div className="system-layout">
             <aside className="system-panel system-groups">
@@ -130,6 +131,7 @@ export function TicketNumberRulePage({
                   onClick={() => onActiveSystemGroupChange(group.key)}
                   type="button"
                 >
+                  {group.key === 'ticket' ? <Hash size={16} /> : group.key === 'mail' ? <MailCheck size={16} /> : group.key === 'notice' ? <Bell size={16} /> : <ShieldCheck size={16} />}
                   <strong>{group.title}</strong>
                   <small>{group.summary}</small>
                 </button>
@@ -241,11 +243,11 @@ export function TicketNumberRulePage({
                       <button onClick={onResetTicketRule} type="button">恢复默认</button>
                       <button
                         className="primary-action"
-                        disabled={activeSystemGroup !== 'ticket'}
+                        disabled={activeSystemGroup !== 'ticket' || !canUpdateTicketNumberRule || !ticketRuleDirty || ticketRuleSaving}
                         onClick={onRequestSave}
                         type="button"
                       >
-                        保存规则
+                        {ticketRuleSaving ? '保存中...' : '保存规则'}
                       </button>
                     </div>
                   </div>
@@ -259,7 +261,13 @@ export function TicketNumberRulePage({
                   <section className="system-panel">
                     <div className="system-panel__head">
                       <strong>规则预览</strong>
-                      <span className="state-pill enabled">可用</span>
+                      <button
+                        disabled={activeSystemGroup !== 'ticket' || ticketRulePreviewLoading}
+                        onClick={onPreviewTicketRule}
+                        type="button"
+                      >
+                        {ticketRulePreviewLoading ? '生成中...' : '生成预览'}
+                      </button>
                     </div>
                     <div className="rule-preview-card">
                       <span>下一工单号</span>

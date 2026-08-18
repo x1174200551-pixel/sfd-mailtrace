@@ -1,3 +1,4 @@
+import { Pagination } from 'antd'
 import {
   Check,
   CircleCheck,
@@ -154,21 +155,22 @@ export function MailboxManagePage({
   return (
     <>
       <section className="app-content mailbox-page" aria-label="邮箱配置">
-        <div className="content-title">
-          <div>
-            <h1>邮箱管理中心</h1>
+        <header className="mailbox-topbar">
+          <div className="mailbox-title-block">
+            <h2>邮箱配置</h2>
+            <span>共 {mailboxesData?.total ?? '-'} 个邮箱，管理收信、发信和自动回执配置</span>
           </div>
-          <div className="content-actions">
+          <div className="mailbox-top-actions">
             <button disabled={mailboxesLoading} onClick={onFetchMailboxes} type="button">
               <RefreshCw size={16} />
-              刷新数据
+              刷新
             </button>
             <button className="primary-action" disabled={!canCreateMailboxes} onClick={onOpenCreateMailbox} type="button">
               <Plus size={16} />
               新增邮箱
             </button>
           </div>
-        </div>
+        </header>
 
         {!canReadMailboxes ? (
           <div className="permission-state">
@@ -178,82 +180,56 @@ export function MailboxManagePage({
           </div>
         ) : (
           <>
-            <div className="user-metrics">
-              <div className="user-metric">
-                <div>
+            <section className="mailbox-summary-strip" aria-label="邮箱统计">
+              <div className="mailbox-summary-item active">
+                <span className="mailbox-summary-icon"><Mail size={17} /></span>
+                <span className="mailbox-summary-copy">
                   <span>邮箱总数</span>
-                  <strong>{mailboxesData?.summary.totalMailboxes ?? '--'}</strong>
                   <small>已配置客服邮箱</small>
-                </div>
-                <i><Mail size={18} /></i>
+                </span>
+                <strong>{mailboxesData?.summary.totalMailboxes ?? '--'}</strong>
               </div>
-              <div className="user-metric">
-                <div>
+              <div className="mailbox-summary-item mailbox-summary-item--success">
+                <span className="mailbox-summary-icon"><CircleCheck size={17} /></span>
+                <span className="mailbox-summary-copy">
                   <span>在线邮箱</span>
-                  <strong>{mailboxesData?.summary.enabledMailboxes ?? '--'}</strong>
                   <small>IMAP/SMTP 正常</small>
-                </div>
-                <i className="green"><CircleCheck size={18} /></i>
+                </span>
+                <strong>{mailboxesData?.summary.enabledMailboxes ?? '--'}</strong>
               </div>
-              <div className="user-metric">
-                <div>
+              <div className="mailbox-summary-item mailbox-summary-item--info">
+                <span className="mailbox-summary-icon"><Inbox size={17} /></span>
+                <span className="mailbox-summary-copy">
                   <span>今日收件邮件</span>
-                  <strong>{mailboxesData ? todayReceivedCount : '--'}</strong>
                   <small>最近拉取统计</small>
-                </div>
-                <i><Inbox size={18} /></i>
+                </span>
+                <strong>{mailboxesData ? todayReceivedCount : '--'}</strong>
               </div>
-              <div className="user-metric">
-                <div>
+              <div className="mailbox-summary-item mailbox-summary-item--success">
+                <span className="mailbox-summary-icon"><Check size={17} /></span>
+                <span className="mailbox-summary-copy">
                   <span>今日自动建单</span>
-                  <strong>{mailboxesData ? todayTicketCount : '--'}</strong>
                   <small>按拉取结果估算</small>
-                </div>
-                <i className="green"><Check size={18} /></i>
+                </span>
+                <strong>{mailboxesData ? todayTicketCount : '--'}</strong>
               </div>
-              <div className="user-metric">
-                <div>
+              <div className="mailbox-summary-item mailbox-summary-item--danger">
+                <span className="mailbox-summary-icon"><TriangleAlert size={17} /></span>
+                <span className="mailbox-summary-copy">
                   <span>异常邮箱</span>
-                  <strong>{mailboxesData?.summary.errorMailboxes ?? '--'}</strong>
                   <small>连接测试失败</small>
-                </div>
-                <i className="red"><TriangleAlert size={18} /></i>
+                </span>
+                <strong>{mailboxesData?.summary.errorMailboxes ?? '--'}</strong>
               </div>
-              <div className="user-metric">
-                <div>
+              <div className="mailbox-summary-item mailbox-summary-item--warning">
+                <span className="mailbox-summary-icon"><RefreshCw size={17} /></span>
+                <span className="mailbox-summary-copy">
                   <span>同步任务</span>
-                  <strong>{mailboxesData ? activeMailboxCount : '--'}</strong>
                   <small>{activeMailboxCount > 0 ? '正在运行' : '暂无运行任务'}</small>
-                </div>
-                <i className="orange"><RefreshCw size={18} /></i>
+                </span>
+                <strong>{mailboxesData ? activeMailboxCount : '--'}</strong>
               </div>
-            </div>
-
-            <div className="user-toolbar mailbox-toolbar">
-              <label className="user-search">
-                <Search size={16} />
-                <input
-                  onChange={(event) => onMailboxKeywordChange(event.target.value)}
-                  placeholder="搜索邮箱名称、地址或服务器"
-                  type="search"
-                  value={mailboxKeyword}
-                />
-              </label>
-              <label>
-                <span>状态</span>
-                <select onChange={(event) => onMailboxStatusFilterChange(event.target.value)} value={mailboxStatusFilter}>
-                  <option value="ALL">全部状态</option>
-                  <option value="OK">连接正常</option>
-                  <option value="ERROR">连接异常</option>
-                  <option value="UNKNOWN">未测试</option>
-                  <option value="DISABLED">已停用</option>
-                </select>
-              </label>
-              <button onClick={onResetMailboxFilters} type="button">
-                <RotateCcw size={15} />
-                清空筛选
-              </button>
-            </div>
+            </section>
 
             {mailboxesError && <div className="user-alert">{mailboxesError}</div>}
 
@@ -265,6 +241,32 @@ export function MailboxManagePage({
                   </div>
                   <span className="template-code-pill">{mailboxesLoading ? '加载中' : `${mailboxesData?.total ?? 0} 条`}</span>
                 </div>
+
+                <section className="mailbox-inline-filters" aria-label="邮箱筛选">
+                  <label className="user-search">
+                    <Search size={16} />
+                    <input
+                      onChange={(event) => onMailboxKeywordChange(event.target.value)}
+                      placeholder="搜索邮箱名称、地址或服务器"
+                      type="search"
+                      value={mailboxKeyword}
+                    />
+                  </label>
+                  <label>
+                    <span>状态</span>
+                    <select onChange={(event) => onMailboxStatusFilterChange(event.target.value)} value={mailboxStatusFilter}>
+                      <option value="ALL">全部状态</option>
+                      <option value="OK">连接正常</option>
+                      <option value="ERROR">连接异常</option>
+                      <option value="UNKNOWN">未测试</option>
+                      <option value="DISABLED">已停用</option>
+                    </select>
+                  </label>
+                  <button onClick={onResetMailboxFilters} type="button">
+                    <RotateCcw size={15} />
+                    清空筛选
+                  </button>
+                </section>
 
                 {mailboxesLoading ? (
                   <div className="user-loading">
@@ -365,32 +367,25 @@ export function MailboxManagePage({
                   </div>
                 )}
 
-                <div className="user-pagination mailbox-pagination">
-                  <span>
-                    共 {mailboxesData?.total ?? 0} 条，每页
-                    <select onChange={(event) => onMailboxPageSizeChange(Number(event.target.value))} value={mailboxPageSize}>
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                    </select>
-                    条
-                  </span>
-                  <div>
-                    <button disabled={mailboxPage <= 1} onClick={() => onMailboxPageChange(mailboxPage - 1)} type="button">
-                      上一页
-                    </button>
-                    <strong>
-                      {mailboxesData?.page ?? mailboxPage} / {Math.max(mailboxesData?.pages ?? 1, 1)}
-                    </strong>
-                    <button
-                      disabled={!mailboxesData || mailboxPage >= Math.max(mailboxesData.pages, 1)}
-                      onClick={() => onMailboxPageChange(mailboxPage + 1)}
-                      type="button"
-                    >
-                      下一页
-                    </button>
-                  </div>
-                </div>
+                <footer className="tickets-pager mailbox-pagination">
+                  <span>展示 {mailboxesData?.records.length ?? 0} 条</span>
+                  <Pagination
+                    current={mailboxesData?.page ?? mailboxPage}
+                    onChange={(page, size) => {
+                      if (typeof size === 'number' && size !== mailboxPageSize) {
+                        onMailboxPageSizeChange(size)
+                        return
+                      }
+                      onMailboxPageChange(page)
+                    }}
+                    pageSize={mailboxPageSize}
+                    pageSizeOptions={[10, 20, 50]}
+                    showSizeChanger
+                    showTotal={(count) => `共 ${count} 条`}
+                    size="small"
+                    total={mailboxesData?.total ?? 0}
+                  />
+                </footer>
               </section>
 
               <section className="mailbox-panel mailbox-editor-panel">
