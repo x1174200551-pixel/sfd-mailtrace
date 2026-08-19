@@ -1,16 +1,16 @@
-import { Alert, Button, Empty, Input, Pagination, Select, Tag, Typography } from 'antd'
-import {
-  CircleCheck,
-  Clock3,
-  Inbox,
-  Layers,
-  Loader,
-  MessageCircle,
-  RefreshCw,
-  Search,
-  TriangleAlert,
-  UserPlus,
-} from 'lucide-react'
+	import { Alert, Button, Empty, Input, Pagination, Select, Tag, Typography } from 'antd'
+	import {
+	  CircleCheck,
+	  Clock3,
+	  Inbox,
+	  Layers,
+	  Loader,
+	  MessageCircle,
+	  RefreshCw,
+	  Search,
+	  TriangleAlert,
+	  UserPlus,
+	} from 'lucide-react'
 import {
   priorityBadgeClass,
   priorityBadgeText,
@@ -186,17 +186,17 @@ export function TicketListPage({
             </div>
           </header>
 
-          <section className="tickets-inline-filters" aria-label="筛选条件">
+        <section className="tickets-inline-filters" aria-label="筛选条件">
             <label className="tickets-search-box">
               <Search size={14} />
-              <Input.Search
+              <Input
                 allowClear
                 bordered={false}
                 placeholder="搜索工单号、主题、客户"
                 size="small"
                 value={keyword}
                 onChange={(event) => onKeywordChange(event.target.value)}
-                onSearch={onSearch}
+                onPressEnter={onSearch}
               />
             </label>
 

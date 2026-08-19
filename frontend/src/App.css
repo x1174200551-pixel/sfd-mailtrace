@@ -2589,6 +2589,7 @@
 
 .customer-toolbar {
   border-bottom-color: var(--customer-border-soft);
+  border-bottom: 0;
   padding: 11px 12px;
   background: rgb(255 255 255 / 70%);
 }
@@ -4788,7 +4789,7 @@
   grid-template-columns: minmax(260px, 1fr) auto auto;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid var(--mailbox-border-soft);
+  border-bottom: 0;
   padding: 10px 12px;
   background: #fff;
   box-shadow: none;
@@ -4836,6 +4837,7 @@
 
 .mailbox-panel__head {
   min-height: 54px;
+  border-bottom: 0;
   border-bottom-color: var(--mailbox-border-soft);
   padding: 10px 12px;
 }
@@ -4863,6 +4865,10 @@
 
 .mailbox-table {
   min-width: 820px;
+}
+
+.mailbox-list-panel .mailbox-table tbody tr:first-child td {
+  border-top: 0;
 }
 
 .mailbox-table td {
@@ -5439,6 +5445,39 @@
 
 .tickets-search-box .ant-input-search {
   min-width: 0;
+}
+
+.tickets-search-box .ant-input {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
+}
+
+.tickets-search-box .ant-input:hover,
+.tickets-search-box .ant-input:focus,
+.tickets-search-box .ant-input:focus-visible {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
+}
+
+.tickets-search-box .ant-input-affix-wrapper {
+  border: 0;
+  box-shadow: none;
+}
+
+.tickets-search-box .ant-input-affix-wrapper:hover,
+.tickets-search-box .ant-input-affix-wrapper-focused,
+.tickets-search-box .ant-input-affix-wrapper:focus,
+.tickets-search-box .ant-input-affix-wrapper:focus-within,
+.tickets-search-box .ant-input-affix-wrapper-active {
+  border: 0;
+  box-shadow: none;
+  outline: 0;
+}
+
+.tickets-search-box .ant-input-suffix {
+  display: none;
 }
 
 .tickets-inline-filters {

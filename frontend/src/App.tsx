@@ -183,6 +183,12 @@ function App() {
     if (canAccessPage(activeMenu)) return
     setActiveMenu(firstVisibleMenuTitle)
   }, [activeMenu, canAccessPage, firstVisibleMenuTitle, user])
+  const handleMenuChange = useCallback((menu: string) => {
+    setActiveMenu(menu)
+    if (menu !== '全部工单') {
+      handleBackToList()
+    }
+  }, [handleBackToList])
 
   const {
     fetchRoles,
@@ -1183,7 +1189,7 @@ function App() {
             text: '帮助文档入口已固定在顶部栏。后续接入操作手册后，这里打开帮助抽屉或文档中心。',
           })}
         onLogout={() => void handleLogout()}
-        onMenuChange={setActiveMenu}
+        onMenuChange={handleMenuChange}
         onNotificationsOpenChange={setNotificationsOpen}
         onProfileOpenChange={setProfileOpen}
         onSearchResultSelect={handleGlobalSearchResultSelect}
