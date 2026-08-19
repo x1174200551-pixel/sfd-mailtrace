@@ -8,7 +8,10 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "mailtrace.storage")
 public class MinioConfig {
+    private boolean enabled = true;
     private String endpoint;
+    private String publicEndpoint;
+    private String region = "us-east-1";
     private String accessKey;
     private String secretKey;
     private String bucket;

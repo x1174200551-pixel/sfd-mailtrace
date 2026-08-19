@@ -469,7 +469,14 @@ class TicketBizServiceTest {
             return 1;
         });
         when(autoReplyService.sendAutoReply(203L, 11L))
-                .thenReturn(MailSendService.SendResult.ok("OK", "<auto-reply@example.com>"));
+                .thenReturn(new AutoReplyService.AutoReplyResult(
+                        true,
+                        "OK",
+                        "<auto-reply@example.com>",
+                        "您的工单已创建：TCK-20260727-203",
+                        "您好，您的邮件已进入工单系统。\n\n工单号：TCK-20260727-203",
+                        null
+                ));
 
         Long ticketId = ticketBizService.createTicket(
                 11L, "自动回执咨询", "customer@example.com", "客户",
@@ -485,7 +492,8 @@ class TicketBizServiceTest {
         assertEquals("inbound@example.com", messages.get(0).getMessageId());
         assertEquals(TicketBizService.DIRECTION_OUTBOUND, messages.get(1).getDirection());
         assertEquals("auto-reply@example.com", messages.get(1).getMessageId());
-        assertTrue(messages.get(1).getSubject().contains("TCK-20260727-203"));
+        assertEquals("您的工单已创建：TCK-20260727-203", messages.get(1).getSubject());
+        assertEquals("您好，您的邮件已进入工单系统。\n\n工单号：TCK-20260727-203", messages.get(1).getContentText());
     }
 
     @Test

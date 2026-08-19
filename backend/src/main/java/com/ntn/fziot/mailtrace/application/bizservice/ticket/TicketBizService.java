@@ -204,7 +204,7 @@ public class TicketBizService {
         autoAssignByRules(ticket, mailboxId, subject, customerEmail);
 
         // 6、发送自动回执（失败不影响工单）
-        MailSendService.SendResult autoReplyResult = autoReplyService.sendAutoReply(ticket.getId(), mailboxId);
+        AutoReplyService.AutoReplyResult autoReplyResult = autoReplyService.sendAutoReply(ticket.getId(), mailboxId);
 
         // 7、保存自动回执消息到会话（OUTBOUND）
         if (autoReplyResult != null && autoReplyResult.success()) {
@@ -216,8 +216,9 @@ public class TicketBizService {
                 autoReplyMsg.setDirection(DIRECTION_OUTBOUND);
                 autoReplyMsg.setFromAddress(mailFrom);
                 autoReplyMsg.setToAddress(customerEmail);
-                autoReplyMsg.setSubject("您的工单已创建：" + ticketNo);
-                autoReplyMsg.setContentText("系统已收到您的工单（" + ticketNo + "），自动回执已发送。客服人员将尽快处理您的问题。");
+                autoReplyMsg.setSubject(autoReplyResult.subject());
+                autoReplyMsg.setContentText(autoReplyResult.contentText());
+                autoReplyMsg.setContentHtml(autoReplyResult.contentHtml());
                 autoReplyMsg.setMessageId(MessageThreadService.normalizeMessageId(autoReplyResult.messageId()));
                 autoReplyMsg.setSentAt(LocalDateTime.now());
                 autoReplyMsg.setCreatedBy(OPERATOR_SYSTEM);

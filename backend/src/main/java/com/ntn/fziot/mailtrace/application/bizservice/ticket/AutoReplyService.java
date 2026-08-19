@@ -4,9 +4,11 @@ import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ public class AutoReplyService {
     private final NotificationTemplateMapper templateMapper;
     private final MailboxMapper mailboxMapper;
     private final TicketMapper ticketMapper;
+    private final UserMapper userMapper;
     private final MailSendService mailSendService;
 
     /**
@@ -35,20 +38,20 @@ public class AutoReplyService {
      * @param ticketId 工单 ID
      * @param mailboxId 发件邮箱 ID
      */
-    public MailSendService.SendResult sendAutoReply(Long ticketId, Long mailboxId) {
+    public AutoReplyResult sendAutoReply(Long ticketId, Long mailboxId) {
         try {
             // 1、查工单
             TicketEntity ticket = ticketMapper.selectById(ticketId);
             if (ticket == null) {
                 log.warn("自动回执跳过：工单不存在 ticketId={}", ticketId);
-                return MailSendService.SendResult.fail("工单不存在：" + ticketId);
+                return AutoReplyResult.fail("工单不存在：" + ticketId);
             }
 
             // 2、查邮箱配置是否启用了自动回执
             MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
             if (mailbox == null || !Boolean.TRUE.equals(mailbox.getAutoReplyEnabled())) {
                 log.info("自动回执跳过：邮箱未启用自动回执 ticketId={} mailboxId={}", ticketId, mailboxId);
-                return MailSendService.SendResult.fail("邮箱未启用自动回执：" + mailboxId);
+                return AutoReplyResult.fail("邮箱未启用自动回执：" + mailboxId);
             }
 
             // 3、查 AUTO_REPLY 模板
@@ -58,19 +61,20 @@ public class AutoReplyService {
                             .last("LIMIT 1"));
             if (template == null || !Boolean.TRUE.equals(template.getEnabled())) {
                 log.warn("自动回执跳过：AUTO_REPLY 模板未找到或未启用 ticketId={}", ticketId);
-                return MailSendService.SendResult.fail("AUTO_REPLY 模板未找到或未启用");
+                return AutoReplyResult.fail("AUTO_REPLY 模板未找到或未启用");
             }
 
             // 4、渲染模板
             String customerName = ticket.getCustomerEmail() != null ? ticket.getCustomerEmail() : "客户";
             String mailboxEmail = mailbox.getSmtpUsername() != null ? mailbox.getSmtpUsername() : "noreply@ntn.fziot";
-            String mailboxName = mailbox.getSmtpFromName() != null ? mailbox.getSmtpFromName() : mailbox.getMailboxName();
+            String assigneeName = resolveAssigneeName(ticket);
 
             Map<String, String> variables = Map.of(
                     "ticket_no", ticket.getTicketNo() != null ? ticket.getTicketNo() : "",
                     "customer_email", ticket.getCustomerEmail() != null ? ticket.getCustomerEmail() : "",
                     "customer_name", customerName,
                     "mailbox_email", mailboxEmail,
+                    "assignee_name", assigneeName,
                     "subject", ticket.getSubject() != null ? ticket.getSubject() : ""
             );
 
@@ -88,13 +92,30 @@ public class AutoReplyService {
                 log.warn("自动回执发送失败 ticketId={} reason={}", ticketId, result.message());
                 // 失败不回滚工单，仅记录日志
             }
-            return result;
+            return AutoReplyResult.fromSendResult(result, subject, content);
 
         } catch (Exception e) {
             log.error("自动回执异常 ticketId={} mailboxId={}", ticketId, mailboxId, e);
             // 任何异常都不影响工单
-            return MailSendService.SendResult.fail("自动回执异常：" + e.getClass().getSimpleName());
+            return AutoReplyResult.fail("自动回执异常：" + e.getClass().getSimpleName());
         }
+    }
+
+    private String resolveAssigneeName(TicketEntity ticket) {
+        if (ticket.getAssigneeId() == null) {
+            return "未分配";
+        }
+        UserEntity user = userMapper.selectById(ticket.getAssigneeId());
+        if (user == null) {
+            return "未分配";
+        }
+        if (user.getDisplayName() != null && !user.getDisplayName().isBlank()) {
+            return user.getDisplayName();
+        }
+        if (user.getAccount() != null && !user.getAccount().isBlank()) {
+            return user.getAccount();
+        }
+        return "未分配";
     }
 
     private String render(String template, Map<String, String> variables) {
@@ -106,5 +127,34 @@ public class AutoReplyService {
             }
         }
         return rendered;
+    }
+
+    public record AutoReplyResult(
+            boolean success,
+            String message,
+            String messageId,
+            String subject,
+            String contentText,
+            String contentHtml
+    ) {
+        public static AutoReplyResult fromSendResult(MailSendService.SendResult result, String subject, String content) {
+            boolean html = isHtml(content);
+            return new AutoReplyResult(
+                    result.success(),
+                    result.message(),
+                    result.messageId(),
+                    subject,
+                    html ? null : content,
+                    html ? content : null
+            );
+        }
+
+        public static AutoReplyResult fail(String message) {
+            return new AutoReplyResult(false, message, null, null, null, null);
+        }
+
+        private static boolean isHtml(String content) {
+            return content != null && (content.startsWith("<") || content.contains("</") || content.contains("<br"));
+        }
     }
 }

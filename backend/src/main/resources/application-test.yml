@@ -1,0 +1,18 @@
+server:
+  port: 8001
+
+spring:
+  datasource:
+    url: jdbc:mysql://gz-cdb-mb93dk2r.sql.tencentcdb.com:27659/mailtrace?useSSL=true&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8
+    username: root
+    password: Dev@2026!
+
+mailtrace:
+  storage:
+    enabled: true
+    endpoint: http://ceqi-minio:12202
+    public-endpoint: http://124.221.245.91:12202
+    region: us-east-1
+    access-key: kb-app
+    secret-key: kb-app-2026
+    bucket: mailtrace-attachments

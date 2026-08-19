@@ -1,8 +1,15 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:22-alpine AS build
 WORKDIR /app
 
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/pnpm/store \
+    corepack enable \
+    && pnpm config set registry ${NPM_REGISTRY} \
+    && pnpm config set store-dir /pnpm/store \
+    && pnpm install --frozen-lockfile
 
 COPY frontend/ .
 RUN pnpm build
@@ -13,7 +20,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=5173
-ENV VITE_PROXY_TARGET=http://127.0.0.1:8080
+ENV VITE_PROXY_TARGET=http://172.17.0.1:8001
 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml ./
 COPY --from=build /app/node_modules ./node_modules

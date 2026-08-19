@@ -21,6 +21,7 @@
     <java.version>17</java.version>
     <mybatis-plus.version>3.5.6</mybatis-plus.version>
     <springdoc.version>2.5.0</springdoc.version>
+    <flyway.version>10.22.0</flyway.version>
   </properties>
 
   <dependencies>
@@ -58,10 +59,12 @@
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-core</artifactId>
+      <version>${flyway.version}</version>
     </dependency>
     <dependency>
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-mysql</artifactId>
+      <version>${flyway.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springdoc</groupId>

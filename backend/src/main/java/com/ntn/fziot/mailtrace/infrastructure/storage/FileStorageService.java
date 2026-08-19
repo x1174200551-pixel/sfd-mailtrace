@@ -29,7 +29,7 @@ public class FileStorageService {
         AwsBasicCredentials credentials = AwsBasicCredentials.create(config.getAccessKey(), config.getSecretKey());
         this.s3Client = S3Client.builder()
                 .endpointOverride(URI.create(config.getEndpoint()))
-                .region(Region.US_EAST_1) // MinIO 忽略 region
+                .region(Region.of(config.getRegion()))
                 .credentialsProvider(StaticCredentialsProvider.create(credentials))
                 .serviceConfiguration(S3Configuration.builder()
                         .pathStyleAccessEnabled(true) // MinIO 需要 path-style
@@ -68,7 +68,10 @@ public class FileStorageService {
     public String getPresignedUrl(String objectKey) {
         // 简单实现：直连 MinIO 的公开 URL，或使用 presigned URL
         // 这里返回可直接访问的 URL（本地开发用）
-        return config.getEndpoint() + "/" + config.getBucket() + "/" + objectKey;
+        String endpoint = config.getPublicEndpoint() != null && !config.getPublicEndpoint().isBlank()
+                ? config.getPublicEndpoint()
+                : config.getEndpoint();
+        return endpoint + "/" + config.getBucket() + "/" + objectKey;
     }
 
     /**
