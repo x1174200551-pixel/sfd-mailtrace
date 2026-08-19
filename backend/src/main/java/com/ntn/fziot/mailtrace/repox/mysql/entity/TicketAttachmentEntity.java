@@ -15,6 +15,8 @@ public class TicketAttachmentEntity {
     private Long fileSize;
     private String contentType;
     private String objectKey;
+    private Boolean isInline;
+    private String contentId;
     private String uploadedBy;
     private LocalDateTime createdAt;
 }

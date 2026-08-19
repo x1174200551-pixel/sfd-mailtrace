@@ -67,6 +67,10 @@ class IncomingMailParserTest {
 
         assertEquals("Hello World", result.contentText());
         assertEquals("<html><body><p>Hello <b>World</b></p></body></html>", result.contentHtml());
+        assertNotNull(result.rawHeaders());
+        assertTrue(result.rawHeaders().contains("Message-ID: <html-001@test.com>"));
+        assertNotNull(result.rawEml());
+        assertTrue(result.rawEml().length > result.contentHtml().length());
     }
 
     @Test
@@ -170,6 +174,7 @@ class IncomingMailParserTest {
         msg.setRecipient(Message.RecipientType.TO, new InternetAddress("to@test.com"));
         msg.setRecipient(Message.RecipientType.CC, new InternetAddress("cc1@test.com"));
         msg.addRecipient(Message.RecipientType.CC, new InternetAddress("cc2@test.com"));
+        msg.setRecipient(Message.RecipientType.BCC, new InternetAddress("bcc@test.com"));
         msg.setSubject("CC Test");
         msg.setText("Test");
         msg.saveChanges();
@@ -178,6 +183,7 @@ class IncomingMailParserTest {
         ParsedMail result = IncomingMailParser.parse(msg);
 
         assertEquals(List.of("cc1@test.com", "cc2@test.com"), result.ccAddresses());
+        assertEquals(List.of("bcc@test.com"), result.bccAddresses());
     }
 
     @Test

@@ -1,0 +1,17 @@
+.git
+.gitignore
+.DS_Store
+.playwright-cli
+.pnpm-store
+.workbuddy
+
+**/node_modules
+**/dist
+**/target
+**/.mvn/wrapper/maven-wrapper.jar
+
+docs
+design-qa.md
+README.md
+
+*.log

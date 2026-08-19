@@ -15,7 +15,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -61,6 +65,23 @@ public class TicketController {
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long id) {
         return BasicResult.ok(ticketBizService.getTicket(principal, id));
+    }
+
+    @Operation(summary = "下载原始邮件")
+    @GetMapping("/{id}/messages/{messageId}/raw-eml")
+    @RequirePermission(value = "ticket:read", message = "无权查看工单")
+    public ResponseEntity<Resource> downloadRawEml(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id,
+            @PathVariable Long messageId) {
+        TicketBizService.RawMailDownload rawMail = ticketBizService.downloadRawEml(principal, id, messageId);
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("message/rfc822"))
+                .header("Content-Disposition", "attachment; filename=\"" + rawMail.fileName() + "\"");
+        if (rawMail.fileSize() != null && rawMail.fileSize() > 0) {
+            builder.contentLength(rawMail.fileSize());
+        }
+        return builder.body(new InputStreamResource(rawMail.inputStream()));
     }
 
     @Operation(summary = "工单统计概览")

@@ -61,6 +61,7 @@ public class TicketAttachmentService {
         entity.setFileSize(file.getSize());
         entity.setContentType(file.getContentType());
         entity.setObjectKey(objectKey);
+        entity.setIsInline(false);
         entity.setUploadedBy(principal.account());
         entity.setCreatedAt(LocalDateTime.now());
         attachmentMapper.insert(entity);
@@ -80,6 +81,9 @@ public class TicketAttachmentService {
         return attachmentMapper.selectList(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<TicketAttachmentEntity>()
                         .eq(TicketAttachmentEntity::getTicketId, ticketId)
+                        .and(wrapper -> wrapper.eq(TicketAttachmentEntity::getIsInline, false)
+                                .or()
+                                .isNull(TicketAttachmentEntity::getIsInline))
                         .orderByAsc(TicketAttachmentEntity::getCreatedAt)
         ).stream().map(this::toVO).collect(Collectors.toList());
     }
@@ -102,11 +106,19 @@ public class TicketAttachmentService {
      * 获取附件的原始输入流（用于下载代理）。
      */
     public InputStream downloadRaw(Long ticketId, Long attachmentId, CurrentUserPrincipal principal) {
+        return download(ticketId, attachmentId, principal).inputStream();
+    }
+
+    public AttachmentDownload download(Long ticketId, Long attachmentId, CurrentUserPrincipal principal) {
         TicketEntity ticket = requireTicket(ticketId);
-        permissionService.assertPermission(principal, "ticket_attachment:download", "无权下载工单附件");
         dataScopeService.assertTicketVisible(principal, ticket);
         TicketAttachmentEntity entity = requireAttachment(ticketId, attachmentId);
-        return fileStorageService.download(entity.getObjectKey());
+        if (Boolean.TRUE.equals(entity.getIsInline())) {
+            permissionService.assertPermission(principal, "ticket:read", "无权查看工单");
+        } else {
+            permissionService.assertPermission(principal, "ticket_attachment:download", "无权下载工单附件");
+        }
+        return new AttachmentDownload(toVO(entity), fileStorageService.download(entity.getObjectKey()));
     }
 
     private TicketEntity requireTicket(Long ticketId) {
@@ -138,9 +150,18 @@ public class TicketAttachmentService {
                 e.getFileName(),
                 e.getFileSize(),
                 e.getContentType(),
-                fileStorageService.getPresignedUrl(e.getObjectKey()),
+                buildDownloadUrl(e),
+                e.getIsInline(),
+                e.getContentId(),
                 e.getUploadedBy(),
                 e.getCreatedAt()
         );
+    }
+
+    private String buildDownloadUrl(TicketAttachmentEntity entity) {
+        return "/api/v1/tickets/" + entity.getTicketId() + "/attachments/" + entity.getId() + "/download";
+    }
+
+    public record AttachmentDownload(TicketAttachmentVO attachment, InputStream inputStream) {
     }
 }

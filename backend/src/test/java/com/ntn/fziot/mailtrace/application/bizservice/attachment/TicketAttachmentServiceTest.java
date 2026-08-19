@@ -1,5 +1,6 @@
 package com.ntn.fziot.mailtrace.application.bizservice.attachment;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
@@ -9,6 +10,10 @@ import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketAttachmentEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketAttachmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.ByteArrayInputStream;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -50,6 +56,16 @@ class TicketAttachmentServiceTest {
     private final CurrentUserPrincipal agent = new CurrentUserPrincipal(
             2L, "agent", "处理人", "agent@example.com", "AGENT");
 
+    @BeforeAll
+    static void initMybatisPlusTableInfo() {
+        MybatisConfiguration configuration = new MybatisConfiguration();
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(
+                configuration,
+                "TicketAttachmentServiceTest.TicketAttachmentEntity"
+        );
+        TableInfoHelper.initTableInfo(assistant, TicketAttachmentEntity.class);
+    }
+
     @BeforeEach
     void setUp() {
         allowAdminAndAgentOperationalPermissions();
@@ -61,7 +77,6 @@ class TicketAttachmentServiceTest {
         when(ticketMapper.selectById(100L)).thenReturn(ticket);
         when(fileStorageService.upload(eq("test.txt"), eq(5L), eq("text/plain"), any()))
                 .thenReturn("attachments/test.txt");
-        when(fileStorageService.getPresignedUrl("attachments/test.txt")).thenReturn("http://file/test.txt");
         MockMultipartFile file = new MockMultipartFile(
                 "file", "test.txt", "text/plain", "hello".getBytes());
 
@@ -71,6 +86,19 @@ class TicketAttachmentServiceTest {
         verify(attachmentMapper).insert(attachmentCaptor.capture());
         assertEquals(100L, attachmentCaptor.getValue().getTicketId());
         assertEquals("agent", attachmentCaptor.getValue().getUploadedBy());
+    }
+
+    @Test
+    void listByTicketId_shouldExcludeInlineResources() {
+        when(ticketMapper.selectById(104L)).thenReturn(ticket(104L, null));
+        when(attachmentMapper.selectList(any())).thenReturn(List.of());
+
+        attachmentService.listByTicketId(104L, agent);
+
+        ArgumentCaptor<LambdaQueryWrapper<TicketAttachmentEntity>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(attachmentMapper).selectList(wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        assertTrue(sqlSegment.contains("is_inline") && sqlSegment.contains("IS NULL"));
     }
 
     @Test
@@ -112,7 +140,26 @@ class TicketAttachmentServiceTest {
 
         attachmentService.downloadRaw(103L, 203L, agent);
 
+        verify(permissionService).assertPermission(agent, "ticket_attachment:download", "无权下载工单附件");
         verify(fileStorageService).download("attachments/open.txt");
+    }
+
+    @Test
+    void download_whenInlineResource_shouldUseTicketReadPermission() {
+        when(ticketMapper.selectById(105L)).thenReturn(ticket(105L, null));
+        TicketAttachmentEntity attachment = new TicketAttachmentEntity();
+        attachment.setId(205L);
+        attachment.setTicketId(105L);
+        attachment.setObjectKey("attachments/inline.png");
+        attachment.setIsInline(true);
+        when(attachmentMapper.selectById(205L)).thenReturn(attachment);
+        when(fileStorageService.download("attachments/inline.png")).thenReturn(new ByteArrayInputStream(new byte[0]));
+
+        attachmentService.download(105L, 205L, agent);
+
+        verify(permissionService).assertPermission(agent, "ticket:read", "无权查看工单");
+        verify(permissionService, never()).assertPermission(agent, "ticket_attachment:download", "无权下载工单附件");
+        verify(fileStorageService).download("attachments/inline.png");
     }
 
     private TicketEntity ticket(Long id, Long assigneeId) {

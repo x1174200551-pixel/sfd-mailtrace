@@ -48,11 +48,17 @@ export type TicketMessage = {
   messageDirection?: string | null
   fromAddress?: string | null
   toAddress?: string | null
+  toAddresses?: string | null
+  ccAddresses?: string | null
+  bccAddresses?: string | null
   displayName?: string | null
   sentAt?: string | null
   createdAt?: string | null
   contentText?: string | null
   contentHtml?: string | null
+  rawHeaders?: string | null
+  rawEmlObjectKey?: string | null
+  rawEmlSize?: number | null
   contentBody?: string | null
 }
 
@@ -87,6 +93,8 @@ export type TicketAttachment = {
   fileSize: number
   contentType: string | null
   downloadUrl: string | null
+  isInline?: boolean | null
+  contentId?: string | null
   uploadedBy: string | null
   createdAt: string
 }

@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 
 @Tag(name = "工单附件")
@@ -61,22 +60,27 @@ public class TicketAttachmentController {
 
     @Operation(summary = "下载附件")
     @GetMapping("/{attachmentId}/download")
-    @RequirePermission(value = "ticket_attachment:download", message = "无权下载工单附件")
+    @RequirePermission(value = "ticket:read", message = "无权查看工单")
     public ResponseEntity<Resource> download(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @PathVariable Long ticketId,
             @PathVariable Long attachmentId) {
-        // Simple proxy - in production use presigned URL directly
-        var attachments = attachmentService.listByTicketId(ticketId, principal);
-        var opt = attachments.stream().filter(a -> a.id().equals(attachmentId)).findFirst();
-        if (opt.isEmpty()) {
-            return ResponseEntity.notFound().build();
-        }
-        var vo = opt.get();
-        InputStream inputStream = attachmentService.downloadRaw(ticketId, attachmentId, principal);
+        var download = attachmentService.download(ticketId, attachmentId, principal);
+        var vo = download.attachment();
+        MediaType mediaType = vo.contentType() != null && !vo.contentType().isBlank()
+                ? MediaType.parseMediaType(vo.contentType())
+                : MediaType.APPLICATION_OCTET_STREAM;
+        String disposition = Boolean.TRUE.equals(vo.isInline()) ? "inline" : "attachment";
         return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header("Content-Disposition", "attachment; filename=\"" + vo.fileName() + "\"")
-                .body(new InputStreamResource(inputStream));
+                .contentType(mediaType)
+                .header("Content-Disposition", disposition + "; filename=\"" + safeFileName(vo.fileName()) + "\"")
+                .body(new InputStreamResource(download.inputStream()));
+    }
+
+    private String safeFileName(String fileName) {
+        if (fileName == null || fileName.isBlank()) {
+            return "attachment";
+        }
+        return fileName.replaceAll("[\\r\\n\"]", "_");
     }
 }

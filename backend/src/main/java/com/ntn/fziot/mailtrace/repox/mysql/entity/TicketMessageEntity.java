@@ -30,11 +30,23 @@ public class TicketMessageEntity {
 
     private String toAddress;
 
+    private String toAddresses;
+
+    private String ccAddresses;
+
+    private String bccAddresses;
+
     private String subject;
 
     private String contentText;
 
     private String contentHtml;
+
+    private String rawHeaders;
+
+    private String rawEmlObjectKey;
+
+    private Long rawEmlSize;
 
     private LocalDateTime sentAt;
 

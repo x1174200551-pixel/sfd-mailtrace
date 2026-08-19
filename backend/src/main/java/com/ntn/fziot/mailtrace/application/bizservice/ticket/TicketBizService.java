@@ -12,7 +12,9 @@ import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
+import com.ntn.fziot.mailtrace.infrastructure.mail.AttachmentInfo;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.storage.FileStorageService;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketEventVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketMessageVO;
@@ -42,6 +44,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -108,6 +112,7 @@ public class TicketBizService {
     private final SlaDeadlineService slaDeadlineService;
     private final DataScopeService dataScopeService;
     private final PermissionService permissionService;
+    private final FileStorageService fileStorageService;
 
     // ==================== 创建工单（系统内部调用） ====================
 
@@ -131,6 +136,19 @@ public class TicketBizService {
     public Long createTicket(Long mailboxId, String subject, String customerEmail, String customerName,
                              String contentText, String contentHtml, String messageId,
                              String inReplyTo, String references, LocalDateTime mailSentAt) {
+        return createTicket(
+                mailboxId, subject, customerEmail, customerName,
+                contentText, contentHtml, messageId, inReplyTo, references, mailSentAt,
+                List.of(), List.of(), List.of(), null, null, List.of()
+        );
+    }
+
+    @Transactional
+    public Long createTicket(Long mailboxId, String subject, String customerEmail, String customerName,
+                             String contentText, String contentHtml, String messageId,
+                             String inReplyTo, String references, LocalDateTime mailSentAt,
+                             List<String> toAddresses, List<String> ccAddresses, List<String> bccAddresses,
+                             String rawHeaders, byte[] rawEml, List<AttachmentInfo> attachments) {
         // 1、生成工单号
         String ticketNo = ticketNumberRuleService.generateNextTicketNo();
         log.info("生成工单号 ticketNo={} mailboxId={} customer={} subject={}", ticketNo, mailboxId, customerEmail, subject);
@@ -160,13 +178,24 @@ public class TicketBizService {
         msg.setInReplyTo(MessageThreadService.normalizeMessageId(inReplyTo));
         msg.setMailReferences(references);
         msg.setFromAddress(customerEmail);
+        msg.setToAddress(joinAddresses(toAddresses));
+        msg.setToAddresses(joinAddresses(toAddresses));
+        msg.setCcAddresses(joinAddresses(ccAddresses));
+        msg.setBccAddresses(joinAddresses(bccAddresses));
         msg.setSubject(subject);
         msg.setContentText(contentText);
         msg.setContentHtml(contentHtml);
+        msg.setRawHeaders(rawHeaders);
+        saveRawEml(msg, messageId, rawEml);
         msg.setSentAt(mailSentAt);
         msg.setCreatedBy(OPERATOR_SYSTEM);
         msg.setUpdatedBy(OPERATOR_SYSTEM);
         ticketMessageMapper.insert(msg);
+        String renderedHtml = saveIncomingAttachments(ticket.getId(), msg.getId(), contentHtml, attachments);
+        if (renderedHtml != null && !renderedHtml.equals(contentHtml)) {
+            msg.setContentHtml(renderedHtml);
+            ticketMessageMapper.updateById(msg);
+        }
 
         // 4、记录生命周期事件：CREATED
         recordEvent(ticket.getId(), EVENT_CREATED, "工单已创建，来源邮箱ID：" + mailboxId, OPERATOR_SYSTEM, LocalDateTime.now());
@@ -228,6 +257,20 @@ public class TicketBizService {
                                        String contentText, String contentHtml,
                                        String messageId, String inReplyTo, String references,
                                        LocalDateTime sentAt) {
+        handleCustomerFollowUp(
+                ticketId, subject, fromAddress, contentText, contentHtml,
+                messageId, inReplyTo, references, sentAt,
+                List.of(), List.of(), List.of(), null, null, List.of()
+        );
+    }
+
+    @Transactional
+    public void handleCustomerFollowUp(Long ticketId, String subject, String fromAddress,
+                                       String contentText, String contentHtml,
+                                       String messageId, String inReplyTo, String references,
+                                       LocalDateTime sentAt,
+                                       List<String> toAddresses, List<String> ccAddresses, List<String> bccAddresses,
+                                       String rawHeaders, byte[] rawEml, List<AttachmentInfo> attachments) {
         TicketEntity ticket = ticketMapper.selectById(ticketId);
         if (ticket == null) {
             log.warn("客户追信跳过：工单不存在 ticketId={}", ticketId);
@@ -239,17 +282,27 @@ public class TicketBizService {
         msg.setTicketId(ticket.getId());
         msg.setDirection(DIRECTION_INBOUND);
         msg.setFromAddress(fromAddress);
-        msg.setToAddress(null);
+        msg.setToAddress(joinAddresses(toAddresses));
+        msg.setToAddresses(joinAddresses(toAddresses));
+        msg.setCcAddresses(joinAddresses(ccAddresses));
+        msg.setBccAddresses(joinAddresses(bccAddresses));
         msg.setSubject(subject);
         msg.setContentText(contentText);
         msg.setContentHtml(contentHtml);
         msg.setMessageId(MessageThreadService.normalizeMessageId(messageId));
         msg.setInReplyTo(MessageThreadService.normalizeMessageId(inReplyTo));
         msg.setMailReferences(references);
+        msg.setRawHeaders(rawHeaders);
+        saveRawEml(msg, messageId, rawEml);
         msg.setSentAt(sentAt != null ? sentAt : LocalDateTime.now());
         msg.setCreatedBy(OPERATOR_SYSTEM);
         msg.setUpdatedBy(OPERATOR_SYSTEM);
         ticketMessageMapper.insert(msg);
+        String renderedHtml = saveIncomingAttachments(ticket.getId(), msg.getId(), contentHtml, attachments);
+        if (renderedHtml != null && !renderedHtml.equals(contentHtml)) {
+            msg.setContentHtml(renderedHtml);
+            ticketMessageMapper.updateById(msg);
+        }
 
         // 2、更新客户最后来信时间；状态事件仍记录为系统处理时间。
         LocalDateTime customerMailAt = msg.getSentAt();
@@ -278,6 +331,98 @@ public class TicketBizService {
             log.info("客户追信：新增消息 ticketId={} ticketNo={} status={}",
                     ticket.getId(), ticket.getTicketNo(), oldStatus);
         }
+    }
+
+    private void saveRawEml(TicketMessageEntity msg, String messageId, byte[] rawEml) {
+        if (rawEml == null || rawEml.length == 0) {
+            msg.setRawEmlSize(0L);
+            return;
+        }
+        String objectKey = fileStorageService.upload(
+                buildRawEmlFileName(messageId),
+                rawEml.length,
+                "message/rfc822",
+                new ByteArrayInputStream(rawEml)
+        );
+        msg.setRawEmlObjectKey(objectKey);
+        msg.setRawEmlSize((long) rawEml.length);
+    }
+
+    private String saveIncomingAttachments(Long ticketId, Long messageId, String contentHtml, List<AttachmentInfo> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return contentHtml;
+        }
+
+        String renderedHtml = contentHtml;
+        int savedCount = 0;
+        for (AttachmentInfo attachment : attachments) {
+            byte[] content = attachment.content();
+            if (content == null || content.length == 0) {
+                log.warn("来信附件内容为空，完整内容已保留在原始EML中 ticketId={} messageId={} fileName={}",
+                        ticketId, messageId, attachment.fileName());
+                continue;
+            }
+
+            String fileName = attachment.fileName() != null && !attachment.fileName().isBlank()
+                    ? attachment.fileName()
+                    : "attachment";
+            String objectKey = fileStorageService.upload(
+                    fileName,
+                    content.length,
+                    attachment.contentType(),
+                    new ByteArrayInputStream(content)
+            );
+
+            TicketAttachmentEntity entity = new TicketAttachmentEntity();
+            entity.setTicketId(ticketId);
+            entity.setMessageId(messageId);
+            entity.setFileName(fileName);
+            entity.setFileSize((long) content.length);
+            entity.setContentType(attachment.contentType());
+            entity.setObjectKey(objectKey);
+            entity.setIsInline(attachment.isInline());
+            entity.setContentId(attachment.contentId());
+            entity.setUploadedBy(OPERATOR_SYSTEM);
+            entity.setCreatedAt(LocalDateTime.now());
+            ticketAttachmentMapper.insert(entity);
+            savedCount++;
+
+            if (renderedHtml != null && attachment.isInline() && attachment.contentId() != null) {
+                String url = buildAttachmentDownloadUrl(ticketId, entity.getId());
+                renderedHtml = renderedHtml
+                        .replace("cid:" + attachment.contentId(), url)
+                        .replace("cid:<" + attachment.contentId() + ">", url);
+            }
+        }
+
+        if (savedCount > 0) {
+            log.info("来信附件保存完成 ticketId={} messageId={} count={}", ticketId, messageId, savedCount);
+        }
+        return renderedHtml;
+    }
+
+    private String joinAddresses(List<String> addresses) {
+        if (addresses == null || addresses.isEmpty()) {
+            return null;
+        }
+        String joined = addresses.stream()
+                .filter(address -> address != null && !address.isBlank())
+                .collect(Collectors.joining(","));
+        return joined.isBlank() ? null : joined;
+    }
+
+    private String buildRawEmlFileName(String messageId) {
+        String normalized = MessageThreadService.normalizeMessageId(messageId);
+        if (normalized == null || normalized.isBlank()) {
+            return "mailtrace-original.eml";
+        }
+        return normalized.replaceAll("[^A-Za-z0-9._-]", "_") + ".eml";
+    }
+
+    private String buildRawEmlDownloadFileName(String ticketNo, Long messageId) {
+        String prefix = ticketNo != null && !ticketNo.isBlank() ? ticketNo : "ticket";
+        String suffix = messageId != null ? String.valueOf(messageId) : "message";
+        return (prefix + "-" + suffix).replaceAll("[^A-Za-z0-9._-]", "_") + ".eml";
     }
 
     // ==================== 分页查询 ====================
@@ -319,6 +464,27 @@ public class TicketBizService {
         TicketEntity ticket = requireTicket(id);
         dataScopeService.assertTicketVisible(principal, ticket);
         return toDetailVO(ticket);
+    }
+
+    public RawMailDownload downloadRawEml(CurrentUserPrincipal principal, Long ticketId, Long messageId) {
+        permissionService.assertPermission(principal, "ticket:read", "无权查看工单");
+        TicketEntity ticket = requireTicket(ticketId);
+        dataScopeService.assertTicketVisible(principal, ticket);
+        if (messageId == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "消息ID不能为空");
+        }
+        TicketMessageEntity message = ticketMessageMapper.selectById(messageId);
+        if (message == null || !ticketId.equals(message.getTicketId())) {
+            throw new BusinessException(CODE_NOT_FOUND, "邮件消息不存在");
+        }
+        if (message.getRawEmlObjectKey() == null || message.getRawEmlObjectKey().isBlank()) {
+            throw new BusinessException(CODE_NOT_FOUND, "原始邮件不存在");
+        }
+        return new RawMailDownload(
+                buildRawEmlDownloadFileName(ticket.getTicketNo(), message.getId()),
+                message.getRawEmlSize(),
+                fileStorageService.download(message.getRawEmlObjectKey())
+        );
     }
 
     // ==================== 分配处理人 ====================
@@ -471,6 +637,7 @@ public class TicketBizService {
                 entity.setFileName(att.fileName() != null ? att.fileName() : att.objectKey());
                 entity.setFileSize(att.fileSize() != null ? att.fileSize() : 0);
                 entity.setContentType(att.contentType());
+                entity.setIsInline(false);
                 entity.setUploadedBy(principal.account());
                 entity.setCreatedAt(LocalDateTime.now());
                 ticketAttachmentMapper.insert(entity);
@@ -882,11 +1049,21 @@ public class TicketBizService {
         String assigneeName = resolveUserName(ticket.getAssigneeId());
         String mailboxName = resolveMailboxName(ticket.getMailboxId());
 
+        List<TicketAttachmentEntity> attachments = ticketAttachmentMapper.selectList(
+                new LambdaQueryWrapper<TicketAttachmentEntity>()
+                        .eq(TicketAttachmentEntity::getTicketId, ticket.getId())
+        );
+        Map<Long, List<TicketAttachmentEntity>> attachmentsByMessageId = attachments.stream()
+                .filter(attachment -> attachment.getMessageId() != null)
+                .collect(Collectors.groupingBy(TicketAttachmentEntity::getMessageId));
+
         List<TicketMessageVO> messages = ticketMessageMapper.selectList(
                 new LambdaQueryWrapper<TicketMessageEntity>()
                         .eq(TicketMessageEntity::getTicketId, ticket.getId())
                         .orderByAsc(TicketMessageEntity::getCreatedAt)
-        ).stream().map(this::toMessageVO).toList();
+        ).stream()
+                .map(message -> toMessageVO(message, attachmentsByMessageId.getOrDefault(message.getId(), List.of())))
+                .toList();
 
         List<TicketEventVO> events = ticketEventMapper.selectList(
                 new LambdaQueryWrapper<TicketEventEntity>()
@@ -911,6 +1088,10 @@ public class TicketBizService {
     }
 
     private TicketMessageVO toMessageVO(TicketMessageEntity message) {
+        return toMessageVO(message, List.of());
+    }
+
+    private TicketMessageVO toMessageVO(TicketMessageEntity message, List<TicketAttachmentEntity> attachments) {
         String operatorName = null;
         if (message.getOperatorId() != null) {
             operatorName = resolveUserName(message.getOperatorId());
@@ -918,10 +1099,39 @@ public class TicketBizService {
         return new TicketMessageVO(
                 message.getId(), message.getDirection(),
                 message.getFromAddress(), message.getToAddress(),
-                message.getSubject(), message.getContentText(),
+                message.getToAddresses(), message.getCcAddresses(), message.getBccAddresses(),
+                message.getSubject(), message.getContentText(), renderMessageHtml(message, attachments),
+                message.getRawHeaders(), message.getRawEmlObjectKey(), message.getRawEmlSize(),
                 message.getSentAt() != null ? message.getSentAt() : message.getCreatedAt(),
                 operatorName, message.getCreatedAt()
         );
+    }
+
+    private String renderMessageHtml(TicketMessageEntity message, List<TicketAttachmentEntity> attachments) {
+        String html = message.getContentHtml();
+        if (html == null || html.isBlank() || attachments == null || attachments.isEmpty()) {
+            return html;
+        }
+        String rendered = html;
+        for (TicketAttachmentEntity attachment : attachments) {
+            String url = buildAttachmentDownloadUrl(attachment.getTicketId(), attachment.getId());
+            if (attachment.getContentId() != null && !attachment.getContentId().isBlank()) {
+                rendered = rendered
+                        .replace("cid:" + attachment.getContentId(), url)
+                        .replace("cid:<" + attachment.getContentId() + ">", url);
+            }
+            if (attachment.getObjectKey() != null && !attachment.getObjectKey().isBlank()) {
+                rendered = rendered.replaceAll(
+                        "https?://[^\"'\\s<>]+/" + java.util.regex.Pattern.quote(attachment.getObjectKey()),
+                        url
+                );
+            }
+        }
+        return rendered;
+    }
+
+    private String buildAttachmentDownloadUrl(Long ticketId, Long attachmentId) {
+        return "/api/v1/tickets/" + ticketId + "/attachments/" + attachmentId + "/download";
     }
 
     private TicketEventVO toEventVO(TicketEventEntity event) {
@@ -993,5 +1203,8 @@ public class TicketBizService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    public record RawMailDownload(String fileName, Long fileSize, InputStream inputStream) {
     }
 }

@@ -74,6 +74,7 @@ public final class IncomingMailParser {
             }
             List<String> toAddresses = parseAddresses(msg.getRecipients(Message.RecipientType.TO));
             List<String> ccAddresses = parseAddresses(msg.getRecipients(Message.RecipientType.CC));
+            List<String> bccAddresses = parseAddresses(msg.getRecipients(Message.RecipientType.BCC));
 
             // 3、主题
             String subject = MimeUtility.decodeText(msg.getSubject());
@@ -86,7 +87,11 @@ public final class IncomingMailParser {
             // 5、正文 + 附件
             ContentResult content = new ContentResult();
             List<AttachmentInfo> attachments = new ArrayList<>();
+            String rawHeaders = null;
+            byte[] rawEml = null;
             if (msg instanceof MimeMessage mimeMsg) {
+                rawHeaders = readAllHeaders(mimeMsg);
+                rawEml = readRawEml(mimeMsg);
                 parsePart(mimeMsg, content, attachments, 0);
             }
 
@@ -107,8 +112,8 @@ public final class IncomingMailParser {
             return new ParsedMail(
                     messageId, inReplyTo, references,
                     fromAddress, fromPersonal,
-                    toAddresses, ccAddresses,
-                    subject, contentText, contentHtml,
+                    toAddresses, ccAddresses, bccAddresses,
+                    subject, contentText, contentHtml, rawHeaders, rawEml,
                     sentAt, receivedAt,
                     attachments, size
             );
@@ -118,8 +123,8 @@ public final class IncomingMailParser {
             return new ParsedMail(
                     null, null, null,
                     null, null,
-                    List.of(), List.of(),
-                    "", null, null,
+                    List.of(), List.of(), List.of(),
+                    "", null, null, null, null,
                     null, LocalDateTime.now(),
                     List.of(), 0
             );
@@ -307,6 +312,24 @@ public final class IncomingMailParser {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static String readAllHeaders(MimeMessage msg) throws MessagingException {
+        StringBuilder builder = new StringBuilder();
+        var lines = msg.getAllHeaderLines();
+        while (lines.hasMoreElements()) {
+            Object line = lines.nextElement();
+            if (line != null) {
+                builder.append(line).append("\r\n");
+            }
+        }
+        return builder.isEmpty() ? null : builder.toString();
+    }
+
+    private static byte[] readRawEml(MimeMessage msg) throws MessagingException, IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        msg.writeTo(output);
+        return output.toByteArray();
     }
 
     private static List<String> parseAddresses(Address[] addresses) {

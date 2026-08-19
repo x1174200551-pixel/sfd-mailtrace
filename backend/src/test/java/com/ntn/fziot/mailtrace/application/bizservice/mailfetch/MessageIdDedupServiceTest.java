@@ -142,8 +142,8 @@ class MessageIdDedupServiceTest {
         return new ParsedMail(
                 messageId, null, null,
                 "from@test.com", "Test Sender",
-                List.of("to@test.com"), List.of(),
-                "Test Subject", "Test body", null,
+                List.of("to@test.com"), List.of(), List.of(),
+                "Test Subject", "Test body", null, null, null,
                 null, null, List.of(), 0
         );
     }

@@ -14,9 +14,12 @@ import java.util.List;
  * @param fromPersonal  发件人显示名
  * @param toAddresses   收件人列表
  * @param ccAddresses   抄送列表
+ * @param bccAddresses  密送列表
  * @param subject       主题（已解码）
  * @param contentText   纯文本正文
  * @param contentHtml   HTML 正文
+ * @param rawHeaders    原始邮件头
+ * @param rawEml        原始 EML 内容
  * @param sentAt        邮件原始发送时间
  * @param receivedAt    IMAP 拉取时间
  * @param attachments   附件列表（超限附件 content 为 null）
@@ -30,9 +33,12 @@ public record ParsedMail(
         String fromPersonal,
         List<String> toAddresses,
         List<String> ccAddresses,
+        List<String> bccAddresses,
         String subject,
         String contentText,
         String contentHtml,
+        String rawHeaders,
+        byte[] rawEml,
         LocalDateTime sentAt,
         LocalDateTime receivedAt,
         List<AttachmentInfo> attachments,

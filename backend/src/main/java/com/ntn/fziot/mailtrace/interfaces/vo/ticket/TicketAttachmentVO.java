@@ -12,6 +12,8 @@ public record TicketAttachmentVO(
         @Schema(description = "文件大小(字节)") Long fileSize,
         @Schema(description = "MIME 类型") String contentType,
         @Schema(description = "下载URL") String downloadUrl,
+        @Schema(description = "是否内嵌资源") Boolean isInline,
+        @Schema(description = "Content-ID") String contentId,
         @Schema(description = "上传人") String uploadedBy,
         @Schema(description = "上传时间") LocalDateTime createdAt
 ) {

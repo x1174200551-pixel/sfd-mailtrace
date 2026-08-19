@@ -120,7 +120,9 @@ public class MailFetchBizService {
                         ticketBizService.handleCustomerFollowUp(
                                 existingTicketId, mail.subject(), mail.fromAddress(),
                                 mail.contentText(), mail.contentHtml(),
-                                mail.messageId(), mail.inReplyTo(), mail.references(), mail.sentAt()
+                                mail.messageId(), mail.inReplyTo(), mail.references(), mail.sentAt(),
+                                mail.toAddresses(), mail.ccAddresses(), mail.bccAddresses(),
+                                mail.rawHeaders(), mail.rawEml(), mail.attachments()
                         );
                         log.info("客户追信回流 ticketId={} messageId={} subject={}",
                                 existingTicketId, mail.messageId(), mail.subject());
@@ -132,7 +134,9 @@ public class MailFetchBizService {
                                 mailboxId, mail.subject(), mail.fromAddress(), customerName,
                                 mail.contentText(), mail.contentHtml(),
                                 mail.messageId(), mail.inReplyTo(), mail.references(),
-                                mail.sentAt()
+                                mail.sentAt(),
+                                mail.toAddresses(), mail.ccAddresses(), mail.bccAddresses(),
+                                mail.rawHeaders(), mail.rawEml(), mail.attachments()
                         );
                         createdTicketCount++;
                     }

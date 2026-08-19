@@ -14,12 +14,15 @@ import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
+import com.ntn.fziot.mailtrace.infrastructure.mail.AttachmentInfo;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
+import com.ntn.fziot.mailtrace.infrastructure.storage.FileStorageService;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPriorityRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketStatusRequest;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketAttachmentEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEventEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketMessageEntity;
@@ -42,9 +45,11 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -84,6 +89,8 @@ class TicketBizServiceTest {
     @Mock
     private SlaDeadlineService slaDeadlineService;
     @Mock
+    private FileStorageService fileStorageService;
+    @Mock
     private PermissionService permissionService;
     @Spy
     private DataScopeService dataScopeService = new DataScopeService();
@@ -109,6 +116,7 @@ class TicketBizServiceTest {
         allowAdminAndAgentOperationalPermissions();
         lenient().when(ticketMessageMapper.selectList(any())).thenReturn(List.of());
         lenient().when(ticketEventMapper.selectList(any())).thenReturn(List.of());
+        lenient().when(ticketAttachmentMapper.selectList(any())).thenReturn(List.of());
         lenient().when(mailboxMapper.selectById(11L)).thenReturn(mailbox());
         lenient().when(userMapper.selectById(2L)).thenReturn(agent(2L, "张三", "agent@example.com"));
         lenient().when(assignmentRuleService.matchForTicket(any(), any(), any(), any())).thenReturn(null);
@@ -478,6 +486,86 @@ class TicketBizServiceTest {
         assertEquals(TicketBizService.DIRECTION_OUTBOUND, messages.get(1).getDirection());
         assertEquals("auto-reply@example.com", messages.get(1).getMessageId());
         assertTrue(messages.get(1).getSubject().contains("TCK-20260727-203"));
+    }
+
+    @Test
+    void createTicket_withOriginalMailPayload_shouldPersistRawMailAndInlineAttachment() {
+        when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-204");
+        when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
+            TicketEntity ticket = invocation.getArgument(0);
+            ticket.setId(204L);
+            return 1;
+        });
+        when(ticketMessageMapper.insert(any(TicketMessageEntity.class))).thenAnswer(invocation -> {
+            TicketMessageEntity message = invocation.getArgument(0);
+            message.setId(304L);
+            return 1;
+        });
+        byte[] rawEml = "Subject: 原始邮件\r\n\r\nbody".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] logo = new byte[]{1, 2, 3, 4};
+        when(fileStorageService.upload(org.mockito.ArgumentMatchers.endsWith(".eml"), eq((long) rawEml.length), eq("message/rfc822"), any()))
+                .thenReturn("raw/mail.eml");
+        when(fileStorageService.upload(eq("logo.png"), eq((long) logo.length), eq("image/png"), any()))
+                .thenReturn("attachments/logo.png");
+        when(ticketAttachmentMapper.insert(any(TicketAttachmentEntity.class))).thenAnswer(invocation -> {
+            TicketAttachmentEntity attachment = invocation.getArgument(0);
+            attachment.setId(404L);
+            return 1;
+        });
+
+        Long ticketId = ticketBizService.createTicket(
+                11L, "含内嵌图邮件", "customer@example.com", "客户",
+                "正文", "<p><img src=\"cid:logo@test.com\"></p>", "<msg-204@example.com>",
+                null, null, LocalDateTime.now(),
+                List.of("support@example.com"), List.of("cc@example.com"), List.of("bcc@example.com"),
+                "Message-ID: <msg-204@example.com>", rawEml,
+                List.of(new AttachmentInfo("logo.png", "image/png", logo.length, true, logo, "logo@test.com"))
+        );
+
+        assertEquals(204L, ticketId);
+
+        ArgumentCaptor<TicketMessageEntity> messageInsertCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper, org.mockito.Mockito.atLeastOnce()).insert(messageInsertCaptor.capture());
+        TicketMessageEntity inbound = messageInsertCaptor.getAllValues().get(0);
+        assertEquals("support@example.com", inbound.getToAddresses());
+        assertEquals("cc@example.com", inbound.getCcAddresses());
+        assertEquals("bcc@example.com", inbound.getBccAddresses());
+        assertEquals("Message-ID: <msg-204@example.com>", inbound.getRawHeaders());
+        assertEquals("raw/mail.eml", inbound.getRawEmlObjectKey());
+        assertEquals((long) rawEml.length, inbound.getRawEmlSize());
+
+        ArgumentCaptor<TicketAttachmentEntity> attachmentCaptor = ArgumentCaptor.forClass(TicketAttachmentEntity.class);
+        verify(ticketAttachmentMapper).insert(attachmentCaptor.capture());
+        assertEquals(204L, attachmentCaptor.getValue().getTicketId());
+        assertEquals(304L, attachmentCaptor.getValue().getMessageId());
+        assertEquals(true, attachmentCaptor.getValue().getIsInline());
+        assertEquals("logo@test.com", attachmentCaptor.getValue().getContentId());
+
+        ArgumentCaptor<TicketMessageEntity> messageUpdateCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper).updateById(messageUpdateCaptor.capture());
+        assertTrue(messageUpdateCaptor.getValue().getContentHtml()
+                .contains("/api/v1/tickets/204/attachments/404/download"));
+    }
+
+    @Test
+    void downloadRawEml_whenMessageHasOriginalObject_shouldReturnOriginalStream() throws Exception {
+        TicketEntity ticket = ticket(205L, TicketBizService.STATUS_PROCESSING);
+        TicketMessageEntity message = new TicketMessageEntity();
+        message.setId(305L);
+        message.setTicketId(205L);
+        message.setRawEmlObjectKey("raw/mail-305.eml");
+        byte[] rawEml = "Subject: raw\r\n\r\nbody".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        message.setRawEmlSize((long) rawEml.length);
+
+        when(ticketMapper.selectById(205L)).thenReturn(ticket);
+        when(ticketMessageMapper.selectById(305L)).thenReturn(message);
+        when(fileStorageService.download("raw/mail-305.eml")).thenReturn(new ByteArrayInputStream(rawEml));
+
+        TicketBizService.RawMailDownload download = ticketBizService.downloadRawEml(admin, 205L, 305L);
+
+        assertEquals("TCK-20260727-205-305.eml", download.fileName());
+        assertEquals((long) rawEml.length, download.fileSize());
+        assertArrayEquals(rawEml, download.inputStream().readAllBytes());
     }
 
     @Test

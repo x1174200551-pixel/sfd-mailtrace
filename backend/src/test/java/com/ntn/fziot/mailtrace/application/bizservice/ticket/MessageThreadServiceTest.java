@@ -36,7 +36,7 @@ class MessageThreadServiceTest {
     private ParsedMail createMail(String messageId, String inReplyTo, String references, String subject) {
         return new ParsedMail(messageId, inReplyTo, references,
                 "from@test.com", "发件人", List.of("to@test.com"),
-                List.of(), subject, "正文", null,
+                List.of(), List.of(), subject, "正文", null, null, null,
                 null, null, List.of(), 0);
     }
 
