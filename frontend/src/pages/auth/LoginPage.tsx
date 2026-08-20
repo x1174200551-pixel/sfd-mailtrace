@@ -168,11 +168,11 @@ export function LoginPage({
             </svg>
           </div>
           <div>
-            <b>知识沉淀</b>
+            <b>邮件追踪</b>
             <span>
-              知识库集中管理
+              收发全链路
               <br />
-              经验持续复用
+              异常快速定位
             </span>
           </div>
         </div>

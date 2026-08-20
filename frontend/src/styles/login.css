@@ -91,8 +91,8 @@
 .slogan {
   position: absolute;
   z-index: 10;
-  left: 4.7%;
-  top: 21.9%;
+  left: 6.4%;
+  top: 18.6%;
 }
 
 .slogan-main {
@@ -112,9 +112,16 @@
 }
 
 .slogan-sub {
-  margin-top: 18px;
+  display: inline-flex;
+  margin-top: 12px;
+  border-radius: 14px;
+  padding: 7px 13px;
   color: #40547c;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 8px 22px rgba(35, 68, 128, 0.08);
   font-size: 16px;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(4px);
 }
 
 .features {
