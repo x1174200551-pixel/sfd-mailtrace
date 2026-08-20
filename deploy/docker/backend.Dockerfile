@@ -12,26 +12,26 @@ COPY backend/src ./src
 RUN --mount=type=cache,target=/root/.m2 \
     mvn -s /usr/share/maven/ref/settings-docker.xml -q -DskipTests package
 
-FROM eclipse-temurin:17-jre-alpine
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
-ARG ALPINE_MIRROR=https://mirrors.aliyun.com/alpine
-RUN sed -i "s#https://dl-cdn.alpinelinux.org/alpine#${ALPINE_MIRROR}#g" /etc/apk/repositories \
-    && apk add --no-cache curl tzdata \
-    && addgroup -S mailtrace \
-    && adduser -S mailtrace -G mailtrace
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system mailtrace \
+    && useradd --system --gid mailtrace --home-dir /app --shell /usr/sbin/nologin mailtrace
 
 ENV TZ=Asia/Shanghai
 ENV JAVA_OPTS=""
-ENV SPRING_PROFILES_ACTIVE=test
+ENV SPRING_PROFILES_ACTIVE=""
 
 COPY --from=build /app/target/*.jar app.jar
 RUN chown -R mailtrace:mailtrace /app
 
 USER mailtrace
-EXPOSE 8001
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8001/api/v1/system/health >/dev/null || exit 1
+  CMD curl -fsS "http://127.0.0.1:${SERVER_PORT:-8080}/api/v1/system/health" >/dev/null || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

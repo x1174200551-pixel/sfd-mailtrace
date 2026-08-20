@@ -1,11 +1,11 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
   servlet:
-    context-path: /api
+    context-path: ${SERVER_CONTEXT_PATH:/api}
 
 spring:
   application:
-    name: mailtrace-backend
+    name: ${APPLICATION_NAME:ntn-cmp-mailtrace-api}
   jackson:
     time-zone: Asia/Shanghai
   servlet:
@@ -13,14 +13,14 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/mailtrace?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
-    username: root
-    password: root123
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${MAILTRACE_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/mailtrace?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${MAILTRACE_DATASOURCE_USERNAME:root}
+    password: ${MAILTRACE_DATASOURCE_PASSWORD:root123}
+    driver-class-name: ${MAILTRACE_DATASOURCE_DRIVER:com.mysql.cj.jdbc.Driver}
   flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
+    enabled: ${MAILTRACE_FLYWAY_ENABLED:true}
+    locations: ${MAILTRACE_FLYWAY_LOCATIONS:classpath:db/migration}
+    baseline-on-migrate: ${MAILTRACE_FLYWAY_BASELINE_ON_MIGRATE:true}
 
 mybatis-plus:
   configuration:
@@ -45,15 +45,21 @@ mailtrace:
   security:
     permit-all: false
     jwt:
-      secret: mailtrace-local-dev-secret-change-before-production
-      expires-in-seconds: 7200
+      secret: ${MAILTRACE_JWT_SECRET:mailtrace-local-dev-secret-change-before-production}
+      expires-in-seconds: ${MAILTRACE_JWT_EXPIRES_IN_SECONDS:7200}
   mail:
-    fetch-fixed-delay-ms: 60000
+    fetch-fixed-delay-ms: ${MAILTRACE_MAIL_FETCH_FIXED_DELAY_MS:60000}
+    retry-fixed-delay-ms: ${MAILTRACE_MAIL_RETRY_FIXED_DELAY_MS:300000}
+  sla:
+    check-fixed-delay-ms: ${MAILTRACE_SLA_CHECK_FIXED_DELAY_MS:60000}
   holiday:
-    national-api-url-template: https://api.jiejiariapi.com/v1/holidays/{year}
-    national-api-timeout-ms: 5000
+    national-api-url-template: ${MAILTRACE_HOLIDAY_NATIONAL_API_URL_TEMPLATE:https://api.jiejiariapi.com/v1/holidays/{year}}
+    national-api-timeout-ms: ${MAILTRACE_HOLIDAY_NATIONAL_API_TIMEOUT_MS:5000}
   storage:
-    endpoint: http://127.0.0.1:9000
-    access-key: minioadmin
-    secret-key: minioadmin123
-    bucket: mailtrace-attachments
+    enabled: ${MAILTRACE_STORAGE_ENABLED:true}
+    endpoint: ${MAILTRACE_STORAGE_ENDPOINT:http://127.0.0.1:9000}
+    public-endpoint: ${MAILTRACE_STORAGE_PUBLIC_ENDPOINT:http://127.0.0.1:9000}
+    region: ${MAILTRACE_STORAGE_REGION:us-east-1}
+    access-key: ${MAILTRACE_STORAGE_ACCESS_KEY:minioadmin}
+    secret-key: ${MAILTRACE_STORAGE_SECRET_KEY:minioadmin123}
+    bucket: ${MAILTRACE_STORAGE_BUCKET:mailtrace-attachments}

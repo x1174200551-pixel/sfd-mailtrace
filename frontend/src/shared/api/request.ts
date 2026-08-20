@@ -15,6 +15,16 @@ export function authHeaders(token: string) {
   return { Authorization: `Bearer ${token}` }
 }
 
+const defaultApiBase = import.meta.env.PROD ? '/mailtrace-api' : '/api'
+const apiBase = import.meta.env.VITE_API_BASE || defaultApiBase
+
+function resolveApiUrl(url: string) {
+  if (!url.startsWith('/api/')) {
+    return url
+  }
+  return `${apiBase.replace(/\/$/, '')}${url.slice('/api'.length)}`
+}
+
 export async function requestApi<T>(url: string, options: RequestOptions = {}) {
   const { skipAuth, ...fetchOptions } = options
   const headers = new Headers(fetchOptions.headers)
@@ -36,7 +46,7 @@ export async function requestApi<T>(url: string, options: RequestOptions = {}) {
 
   let response: Response
   try {
-    response = await fetch(url, {
+    response = await fetch(resolveApiUrl(url), {
       ...fetchOptions,
       headers: Object.fromEntries(headers.entries()),
     })
