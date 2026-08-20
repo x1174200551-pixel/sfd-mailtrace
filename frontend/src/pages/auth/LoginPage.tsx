@@ -1,4 +1,6 @@
 import type { FormEvent } from 'react'
+import loginCardVisual from '../../assets/login-prototype-card.png'
+import loginEnvelopeVisual from '../../assets/login-prototype-envelope.png'
 
 export type LoginModalState = {
   title: string
@@ -23,13 +25,6 @@ type LoginPageProps = {
   submitting: boolean
 }
 
-const features = [
-  { mark: 'M', title: '自动收取邮件', text: 'IMAP 实时同步' },
-  { mark: 'T', title: '自动生成工单', text: '智能解析，快速建单' },
-  { mark: 'U', title: '分配处理人', text: '按规则自动分配' },
-  { mark: 'S', title: 'SLA 监控', text: '超时提醒，保障服务' },
-]
-
 export function LoginPage({
   account,
   accountError,
@@ -47,117 +42,214 @@ export function LoginPage({
   showPassword,
   submitting,
 }: LoginPageProps) {
+  const toastMessage = formError || accountError || passwordError || '原型演示'
+  const showToast = Boolean(formError || accountError || passwordError)
+
   return (
     <main className="login-page">
-      <section className="login-intro" aria-label="产品介绍">
-        <div className="brand">
-          <span className="brand-mark">M</span>
-          <span>
-            <h1>邮件工单系统</h1>
-            <p>企业级邮件工单管理平台</p>
-          </span>
-        </div>
+      <div className={`toast${showToast ? ' show' : ''}`} role={showToast ? 'alert' : undefined}>
+        {toastMessage}
+      </div>
 
-        <div className="hero-copy">
-          <h2>
-            让邮件沟通<span>更高效</span>
-          </h2>
-          <p>集中管理客户邮件，自动生成工单，智能分配处理，全流程跟踪，提升团队协作效率与客户满意度。</p>
-        </div>
+      <div className="top-wave"></div>
+      <div className="bottom-wave"></div>
 
-        <div className="workflow" aria-label="系统能力">
-          {features.map((feature) => (
-            <div className="feature" key={feature.title}>
-              <span className="feature-mark">{feature.mark}</span>
-              <span>
-                <strong>{feature.title}</strong>
-                <small>{feature.text}</small>
-              </span>
-            </div>
-          ))}
-          <div className="screen-preview" aria-hidden="true">
-            <div className="screen-bar">
-              <span />
-              <span />
-              <span />
-            </div>
-            <div className="screen-body">
-              <div className="mini-sidebar">
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-              <div className="mini-content">
-                <div className="mini-search" />
-                {[0, 1, 2, 3].map((item) => (
-                  <div className="mini-row" key={item}>
-                    <span />
-                    <i />
-                    <b />
-                  </div>
-                ))}
-              </div>
-            </div>
+      <div className="brand">
+        <div className="brand-logo">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M3 6.8 12 13l9-6.2M4.5 5h15A1.5 1.5 0 0 1 21 6.5v11A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11A1.5 1.5 0 0 1 4.5 5Z"
+              stroke="white"
+              strokeLinejoin="round"
+              strokeWidth="1.8"
+            />
+          </svg>
+        </div>
+        <div>
+          <div className="brand-title">邮件工单系统</div>
+          <div className="brand-sub">高效连接 · 智能服务 · 价值驱动</div>
+        </div>
+      </div>
+
+      <div className="slogan">
+        <div className="slogan-main">
+          让每一封邮件
+          <span className="slogan-accent">都有回应</span>
+        </div>
+        <div className="slogan-sub">智能收件 · 工单管理 · 团队协作 · 服务升级</div>
+      </div>
+
+      <div className="features">
+        <div className="feature mail">
+          <div className="fi">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M3 7l9 6 9-6M4.5 5h15A1.5 1.5 0 0 1 21 6.5v11A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11A1.5 1.5 0 0 1 4.5 5Z"
+                strokeWidth="1.7"
+              />
+            </svg>
           </div>
-          <div className="shield" aria-hidden="true">OK</div>
-        </div>
-      </section>
-
-      <section className="login-panel" aria-label="登录表单">
-        <form className="form-box" onSubmit={onSubmit} noValidate>
-          <div className="form-header">
-            <h2>欢迎登录</h2>
-            <p>请输入您的账号和密码登录系统</p>
+          <div>
+            <b>智能收件</b>
+            <span>多渠道接入，自动识别</span>
           </div>
+        </div>
+        <div className="feature chart">
+          <div className="fi">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M5 20V11M12 20V4M19 20v-7" strokeLinecap="round" strokeWidth="2" />
+            </svg>
+          </div>
+          <div>
+            <b>数据洞察</b>
+            <span>多维度统计，洞察趋势</span>
+          </div>
+        </div>
+        <div className="feature team">
+          <div className="fi">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="9" cy="8" r="3" />
+              <circle cx="16.5" cy="9" r="2.5" />
+              <path d="M3.5 20a5.5 5.5 0 0 1 11 0M13 20a4.5 4.5 0 0 1 8 0" strokeWidth="1.7" />
+            </svg>
+          </div>
+          <div>
+            <b>团队协作</b>
+            <span>高效分配，协同处理</span>
+          </div>
+        </div>
+      </div>
 
-          {formError && (
-            <div className="alert" role="alert">
-              {formError}
-            </div>
-          )}
+      <div className="notice">
+        <strong>🔔 及时通知</strong>
+        <small>状态变更，实时提醒</small>
+      </div>
 
-          <label className="field">
-            <span>账号</span>
+      <div className="hero">
+        <img src={loginCardVisual} alt="邮件工单系统主视觉" />
+      </div>
+
+      <div className="capbar">
+        <div className="cap">
+          <div className="cap-i">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m13 2-7 11h5l-1 9 8-12h-5V2Z" strokeLinejoin="round" strokeWidth="1.8" />
+            </svg>
+          </div>
+          <div>
+            <b>智能路由</b>
+            <span>
+              自动识别规则
+              <br />
+              精准分配工单
+            </span>
+          </div>
+        </div>
+        <div className="cap">
+          <div className="cap-i">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" />
+              <path d="M12 7v5l3 2" strokeLinecap="round" strokeWidth="1.8" />
+            </svg>
+          </div>
+          <div>
+            <b>SLA 监控</b>
+            <span>
+              全程跟踪监控
+              <br />
+              保障服务时效
+            </span>
+          </div>
+        </div>
+        <div className="cap">
+          <div className="cap-i">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="m4 7 8-4 8 4-8 4-8-4Zm0 0v9l8 4 8-4V7M12 11v9" strokeWidth="1.8" />
+            </svg>
+          </div>
+          <div>
+            <b>知识沉淀</b>
+            <span>
+              知识库集中管理
+              <br />
+              经验持续复用
+            </span>
+          </div>
+        </div>
+        <div className="cap">
+          <div className="cap-i">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 3 5 6v5c0 4.4 2.8 7.7 7 10 4.2-2.3 7-5.6 7-10V6l-7-3Z" strokeWidth="1.8" />
+              <path d="m9 12 2 2 4-4" strokeLinecap="round" strokeWidth="1.8" />
+            </svg>
+          </div>
+          <div>
+            <b>安全可靠</b>
+            <span>
+              权限精细管控
+              <br />
+              数据安全保障
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="top-visual">
+          <img src={loginEnvelopeVisual} alt="登录信封" />
+        </div>
+        <h1 className="title">欢迎回来！</h1>
+        <div className="sub">登录邮件工单系统，开启高效工作之旅</div>
+        <form onSubmit={onSubmit} noValidate>
+          <div className="form-item">
+            <span className="icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="8" r="4" strokeWidth="1.7" />
+                <path d="M4.5 20a7.5 7.5 0 0 1 15 0" strokeWidth="1.7" />
+              </svg>
+            </span>
             <input
               aria-invalid={Boolean(accountError)}
               autoComplete="username"
               className={accountError ? 'invalid' : ''}
               disabled={submitting}
               onChange={(event) => onAccountChange(event.target.value)}
-              placeholder="请输入账号 / 邮箱"
+              placeholder="请输入用户名"
               type="text"
               value={account}
             />
-            {accountError && <small>{accountError}</small>}
-          </label>
-
-          <label className="field">
-            <span>密码</span>
-            <div className="password-field">
-              <input
-                aria-invalid={Boolean(passwordError)}
-                autoComplete="current-password"
-                className={passwordError ? 'invalid' : ''}
-                disabled={submitting}
-                onChange={(event) => onPasswordChange(event.target.value)}
-                placeholder="请输入密码"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-              />
-              <button
-                aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                disabled={submitting}
-                onClick={() => onShowPasswordChange((value) => !value)}
-                title="显示/隐藏密码"
-                type="button"
-              >
-                {showPassword ? '隐藏' : '显示'}
-              </button>
-            </div>
-            {passwordError && <small>{passwordError}</small>}
-          </label>
+          </div>
+          <div className="form-item">
+            <span className="icon">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <rect x="5" y="10" width="14" height="10" rx="2" strokeWidth="1.7" />
+                <path d="M8 10V7a4 4 0 0 1 8 0v3" strokeWidth="1.7" />
+              </svg>
+            </span>
+            <input
+              aria-invalid={Boolean(passwordError)}
+              autoComplete="current-password"
+              className={passwordError ? 'invalid' : ''}
+              disabled={submitting}
+              onChange={(event) => onPasswordChange(event.target.value)}
+              placeholder="请输入密码"
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+            />
+            <button
+              aria-label={showPassword ? '隐藏密码' : '显示密码'}
+              className="eye"
+              disabled={submitting}
+              onClick={() => onShowPasswordChange((value) => !value)}
+              title="显示/隐藏密码"
+              type="button"
+            >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 12s3.2-5 9-5 9 5 9 5-3.2 5-9 5-9-5-9-5Z" strokeWidth="1.6" />
+                <circle cx="12" cy="12" r="2.5" strokeWidth="1.6" />
+              </svg>
+            </button>
+          </div>
 
           <div className="form-row">
             <label className="remember">
@@ -167,10 +259,10 @@ export function LoginPage({
                 onChange={(event) => onRememberMeChange(event.target.checked)}
                 type="checkbox"
               />
-              <span>记住我</span>
+              记住我
             </label>
             <button
-              className="link-button"
+              className="forgot"
               onClick={() =>
                 onModalChange({
                   title: '忘记密码',
@@ -178,31 +270,22 @@ export function LoginPage({
                 })}
               type="button"
             >
-              忘记密码?
+              忘记密码？
             </button>
           </div>
 
-          <button className="login-button" disabled={submitting} type="submit">
+          <button className="login-btn" disabled={submitting} type="submit">
             {submitting ? '登录中...' : '登录'}
           </button>
-
-          <p className="helper">
-            首次无账号？
-            <button
-              onClick={() =>
-                onModalChange({
-                  title: '首次无账号',
-                  text: '后台账号由管理员统一创建。请联系管理员开通账号并分配角色后再登录。',
-                })}
-              type="button"
-            >
-              请联系管理员创建账号
-            </button>
-          </p>
         </form>
-      </section>
-
-      <footer>© 2026 邮件工单系统. All rights reserved.</footer>
+        <div className="safe-wrap">
+          <div className="divider"></div>
+          <div className="safe">
+            <span className="shield">◇</span>
+            安全登录 · 数据加密 · 稳定可靠
+          </div>
+        </div>
+      </div>
 
       {modal && (
         <div className="modal-mask" role="dialog" aria-modal="true" aria-labelledby="modal-title">
