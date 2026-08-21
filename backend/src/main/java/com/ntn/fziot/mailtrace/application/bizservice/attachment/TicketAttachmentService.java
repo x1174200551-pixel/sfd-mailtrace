@@ -45,7 +45,7 @@ public class TicketAttachmentService {
         permissionService.assertPermission(principal, "ticket_attachment:upload", "无权上传工单附件");
         dataScopeService.assertTicketOperable(principal, ticket);
 
-        // 1、上传到 MinIO
+        // 1、上传到当前配置的文件存储
         String objectKey = fileStorageService.upload(
                 file.getOriginalFilename(),
                 file.getSize(),

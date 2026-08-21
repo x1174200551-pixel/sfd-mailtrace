@@ -1,12 +1,15 @@
 spring:
   application:
+    # 对应 Nacos Data ID：ntn-cmp-mailtrace-api.yaml。
     name: ${APPLICATION_NAME:ntn-cmp-mailtrace-api}
   cloud:
     refresh:
       extra-refreshable:
         - javax.sql.DataSource
     nacos:
+      # Nacos 地址。
       server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      # Nacos 账号密码。
       username: ${NACOS_USERNAME:}
       password: ${NACOS_PASSWORD:}
       discovery:
@@ -17,8 +20,11 @@ spring:
           multiplier: 1.5
           max-attempts: 0
       config:
+        # 当前本地启动默认启用 Nacos；不用 Nacos 时设 NACOS_CONFIG_ENABLED=false。
         enabled: ${NACOS_CONFIG_ENABLED:true}
+        # 使用 yaml 后缀，Data ID 为 ntn-cmp-mailtrace-api.yaml。
         file-extension: ${NACOS_FILE_EXTENSION:yaml}
+        # 需和 Nacos 上配置所在 group/namespace 一致。
         group: ${NACOS_GROUP:bcs}
         namespace: ${NACOS_NAMESPACE:ntn}
         refresh-enabled: ${NACOS_REFRESH_ENABLED:true}

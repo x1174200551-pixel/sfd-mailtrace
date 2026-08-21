@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Button, Empty, Input, Segmented, Space, Tabs, Tag } from 'antd'
+import type { MouseEvent } from 'react'
+import { Alert, Button, Empty, Input, Segmented, Space, Tabs, Tag, message } from 'antd'
 import {
   ArrowLeftOutlined,
   CloseCircleOutlined,
@@ -221,6 +222,31 @@ function formatDetailDate(value: string | null | undefined) {
   return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
 }
 
+async function parseDownloadError(response: Response) {
+  const fallback = `附件下载失败：${response.status}`
+  const contentType = response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    return fallback
+  }
+  try {
+    const body = await response.json()
+    return typeof body?.message === 'string' && body.message ? body.message : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function saveBlob(blob: Blob, fileName: string) {
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = fileName || 'attachment'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+}
+
 export function TicketDetailPage({
   canClaimCurrentTicket,
   canOperateCurrentTicket,
@@ -276,6 +302,31 @@ export function TicketDetailPage({
   const latestEvents = events.slice(0, 4)
   const responseDeadline = formatDetailDate(detail.slaResponseDeadline)
   const resolveDeadline = formatDetailDate(detail.slaResolveDeadline)
+  const handleAttachmentDownload = async (event: MouseEvent<HTMLAnchorElement>, attachment: TicketAttachment) => {
+    event.preventDefault()
+    if (!attachment.downloadUrl) {
+      message.error('附件下载地址不存在')
+      return
+    }
+    const token = readStoredToken()
+    if (!token) {
+      message.error('登录状态已失效，请重新登录')
+      return
+    }
+
+    try {
+      const response = await fetch(attachment.downloadUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!response.ok) {
+        message.error(await parseDownloadError(response))
+        return
+      }
+      saveBlob(await response.blob(), attachment.fileName)
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '附件下载失败')
+    }
+  }
 
   return (
     <section className="app-content ticket-detail-page" aria-label="工单详情">
@@ -436,7 +487,11 @@ export function TicketDetailPage({
                                     {msgAttachments.map((attachment) => (
                                       <div key={attachment.id} className="msg-attachment-item">
                                         <PaperClipOutlined />
-                                        <a href={attachment.downloadUrl || undefined} target="_blank" rel="noopener noreferrer" className="msg-attachment-link">
+                                        <a
+                                          href={attachment.downloadUrl || undefined}
+                                          className="msg-attachment-link"
+                                          onClick={(event) => handleAttachmentDownload(event, attachment)}
+                                        >
                                           {attachment.fileName}
                                         </a>
                                         <span className="msg-attachment-size">({formatFileSize(attachment.fileSize)})</span>
