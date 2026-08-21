@@ -104,10 +104,10 @@ export function TicketNumberRulePage({
             <div className="user-summary-item">
               <span className="user-summary-icon info"><CalendarDays size={17} /></span>
               <span className="user-summary-copy">
-                <span>当前流水</span>
-                <small>下一号 {ticketRule?.nextSeq ?? '--'}</small>
+                <span>随机数预览</span>
+                <small>位数 {(ticketRule?.seqLength ?? ticketRuleForm.seqLength) || '--'}</small>
               </span>
-              <strong>{ticketRule?.usedSeq ?? '--'}</strong>
+              <strong>{ticketRule?.nextSeq ?? '--'}</strong>
             </div>
           </section>
 
@@ -172,7 +172,7 @@ export function TicketNumberRulePage({
                       <option value="true">启用</option>
                       <option value="false">停用</option>
                     </select>
-                    <small>停用后使用默认规则 TCK-yyyyMMdd-0001。</small>
+                    <small>停用后使用默认规则 TCK-yyMMddHHmmss-随机数。</small>
                   </label>
                   <label>
                     <span>工单前缀</span>
@@ -193,24 +193,32 @@ export function TicketNumberRulePage({
                       onChange={(event) => onUpdateTicketRuleForm({ dateFormat: event.target.value })}
                       value={ticketRuleForm.dateFormat}
                     >
+                      <option value="yyMMddHHmmss">yyMMddHHmmss</option>
                       <option value="yyyyMMdd">yyyyMMdd</option>
                       <option value="yyyyMM">yyyyMM</option>
                       <option value="yyyy">yyyy</option>
                     </select>
-                    <small>变更后新工单按新日期维度取流水。</small>
+                    <small>变更后新工单按新日期维度生成随机数。</small>
                   </label>
                   <label>
-                    <span>流水位数</span>
+                    <span>随机数位数</span>
                     <input
-                      max={8}
-                      min={3}
-                      onChange={(event) =>
-                        onUpdateTicketRuleForm({ seqLength: Number(event.target.value || 4) })
-                      }
-                      type="number"
+                      inputMode="numeric"
+                      maxLength={1}
+                      onChange={(event) => {
+                        const nextValue = event.target.value.replace(/\D/g, '').slice(0, 1)
+                        if (!/^[1-6]?$/.test(nextValue)) return
+                        onUpdateTicketRuleForm({
+                          seqLength: nextValue === ''
+                            ? ''
+                            : Number(nextValue),
+                        })
+                      }}
+                      pattern="[1-6]*"
+                      type="text"
                       value={ticketRuleForm.seqLength}
                     />
-                    <small>示例：4 位生成 0001，6 位生成 000001。</small>
+                    <small>请输入 1-6 的正整数，示例：6 位生成 482931。</small>
                   </label>
                   <label>
                     <span>分隔符</span>
@@ -234,11 +242,11 @@ export function TicketNumberRulePage({
                   <div className="system-token-row">
                     <span>{'{prefix}'}</span>
                     <span>{`{${ticketRuleForm.dateFormat}}`}</span>
-                    <span>{'{seq}'}</span>
+                    <span>{'{random}'}</span>
                     <span>{ticketRuleForm.separator || '无分隔符'}</span>
                   </div>
                   <div className="system-actions">
-                    <span>保存前会校验格式合法性和下一号预览。</span>
+                    <span>保存前会校验格式合法性并生成工单号预览。</span>
                     <div>
                       <button onClick={onResetTicketRule} type="button">恢复默认</button>
                       <button
@@ -270,13 +278,15 @@ export function TicketNumberRulePage({
                       </button>
                     </div>
                     <div className="rule-preview-card">
-                      <span>下一工单号</span>
+                      <span>工单号预览</span>
                       <strong>{ticketRule?.nextTicketNo || '点击生成预览'}</strong>
                     </div>
                     <div className="rule-preview-list">
                       <div><span>今日日期</span><strong>{ticketRule?.todayDate || '--'}</strong></div>
-                      <div><span>当前日期维度</span><strong>{ticketRule?.dateKey || '--'}</strong></div>
-                      <div><span>当前已用流水</span><strong>{ticketRule?.usedSeq ?? '--'}</strong></div>
+                      <div><span>日期格式</span><strong>{ticketRule?.dateFormat || ticketRuleForm.dateFormat}</strong></div>
+                      <div><span>日期片段</span><strong>{ticketRule?.dateKey || '--'}</strong></div>
+                      <div><span>随机数预览</span><strong>{ticketRule?.nextSeq || '--'}</strong></div>
+                      <div><span>随机数位数</span><strong>{(ticketRule?.seqLength ?? ticketRuleForm.seqLength) || '--'}</strong></div>
                       <div><span>主题匹配样例</span><strong>{ticketRule?.subjectPreview || '--'}</strong></div>
                     </div>
                   </section>
@@ -287,8 +297,8 @@ export function TicketNumberRulePage({
                       <span className="template-code-pill">自动校验</span>
                     </div>
                     <div className="system-check-list">
-                      <div><Check size={16} /><span><strong>规则格式合法</strong><small>前缀、日期和流水片段均可解析。</small></span></div>
-                      <div><Check size={16} /><span><strong>下一号可预览</strong><small>预览编号按当前日期维度生成。</small></span></div>
+                      <div><Check size={16} /><span><strong>规则格式合法</strong><small>前缀、日期和随机片段均可解析。</small></span></div>
+                      <div><Check size={16} /><span><strong>工单号可预览</strong><small>预览编号按当前时间和随机数生成。</small></span></div>
                       <div><TriangleAlert size={16} /><span><strong>影响新工单</strong><small>保存后仅影响后续自动建单。</small></span></div>
                     </div>
                   </section>

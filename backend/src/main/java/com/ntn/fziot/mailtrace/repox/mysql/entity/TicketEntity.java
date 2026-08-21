@@ -31,6 +31,13 @@ public class TicketEntity {
 
     private String customerEmail;
 
+    private String customerAccessCodeHash;
+
+    private LocalDateTime customerAccessExpiresAt;
+
+    @TableField("customer_access_enabled")
+    private Boolean customerAccessEnabled;
+
     private Long assigneeId;
 
     @TableField("link_suspect")

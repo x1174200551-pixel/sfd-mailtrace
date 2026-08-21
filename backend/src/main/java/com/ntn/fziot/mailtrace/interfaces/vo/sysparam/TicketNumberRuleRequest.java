@@ -24,14 +24,14 @@ public class TicketNumberRuleRequest {
     private String prefix;
 
     @NotBlank(message = "请选择日期格式")
-    @Pattern(regexp = "^(yyyyMMdd|yyyyMM|yyyy)$", message = "日期格式仅支持 yyyyMMdd、yyyyMM 或 yyyy")
-    @Schema(description = "日期格式", example = "yyyyMMdd")
+    @Pattern(regexp = "^(yyMMddHHmmss|yyyyMMdd|yyyyMM|yyyy)$", message = "日期格式仅支持 yyMMddHHmmss、yyyyMMdd、yyyyMM 或 yyyy")
+    @Schema(description = "日期格式", example = "yyMMddHHmmss")
     private String dateFormat;
 
-    @NotNull(message = "请输入流水位数")
-    @Min(value = 3, message = "流水位数最少 3 位")
-    @Max(value = 8, message = "流水位数最多 8 位")
-    @Schema(description = "流水位数", example = "4")
+    @NotNull(message = "请输入随机数位数")
+    @Min(value = 1, message = "随机数位数需为正整数")
+    @Max(value = 6, message = "随机数位数最多 6 位")
+    @Schema(description = "随机数位数", example = "6")
     private Integer seqLength;
 
     @Pattern(regexp = "^[-_]?$", message = "分隔符仅支持短横线、下划线或不设置")

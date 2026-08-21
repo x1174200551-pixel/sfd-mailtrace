@@ -3,8 +3,8 @@ import type { SystemGroup, TicketRuleFormState } from '../types/system-config'
 export const emptyTicketRuleForm: TicketRuleFormState = {
   enabled: true,
   prefix: 'TCK',
-  dateFormat: 'yyyyMMdd',
-  seqLength: 4,
+  dateFormat: 'yyMMddHHmmss',
+  seqLength: 6,
   separator: '-',
   description: '客户来信自动建单时生成唯一工单号；邮件线程关联会优先匹配主题中的工单号。',
 }
@@ -13,7 +13,7 @@ export const systemGroups: SystemGroup[] = [
   {
     key: 'ticket',
     title: '工单编号规则',
-    summary: '前缀、日期格式、流水位数',
+    summary: '前缀、日期格式、随机数位数',
     detail: '业务人员可在此维护工单号生成规则，保存后仅影响后续新建工单。',
     owner: '业务可配',
   },

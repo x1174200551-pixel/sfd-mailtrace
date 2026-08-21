@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRef } from 'react'
 import type { MouseEvent } from 'react'
 import { Alert, Button, Empty, Input, Segmented, Space, Tabs, Tag, message } from 'antd'
 import {
@@ -17,6 +17,7 @@ import {
 import { Clock3, Inbox, MessageCircle, ShieldCheck, TriangleAlert, UserPlus, UserRound } from 'lucide-react'
 import dayjs from 'dayjs'
 import TiptapRichEditor from '../../TiptapRichEditor'
+import { EmailHtmlFrame } from '../../components/ticket/EmailHtmlFrame'
 import {
   priorityBadgeClass,
   priorityBadgeText,
@@ -80,130 +81,6 @@ function msgBodyText(msg: TicketMessage): string {
   if (msg.contentHtml) return htmlToText(msg.contentHtml)
   if (msg.contentBody) return msg.contentBody
   return '(无内容)'
-}
-
-function buildEmailSrcDoc(html: string): string {
-  const baseHref = typeof window === 'undefined' ? '/' : `${window.location.origin}/`
-  const baseStyle = `
-    <meta charset="utf-8" />
-    <base href="${baseHref}" target="_blank" />
-    <style>
-      html, body { margin: 0; padding: 0; background: #fff; }
-      body { overflow-wrap: anywhere; }
-      img { max-width: 100%; height: auto; }
-    </style>
-  `
-  const trimmed = html.trim()
-  if (/<html[\s>]/i.test(trimmed)) {
-    if (/<head[\s>]/i.test(trimmed)) {
-      return trimmed.replace(/<head([^>]*)>/i, `<head$1>${baseStyle}`)
-    }
-    return trimmed.replace(/<html([^>]*)>/i, `<html$1><head>${baseStyle}</head>`)
-  }
-  return `<!doctype html><html><head>${baseStyle}</head><body>${trimmed}</body></html>`
-}
-
-const PROXIED_INLINE_RESOURCE_URL_RE =
-  /(?:https?:\/\/[^"'()<>\s]+)?\/api\/v1\/tickets\/\d+\/attachments\/\d+\/download/g
-
-async function resolveAuthorizedInlineResources(html: string, signal: AbortSignal) {
-  const urls = Array.from(new Set(html.match(PROXIED_INLINE_RESOURCE_URL_RE) ?? []))
-  const objectUrls: string[] = []
-  if (urls.length === 0) {
-    return { html, objectUrls }
-  }
-
-  const token = readStoredToken()
-  if (!token) {
-    return { html, objectUrls }
-  }
-
-  let nextHtml = html
-  const replacements = await Promise.all(
-    urls.map(async (url) => {
-      try {
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal,
-        })
-        if (!response.ok) return null
-        const objectUrl = URL.createObjectURL(await response.blob())
-        objectUrls.push(objectUrl)
-        return { url, objectUrl }
-      } catch {
-        return null
-      }
-    }),
-  )
-
-  replacements.forEach((item) => {
-    if (!item) return
-    nextHtml = nextHtml.split(item.url).join(item.objectUrl)
-  })
-  return { html: nextHtml, objectUrls }
-}
-
-function EmailHtmlFrame({ html }: { html: string }) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [height, setHeight] = useState(180)
-  const [resolvedHtml, setResolvedHtml] = useState(html)
-  const srcDoc = useMemo(() => buildEmailSrcDoc(resolvedHtml), [resolvedHtml])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    let mounted = true
-    let objectUrls: string[] = []
-    setResolvedHtml(html)
-
-    resolveAuthorizedInlineResources(html, controller.signal)
-      .then((result) => {
-        if (!mounted) {
-          result.objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
-          return
-        }
-        objectUrls = result.objectUrls
-        setResolvedHtml(result.html)
-      })
-      .catch(() => {
-        if (mounted) setResolvedHtml(html)
-      })
-
-    return () => {
-      mounted = false
-      controller.abort()
-      objectUrls.forEach((objectUrl) => URL.revokeObjectURL(objectUrl))
-    }
-  }, [html])
-
-  const syncHeight = () => {
-    const doc = iframeRef.current?.contentDocument
-    if (!doc) return
-    const nextHeight = Math.max(
-      doc.body.scrollHeight,
-      doc.body.offsetHeight,
-      doc.documentElement.scrollHeight,
-      doc.documentElement.offsetHeight,
-    )
-    setHeight(Math.max(180, nextHeight + 2))
-  }
-
-  const handleLoad = () => {
-    syncHeight()
-    window.setTimeout(syncHeight, 120)
-    window.setTimeout(syncHeight, 600)
-  }
-
-  return (
-    <iframe
-      ref={iframeRef}
-      className="msg-body-frame"
-      title="邮件正文"
-      sandbox="allow-same-origin"
-      srcDoc={srcDoc}
-      style={{ height }}
-      onLoad={handleLoad}
-    />
-  )
 }
 
 function MessageBody({ msg }: { msg: TicketMessage }) {
@@ -299,7 +176,7 @@ export function TicketDetailPage({
         ? new Date(leftTime).getTime() - new Date(rightTime).getTime()
         : new Date(rightTime).getTime() - new Date(leftTime).getTime()
     })
-  const latestEvents = events.slice(0, 4)
+  const lifecycleEvents = [...events].reverse()
   const responseDeadline = formatDetailDate(detail.slaResponseDeadline)
   const resolveDeadline = formatDetailDate(detail.slaResolveDeadline)
   const handleAttachmentDownload = async (event: MouseEvent<HTMLAnchorElement>, attachment: TicketAttachment) => {
@@ -718,12 +595,12 @@ export function TicketDetailPage({
             <header>
               <div>
                 <strong>生命周期</strong>
-                <span>最近 {latestEvents.length} 条</span>
+                <span>共 {lifecycleEvents.length} 条</span>
               </div>
             </header>
-            {latestEvents.length > 0 ? (
+            {lifecycleEvents.length > 0 ? (
               <div className="detail-mini-events">
-                {latestEvents.map((event) => (
+                {lifecycleEvents.map((event) => (
                   <div key={event.id}>
                     <i />
                     <span>

@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -31,6 +32,7 @@ public class AutoReplyService {
     private final TicketMapper ticketMapper;
     private final UserMapper userMapper;
     private final MailSendService mailSendService;
+    private final CustomerTicketAccessService customerTicketAccessService;
 
     /**
      * 发送自动回执。
@@ -38,7 +40,7 @@ public class AutoReplyService {
      * @param ticketId 工单 ID
      * @param mailboxId 发件邮箱 ID
      */
-    public AutoReplyResult sendAutoReply(Long ticketId, Long mailboxId) {
+    public AutoReplyResult sendAutoReply(Long ticketId, Long mailboxId, String customerAccessCode) {
         try {
             // 1、查工单
             TicketEntity ticket = ticketMapper.selectById(ticketId);
@@ -69,14 +71,17 @@ public class AutoReplyService {
             String mailboxEmail = mailbox.getSmtpUsername() != null ? mailbox.getSmtpUsername() : "noreply@ntn.fziot";
             String assigneeName = resolveAssigneeName(ticket);
 
-            Map<String, String> variables = Map.of(
-                    "ticket_no", ticket.getTicketNo() != null ? ticket.getTicketNo() : "",
-                    "customer_email", ticket.getCustomerEmail() != null ? ticket.getCustomerEmail() : "",
-                    "customer_name", customerName,
-                    "mailbox_email", mailboxEmail,
-                    "assignee_name", assigneeName,
-                    "subject", ticket.getSubject() != null ? ticket.getSubject() : ""
-            );
+            Map<String, String> variables = new HashMap<>();
+            variables.put("ticket_no", ticket.getTicketNo() != null ? ticket.getTicketNo() : "");
+            variables.put("customer_email", ticket.getCustomerEmail() != null ? ticket.getCustomerEmail() : "");
+            variables.put("customer_name", customerName);
+            variables.put("mailbox_email", mailboxEmail);
+            variables.put("assignee_name", assigneeName);
+            variables.put("subject", ticket.getSubject() != null ? ticket.getSubject() : "");
+            variables.put("customer_ticket_url", customerTicketAccessService.buildTicketUrl(ticket));
+            variables.put("customer_ticket_code", customerAccessCode != null ? customerAccessCode : "");
+            variables.put("customer_ticket_expires_at",
+                    customerTicketAccessService.formatExpiresAt(ticket.getCustomerAccessExpiresAt()));
 
             String subject = render(template.getSubjectTpl(), variables);
             String content = render(template.getContentTpl(), variables);

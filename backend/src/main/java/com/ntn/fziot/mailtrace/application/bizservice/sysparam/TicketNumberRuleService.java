@@ -9,17 +9,17 @@ import com.ntn.fziot.mailtrace.interfaces.vo.sysparam.TicketNumberRuleRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sysparam.TicketNumberRuleVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.SysParamEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketSeqEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SysParamMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketSeqMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,10 +36,11 @@ public class TicketNumberRuleService {
     private static final String PARAM_SEPARATOR = "ticket.no.separator";
     private static final String PARAM_DESCRIPTION = "ticket.no.description";
     private static final String DEFAULT_DESCRIPTION = "客户来信自动建单时生成唯一工单号；邮件线程关联会优先匹配主题中的工单号。";
-    private static final String OPERATOR_SYSTEM = "system";
+    private static final int MAX_GENERATE_ATTEMPTS = 10;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SysParamMapper sysParamMapper;
-    private final TicketSeqMapper ticketSeqMapper;
+    private final TicketMapper ticketMapper;
     private final OperationLogMapper operationLogMapper;
     private final PermissionService permissionService;
 
@@ -51,8 +52,8 @@ public class TicketNumberRuleService {
         permissionService.assertPermission(principal, "ticket_number_rule:read", "无权查看编号规则");
         // 2、读取系统参数表中的编号规则配置
         TicketNumberRuleConfig config = loadConfig();
-        // 3、按当前日期维度查询已使用流水并组装预览
-        return buildVO(config, findUsedSeq(config.dateKey(LocalDate.now())));
+        // 3、按当前规则组装预览
+        return buildVO(config);
     }
 
     /**
@@ -63,8 +64,8 @@ public class TicketNumberRuleService {
         permissionService.assertPermission(principal, "ticket_number_rule:preview", "无权预览编号规则");
         // 2、规范化并校验页面传入的编号规则
         TicketNumberRuleConfig config = toConfig(request);
-        // 3、按规则日期维度查询已使用流水并返回预览结果
-        return buildVO(config, findUsedSeq(config.dateKey(LocalDate.now())));
+        // 3、按规则返回预览结果
+        return buildVO(config);
     }
 
     /**
@@ -80,11 +81,11 @@ public class TicketNumberRuleService {
         upsertParam(PARAM_ENABLED, String.valueOf(config.enabled()), "工单编号规则启用状态", principal.account());
         upsertParam(PARAM_PREFIX, config.prefix(), "工单号前缀", principal.account());
         upsertParam(PARAM_DATE_FORMAT, config.dateFormat(), "工单号日期格式", principal.account());
-        upsertParam(PARAM_SEQ_LENGTH, String.valueOf(config.seqLength()), "工单号流水位数", principal.account());
+        upsertParam(PARAM_SEQ_LENGTH, String.valueOf(config.seqLength()), "工单号随机数位数", principal.account());
         upsertParam(PARAM_SEPARATOR, config.separator(), "工单号分隔符", principal.account());
         upsertParam(PARAM_DESCRIPTION, config.description(), "工单编号规则业务说明", principal.account());
         // 4、写入操作日志，便于后续审计
-        recordLog(principal, "UPDATE", PARAM_PREFIX, "保存工单编号规则：" + config.previewTicketNo(findUsedSeq(config.dateKey(LocalDate.now()))));
+        recordLog(principal, "UPDATE", PARAM_PREFIX, "保存工单编号规则：" + config.previewTicketNo());
         // 5、返回保存后的最新预览结果
         return getRule(principal);
     }
@@ -106,8 +107,8 @@ public class TicketNumberRuleService {
         return new TicketNumberRuleConfig(
                 Boolean.parseBoolean(valueOf(paramMap, PARAM_ENABLED, "true")),
                 normalizePrefix(valueOf(paramMap, PARAM_PREFIX, "TCK")),
-                normalizeDateFormat(valueOf(paramMap, PARAM_DATE_FORMAT, "yyyyMMdd")),
-                normalizeSeqLength(valueOf(paramMap, PARAM_SEQ_LENGTH, "4")),
+                normalizeDateFormat(valueOf(paramMap, PARAM_DATE_FORMAT, "yyMMddHHmmss")),
+                normalizeSeqLength(valueOf(paramMap, PARAM_SEQ_LENGTH, "6")),
                 normalizeSeparator(valueOf(paramMap, PARAM_SEPARATOR, "-")),
                 normalizeDescription(valueOf(paramMap, PARAM_DESCRIPTION, DEFAULT_DESCRIPTION)),
                 latestUpdatedAt(paramMap)
@@ -129,17 +130,10 @@ public class TicketNumberRuleService {
         );
     }
 
-    private int findUsedSeq(String dateKey) {
-        TicketSeqEntity seq = ticketSeqMapper.selectOne(new LambdaQueryWrapper<TicketSeqEntity>()
-                .eq(TicketSeqEntity::getSeqDate, dateKey)
-                .last("LIMIT 1"));
-        return seq == null || seq.getCurrentValue() == null ? 0 : seq.getCurrentValue();
-    }
-
-    private TicketNumberRuleVO buildVO(TicketNumberRuleConfig config, int usedSeq) {
-        LocalDate today = LocalDate.now();
-        String dateKey = config.dateKey(today);
-        String nextSeq = formatSeq(usedSeq + 1, config.seqLength());
+    private TicketNumberRuleVO buildVO(TicketNumberRuleConfig config) {
+        LocalDateTime now = LocalDateTime.now();
+        String dateKey = config.dateKey(now);
+        String nextSeq = randomDigits(config.seqLength());
         String nextTicketNo = config.composeTicketNo(dateKey, nextSeq);
         return new TicketNumberRuleVO(
                 config.enabled(),
@@ -148,9 +142,9 @@ public class TicketNumberRuleService {
                 config.seqLength(),
                 config.separator(),
                 config.description(),
-                today.format(DateTimeFormatter.ISO_LOCAL_DATE),
+                now.toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE),
                 dateKey,
-                usedSeq,
+                0,
                 nextSeq,
                 nextTicketNo,
                 "Re: " + nextTicketNo,
@@ -189,29 +183,15 @@ public class TicketNumberRuleService {
         if (!config.enabled()) {
             throw new BusinessException(CODE_BAD_REQUEST, "工单编号规则未启用，请联系管理员配置");
         }
-        LocalDate today = LocalDate.now();
-        String dateKey = config.dateKey(today);
-        // 悲观锁：INSERT ... ON DUPLICATE KEY UPDATE 或先查后更
-        TicketSeqEntity seq = ticketSeqMapper.selectOne(new LambdaQueryWrapper<TicketSeqEntity>()
-                .eq(TicketSeqEntity::getSeqDate, dateKey)
-                .last("LIMIT 1"));
-        int nextValue;
-        if (seq == null) {
-            seq = new TicketSeqEntity();
-            seq.setSeqDate(dateKey);
-            seq.setCurrentValue(1);
-            seq.setCreatedBy(OPERATOR_SYSTEM);
-            seq.setUpdatedBy(OPERATOR_SYSTEM);
-            ticketSeqMapper.insert(seq);
-            nextValue = 1;
-        } else {
-            nextValue = seq.getCurrentValue() + 1;
-            ticketSeqMapper.update(null, new LambdaUpdateWrapper<TicketSeqEntity>()
-                    .eq(TicketSeqEntity::getId, seq.getId())
-                    .set(TicketSeqEntity::getCurrentValue, nextValue)
-                    .set(TicketSeqEntity::getUpdatedBy, OPERATOR_SYSTEM));
+        LocalDateTime now = LocalDateTime.now();
+        String dateKey = config.dateKey(now);
+        for (int i = 0; i < MAX_GENERATE_ATTEMPTS; i++) {
+            String ticketNo = config.composeTicketNo(dateKey, randomDigits(config.seqLength()));
+            if (!existsTicketNo(ticketNo)) {
+                return ticketNo;
+            }
         }
-        return config.composeTicketNo(dateKey, formatSeq(nextValue, config.seqLength()));
+        throw new BusinessException(CODE_BAD_REQUEST, "工单号生成冲突，请稍后重试");
     }
 
     private void recordLog(CurrentUserPrincipal principal, String actionCode, String bizId, String content) {
@@ -249,8 +229,8 @@ public class TicketNumberRuleService {
 
     private String normalizeDateFormat(String value) {
         String dateFormat = normalize(value);
-        if (!List.of("yyyyMMdd", "yyyyMM", "yyyy").contains(dateFormat)) {
-            throw new BusinessException(CODE_BAD_REQUEST, "日期格式仅支持 yyyyMMdd、yyyyMM 或 yyyy");
+        if (!List.of("yyMMddHHmmss", "yyyyMMdd", "yyyyMM", "yyyy").contains(dateFormat)) {
+            throw new BusinessException(CODE_BAD_REQUEST, "日期格式仅支持 yyMMddHHmmss、yyyyMMdd、yyyyMM 或 yyyy");
         }
         return dateFormat;
     }
@@ -258,12 +238,12 @@ public class TicketNumberRuleService {
     private int normalizeSeqLength(String value) {
         try {
             int seqLength = Integer.parseInt(normalize(value));
-            if (seqLength < 3 || seqLength > 8) {
-                throw new BusinessException(CODE_BAD_REQUEST, "流水位数需为 3-8 位");
+            if (seqLength < 1 || seqLength > 6) {
+                throw new BusinessException(CODE_BAD_REQUEST, "随机数位数需为 1-6 位");
             }
             return seqLength;
         } catch (NumberFormatException exception) {
-            throw new BusinessException(CODE_BAD_REQUEST, "流水位数需为数字");
+            throw new BusinessException(CODE_BAD_REQUEST, "随机数位数需为数字");
         }
     }
 
@@ -284,8 +264,18 @@ public class TicketNumberRuleService {
         return value == null ? "" : value.trim();
     }
 
-    private String formatSeq(int value, int seqLength) {
-        return String.format("%0" + seqLength + "d", value);
+    private String randomDigits(int length) {
+        StringBuilder builder = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            builder.append(RANDOM.nextInt(10));
+        }
+        return builder.toString();
+    }
+
+    private boolean existsTicketNo(String ticketNo) {
+        Long count = ticketMapper.selectCount(new LambdaQueryWrapper<TicketEntity>()
+                .eq(TicketEntity::getTicketNo, ticketNo));
+        return count != null && count > 0;
     }
 
     private static final class TicketNumberRuleConfig {
@@ -309,13 +299,8 @@ public class TicketNumberRuleService {
             this.updatedAt = updatedAt;
         }
 
-        private String dateKey(LocalDate date) {
-            if ("yyyy".equals(dateFormat)) {
-                return date.format(DateTimeFormatter.ofPattern("yyyy"));
-            } else if ("yyyyMM".equals(dateFormat)) {
-                return date.format(DateTimeFormatter.ofPattern("yyyyMM"));
-            }
-            return date.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        private String dateKey(LocalDateTime dateTime) {
+            return dateTime.format(DateTimeFormatter.ofPattern(dateFormat));
         }
 
         private String composeTicketNo(String dateKey, String nextSeq) {
@@ -325,9 +310,9 @@ public class TicketNumberRuleService {
                     .orElse(prefix);
         }
 
-        private String previewTicketNo(int usedSeq) {
-            String dateKey = dateKey(LocalDate.now());
-            String nextSeq = String.format("%0" + seqLength + "d", usedSeq + 1);
+        private String previewTicketNo() {
+            String dateKey = dateKey(LocalDateTime.now());
+            String nextSeq = "0".repeat(seqLength);
             return composeTicketNo(dateKey, nextSeq);
         }
 

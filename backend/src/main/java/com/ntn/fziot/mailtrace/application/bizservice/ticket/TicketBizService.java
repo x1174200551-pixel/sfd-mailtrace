@@ -41,6 +41,7 @@ import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketAttachmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -88,6 +89,7 @@ public class TicketBizService {
     private static final int CODE_NOT_FOUND = 40401;
     private static final String OPERATOR_SYSTEM = "system";
     private static final String MODULE_TICKET = "TICKET";
+    private static final int MAX_TICKET_INSERT_ATTEMPTS = 10;
 
     private static final Set<String> VALID_STATUSES = Set.of(
             STATUS_PENDING_ASSIGN, STATUS_PROCESSING, STATUS_WAITING_CUSTOMER, STATUS_CLOSED, STATUS_CANCELLED
@@ -113,6 +115,7 @@ public class TicketBizService {
     private final DataScopeService dataScopeService;
     private final PermissionService permissionService;
     private final FileStorageService fileStorageService;
+    private final CustomerTicketAccessService customerTicketAccessService;
 
     // ==================== 创建工单（系统内部调用） ====================
 
@@ -149,13 +152,8 @@ public class TicketBizService {
                              String inReplyTo, String references, LocalDateTime mailSentAt,
                              List<String> toAddresses, List<String> ccAddresses, List<String> bccAddresses,
                              String rawHeaders, byte[] rawEml, List<AttachmentInfo> attachments) {
-        // 1、生成工单号
-        String ticketNo = ticketNumberRuleService.generateNextTicketNo();
-        log.info("生成工单号 ticketNo={} mailboxId={} customer={} subject={}", ticketNo, mailboxId, customerEmail, subject);
-
-        // 2、创建工单，并在入库前计算首次响应/解决 SLA 截止时间。
+        // 1、创建工单，并在入库前计算首次响应/解决 SLA 截止时间。
         TicketEntity ticket = new TicketEntity();
-        ticket.setTicketNo(ticketNo);
         ticket.setSubject(subject);
         ticket.setStatus(STATUS_PENDING_ASSIGN);
         ticket.setPriority("NORMAL");
@@ -165,12 +163,16 @@ public class TicketBizService {
         ticket.setSlaBreached(false);
         ticket.setSlaWarningSent(false);
         ticket.setSlaBreachNotified(false);
+        CustomerTicketAccessService.CustomerTicketAccess customerAccess = customerTicketAccessService.createAccess();
+        ticket.setCustomerAccessCodeHash(customerAccess.codeHash());
+        ticket.setCustomerAccessExpiresAt(customerAccess.expiresAt());
+        ticket.setCustomerAccessEnabled(true);
         applySlaDeadlines(ticket, mailSentAt);
         ticket.setCreatedBy(OPERATOR_SYSTEM);
         ticket.setUpdatedBy(OPERATOR_SYSTEM);
-        ticketMapper.insert(ticket);
+        insertTicketWithRetry(ticket, mailboxId, customerEmail, subject);
 
-        // 3、保存原始邮件消息
+        // 2、保存原始邮件消息
         TicketMessageEntity msg = new TicketMessageEntity();
         msg.setTicketId(ticket.getId());
         msg.setDirection(DIRECTION_INBOUND);
@@ -197,16 +199,17 @@ public class TicketBizService {
             ticketMessageMapper.updateById(msg);
         }
 
-        // 4、记录生命周期事件：CREATED
+        // 3、记录生命周期事件：CREATED
         recordEvent(ticket.getId(), EVENT_CREATED, "工单已创建，来源邮箱ID：" + mailboxId, OPERATOR_SYSTEM, LocalDateTime.now());
 
-        // 5、尝试自动分配（分配规则优先，邮箱默认处理人兜底）
+        // 4、尝试自动分配（分配规则优先，邮箱默认处理人兜底）
         autoAssignByRules(ticket, mailboxId, subject, customerEmail);
 
-        // 6、发送自动回执（失败不影响工单）
-        AutoReplyService.AutoReplyResult autoReplyResult = autoReplyService.sendAutoReply(ticket.getId(), mailboxId);
+        // 5、发送自动回执（失败不影响工单）
+        AutoReplyService.AutoReplyResult autoReplyResult = autoReplyService.sendAutoReply(
+                ticket.getId(), mailboxId, customerAccess.code());
 
-        // 7、保存自动回执消息到会话（OUTBOUND）
+        // 6、保存自动回执消息到会话（OUTBOUND）
         if (autoReplyResult != null && autoReplyResult.success()) {
             try {
                 MailboxEntity mb = mailboxMapper.selectById(mailboxId);
@@ -229,8 +232,26 @@ public class TicketBizService {
             }
         }
 
-        log.info("工单创建成功 id={} ticketNo={}", ticket.getId(), ticketNo);
+        log.info("工单创建成功 id={} ticketNo={}", ticket.getId(), ticket.getTicketNo());
         return ticket.getId();
+    }
+
+    private void insertTicketWithRetry(TicketEntity ticket, Long mailboxId, String customerEmail, String subject) {
+        for (int attempt = 1; attempt <= MAX_TICKET_INSERT_ATTEMPTS; attempt++) {
+            String ticketNo = ticketNumberRuleService.generateNextTicketNo();
+            ticket.setId(null);
+            ticket.setTicketNo(ticketNo);
+            log.info("生成工单号 ticketNo={} mailboxId={} customer={} subject={}", ticketNo, mailboxId, customerEmail, subject);
+            try {
+                ticketMapper.insert(ticket);
+                return;
+            } catch (DuplicateKeyException exception) {
+                if (attempt >= MAX_TICKET_INSERT_ATTEMPTS) {
+                    throw new BusinessException(CODE_BAD_REQUEST, "工单号生成冲突，请稍后重试");
+                }
+                log.warn("工单号入库冲突，重新生成 ticketNo={} attempt={}", ticketNo, attempt);
+            }
+        }
     }
 
     // ==================== 客户追信回流 ====================

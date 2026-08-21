@@ -43,6 +43,7 @@ public class SecurityConfig {
                                     AntPathRequestMatcher.antMatcher("/swagger-ui/**"),
                                     AntPathRequestMatcher.antMatcher("/swagger-ui.html"),
                                     AntPathRequestMatcher.antMatcher("/v1/auth/login"),
+                                    AntPathRequestMatcher.antMatcher("/v1/customer-tickets/**"),
                                     AntPathRequestMatcher.antMatcher("/v1/system/health")
                             ).permitAll()
                             .anyRequest().authenticated())

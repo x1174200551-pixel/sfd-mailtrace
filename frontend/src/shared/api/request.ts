@@ -18,7 +18,7 @@ export function authHeaders(token: string) {
 const defaultApiBase = import.meta.env.PROD ? '/mailtrace-api' : '/api'
 const apiBase = import.meta.env.VITE_API_BASE || defaultApiBase
 
-function resolveApiUrl(url: string) {
+export function resolveApiUrl(url: string) {
   if (!url.startsWith('/api/')) {
     return url
   }

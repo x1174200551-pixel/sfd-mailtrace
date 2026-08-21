@@ -26,11 +26,12 @@ import { useCustomerManagement } from './hooks/useCustomerManagement'
 import { useTicketNumberRuleManagement } from './hooks/useTicketNumberRuleManagement'
 import { LoginPage } from './pages/auth/LoginPage'
 import type { LoginModalState } from './pages/auth/LoginPage'
+import { CustomerTicketLookupPage } from './pages/customer/CustomerTicketLookupPage'
 import type { SystemGroupKey } from './types/system-config'
 import { getVisibleTicketEvents, isTerminalTicket } from './utils/ticket-events'
 import { workdayLabel } from './utils/work-calendar'
 
-function App() {
+function AdminApp() {
   const {
     account,
     accountError,
@@ -1229,6 +1230,23 @@ function App() {
       submitting={submitting}
     />
   )
+}
+
+function customerTicketNoFromPath() {
+  const prefix = '/customer/tickets/'
+  const path = window.location.pathname
+  if (!path.startsWith(prefix)) {
+    return ''
+  }
+  return decodeURIComponent(path.slice(prefix.length).split('/')[0] || '').trim()
+}
+
+function App() {
+  const customerTicketNo = customerTicketNoFromPath()
+  if (customerTicketNo) {
+    return <CustomerTicketLookupPage ticketNo={customerTicketNo} />
+  }
+  return <AdminApp />
 }
 
 export default App

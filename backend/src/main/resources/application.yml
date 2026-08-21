@@ -58,6 +58,11 @@ mailtrace:
   holiday:
     national-api-url-template: ${MAILTRACE_HOLIDAY_NATIONAL_API_URL_TEMPLATE:https://api.jiejiariapi.com/v1/holidays/{year}}
     national-api-timeout-ms: ${MAILTRACE_HOLIDAY_NATIONAL_API_TIMEOUT_MS:5000}
+  customer-view:
+    # 客户查看链接基础地址，模板变量 customer_ticket_url 使用。
+    base-url: ${MAILTRACE_CUSTOMER_VIEW_BASE_URL:http://localhost:5174/customer/tickets}
+    access-ttl-hours: ${MAILTRACE_CUSTOMER_VIEW_ACCESS_TTL_HOURS:72}
+    code-length: ${MAILTRACE_CUSTOMER_VIEW_CODE_LENGTH:6}
   storage:
     # 文件存储类型：oss 或 minio。
     enabled: ${MAILTRACE_STORAGE_ENABLED:true}

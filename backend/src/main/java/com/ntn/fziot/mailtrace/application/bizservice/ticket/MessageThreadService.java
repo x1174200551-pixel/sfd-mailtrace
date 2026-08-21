@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
  * <p>
  * 优先级：
  * 1. In-Reply-To / References → 匹配 mt_ticket_message → 关联原工单
- * 2. 主题含工单号（TCK-yyyyMMdd-xxxx） → 匹配 mt_ticket → 关联工单
+ * 2. 主题含工单号（前缀-日期-随机数） → 匹配 mt_ticket → 关联工单
  * 3. 均不匹配 → 返回 null，由调用方决定新建工单
  */
 @Slf4j
@@ -27,8 +27,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class MessageThreadService {
 
-    /** 工单号正则：TCK-20260724-0001 */
-    private static final Pattern TICKET_NO_PATTERN = Pattern.compile("(TCK-\\d{8}-\\d+)");
+    /** 工单号正则：兼容 TCK-20260724-0001 与 TCK-260821093012-482931 */
+    private static final Pattern TICKET_NO_PATTERN = Pattern.compile("([A-Z0-9]{2,8}[-_]?(?:\\d{12}|\\d{8}|\\d{6}|\\d{4})[-_]?\\d{1,6})");
 
     private final TicketMessageMapper ticketMessageMapper;
     private final TicketMapper ticketMapper;

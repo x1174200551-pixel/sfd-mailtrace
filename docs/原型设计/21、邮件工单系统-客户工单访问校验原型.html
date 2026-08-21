@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>客户工单访问校验原型</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --border: #e4e7ed;
+      --text-primary: #1a1a2e;
+      --text-secondary: #6b7280;
+      --text-tertiary: #9ca3af;
+      --brand: #4f6ef7;
+      --brand-light: #eef2ff;
+      --green: #22c55e;
+      --green-light: #dcfce7;
+      --orange: #f59e0b;
+      --orange-light: #fef3c7;
+      --red: #ef4444;
+      --red-light: #fee2e2;
+      --blue: #3b82f6;
+      --blue-light: #dbeafe;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .page-wrapper {
+      position: relative;
+      max-width: 960px;
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--brand);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .logo-text {
+      color: var(--text-primary);
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .top-right {
+      color: var(--text-tertiary);
+      font-size: 13px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .top-right span {
+      color: var(--orange);
+      font-weight: 500;
+    }
+
+    .ticket-header-card,
+    .progress-card,
+    .sidebar-card,
+    .verify-modal {
+      border-radius: var(--radius);
+      background: var(--card-bg);
+      box-shadow: var(--shadow);
+    }
+
+    .masked-content {
+      filter: blur(2px);
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .ticket-header-card {
+      margin-bottom: 20px;
+      padding: 28px 32px;
+    }
+
+    .ticket-header-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .ticket-id {
+      color: var(--text-tertiary);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+
+    .ticket-title {
+      margin-top: 6px;
+      color: var(--text-primary);
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 20px;
+      padding: 7px 16px;
+      background: var(--blue-light);
+      color: #1d4ed8;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .status-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--blue);
+    }
+
+    .ticket-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px 24px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+    }
+
+    .meta-label {
+      margin-bottom: 4px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .meta-value {
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .progress-card {
+      margin-bottom: 20px;
+      padding: 24px 32px;
+    }
+
+    .progress-card h3,
+    .sidebar-card h4 {
+      margin-bottom: 16px;
+      color: var(--text-primary);
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .skeleton-line {
+      height: 10px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      background: #eef1f6;
+    }
+
+    .skeleton-line.short {
+      width: 58%;
+    }
+
+    .skeleton-line.long {
+      width: 88%;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 20px;
+    }
+
+    .sidebar-card {
+      padding: 20px 24px;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding: 8px 0;
+      color: var(--text-tertiary);
+      font-size: 13px;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-row .value {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .modal-mask {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.34);
+    }
+
+    .verify-modal {
+      width: min(100%, 440px);
+      background: #fff;
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px;
+    }
+
+    .modal-head strong {
+      color: var(--text-primary);
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .modal-head span {
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .modal-body {
+      display: grid;
+      gap: 14px;
+      padding: 20px;
+    }
+
+    .verify-title {
+      display: grid;
+      gap: 5px;
+    }
+
+    .verify-title h2 {
+      color: var(--text-primary);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .verify-title span {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.65;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      color: var(--text-primary);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .field input {
+      width: 100%;
+      height: 40px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 12px;
+      color: var(--text-primary);
+      background: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .field input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 4px var(--brand-light);
+    }
+
+    .field small {
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .hint-box {
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--brand-light);
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .error-box {
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--red-light);
+      color: var(--red);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      padding: 0 20px 20px;
+    }
+
+    .action-btn {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .action-btn.primary {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .action-btn.secondary {
+      border: 1px solid var(--border);
+      background: #fff;
+      color: var(--text-primary);
+    }
+
+    @media (max-width: 768px) {
+      .page-wrapper {
+        padding: 18px 14px 48px;
+      }
+
+      .top-bar,
+      .ticket-header-top {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .ticket-meta-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <div class="masked-content">
+      <div class="top-bar">
+        <div class="logo-area">
+          <div class="logo-icon">M</div>
+          <div class="logo-text">邮件工单服务平台</div>
+        </div>
+        <div class="top-right">
+          访问状态：<span>等待校验</span>
+        </div>
+      </div>
+
+      <section class="ticket-header-card">
+        <div class="ticket-header-top">
+          <div>
+            <div class="ticket-id">工单编号：TCK-260821101500-482931</div>
+            <div class="ticket-title">关于订单发货状态和发票信息的咨询</div>
+          </div>
+          <div class="status-badge"><span class="dot"></span>处理中</div>
+        </div>
+        <div class="ticket-meta-grid">
+          <div><div class="meta-label">客户邮箱</div><div class="meta-value">customer@example.com</div></div>
+          <div><div class="meta-label">来源渠道</div><div class="meta-value">邮件来信</div></div>
+          <div><div class="meta-label">创建时间</div><div class="meta-value">2026-08-21 10:15</div></div>
+          <div><div class="meta-label">更新时间</div><div class="meta-value">2026-08-21 11:32</div></div>
+        </div>
+      </section>
+
+      <section class="progress-card">
+        <h3>处理进度</h3>
+        <div class="skeleton-line long"></div>
+        <div class="skeleton-line"></div>
+        <div class="skeleton-line short"></div>
+      </section>
+
+      <div class="content-grid">
+        <section class="progress-card">
+          <h3>处理时间线</h3>
+          <div class="skeleton-line long"></div>
+          <div class="skeleton-line long"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+        </section>
+        <aside class="sidebar-card">
+          <h4>工单信息</h4>
+          <div class="info-row"><span>当前状态</span><span class="value">处理中</span></div>
+          <div class="info-row"><span>SLA 状态</span><span class="value">正常</span></div>
+          <div class="info-row"><span>来源渠道</span><span class="value">邮件来信</span></div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-mask">
+    <section class="verify-modal" role="dialog" aria-modal="true" aria-labelledby="verify-title">
+      <header class="modal-head">
+        <strong>访问校验</strong>
+        <span>校验通过后展示工单详情</span>
+      </header>
+      <div class="modal-body">
+        <div class="verify-title">
+          <h2 id="verify-title">请输入校验码</h2>
+          <span>为保护工单信息，打开详情前需要校验自动回复邮件中的访问码。</span>
+        </div>
+        <div class="field">
+          <label>工单编号</label>
+          <input value="TCK-260821101500-482931" readonly />
+          <small>自动回复链接会带入该编号。</small>
+        </div>
+        <div class="field">
+          <label>校验码</label>
+          <input value="123456" inputmode="numeric" maxlength="6" />
+          <small>请输入自动回复邮件中的校验码。</small>
+        </div>
+        <div class="hint-box">校验通过后关闭弹框并展示详情；校验失败、链接过期或客户查看关闭时，不返回任何工单详情。</div>
+        <div class="error-box">错误提示样式：校验码不正确或链接已失效。</div>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn secondary" type="button">关闭页面</button>
+        <button class="action-btn primary" type="button">确认查看</button>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

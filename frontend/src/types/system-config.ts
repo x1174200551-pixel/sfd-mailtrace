@@ -18,9 +18,13 @@ export type TicketRuleFormState = {
   enabled: boolean
   prefix: string
   dateFormat: string
-  seqLength: number
+  seqLength: number | ''
   separator: string
   description: string
+}
+
+export type TicketRulePayload = Omit<TicketRuleFormState, 'seqLength'> & {
+  seqLength: number
 }
 
 export type SystemGroupKey = 'ticket' | 'mail' | 'notice' | 'security'

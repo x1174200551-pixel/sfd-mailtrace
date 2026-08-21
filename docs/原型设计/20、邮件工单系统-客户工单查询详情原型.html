@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>客户工单查询详情原型</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --card-bg: #ffffff;
+      --border: #e4e7ed;
+      --text-primary: #1a1a2e;
+      --text-secondary: #6b7280;
+      --text-tertiary: #9ca3af;
+      --brand: #4f6ef7;
+      --brand-light: #eef2ff;
+      --green: #22c55e;
+      --green-light: #dcfce7;
+      --orange: #f59e0b;
+      --blue: #3b82f6;
+      --blue-light: #dbeafe;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .page-wrapper {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px 20px 60px;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: var(--brand);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .logo-text {
+      color: var(--text-primary);
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .top-right {
+      color: var(--text-tertiary);
+      font-size: 13px;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .top-right span {
+      color: var(--green);
+      font-weight: 500;
+    }
+
+    .ticket-header-card,
+    .progress-card,
+    .timeline-card,
+    .email-card,
+    .sidebar-card {
+      border-radius: var(--radius);
+      background: var(--card-bg);
+      box-shadow: var(--shadow);
+    }
+
+    .ticket-header-card {
+      margin-bottom: 20px;
+      padding: 28px 32px;
+    }
+
+    .ticket-header-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .ticket-id {
+      color: var(--text-tertiary);
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+
+    .ticket-title {
+      margin-top: 6px;
+      color: var(--text-primary);
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 20px;
+      padding: 7px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .status-badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .status-badge.processing {
+      background: var(--blue-light);
+      color: #1d4ed8;
+    }
+
+    .status-badge.processing .dot {
+      background: var(--blue);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .ticket-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px 24px;
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+    }
+
+    .meta-label {
+      margin-bottom: 4px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .meta-value {
+      overflow: hidden;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 500;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .meta-value.ok {
+      color: var(--green);
+    }
+
+    .progress-card {
+      margin-bottom: 20px;
+      padding: 24px 32px;
+    }
+
+    .progress-card h3,
+    .timeline-card h3,
+    .email-card h3 {
+      margin-bottom: 20px;
+      color: var(--text-primary);
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .progress-steps {
+      position: relative;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .progress-line {
+      position: absolute;
+      top: 16px;
+      left: 32px;
+      right: 32px;
+      z-index: 0;
+      height: 3px;
+      background: var(--border);
+    }
+
+    .progress-line-fill {
+      position: absolute;
+      top: 16px;
+      left: 32px;
+      z-index: 1;
+      width: calc((100% - 64px) * 0.75);
+      height: 3px;
+      background: var(--brand);
+      transition: width 0.6s ease;
+    }
+
+    .step {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      text-align: center;
+    }
+
+    .step-circle {
+      width: 34px;
+      height: 34px;
+      border: 3px solid var(--border);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--card-bg);
+      color: var(--text-tertiary);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .step.done .step-circle {
+      border-color: var(--brand);
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .step.current .step-circle {
+      border-color: var(--brand);
+      background: var(--card-bg);
+      color: var(--brand);
+      box-shadow: 0 0 0 4px var(--brand-light);
+    }
+
+    .step-label {
+      color: var(--text-tertiary);
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .step.done .step-label,
+    .step.current .step-label {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .step-time {
+      color: var(--text-tertiary);
+      font-size: 11px;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 20px;
+    }
+
+    .timeline-card,
+    .email-card {
+      margin-bottom: 20px;
+      padding: 24px 32px;
+    }
+
+    .timeline-card h3 .count {
+      color: var(--text-tertiary);
+      font-size: 12px;
+      font-weight: 400;
+    }
+
+    .timeline {
+      position: relative;
+      padding-left: 28px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      top: 8px;
+      bottom: 8px;
+      left: 7px;
+      width: 2px;
+      background: var(--border);
+    }
+
+    .timeline-item {
+      position: relative;
+      padding-bottom: 24px;
+    }
+
+    .timeline-item:last-child {
+      padding-bottom: 0;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      top: 4px;
+      left: -28px;
+      width: 16px;
+      height: 16px;
+      border: 3px solid var(--card-bg);
+      border-radius: 50%;
+      background: var(--text-tertiary);
+      box-shadow: 0 0 0 2px var(--border);
+    }
+
+    .timeline-item.done .timeline-dot {
+      background: var(--brand);
+      box-shadow: 0 0 0 2px var(--brand);
+    }
+
+    .timeline-item.current .timeline-dot {
+      background: var(--blue);
+      box-shadow: 0 0 0 2px var(--blue), 0 0 0 6px var(--blue-light);
+      animation: pulse-ring 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { box-shadow: 0 0 0 2px var(--blue), 0 0 0 6px var(--blue-light); }
+      50% { box-shadow: 0 0 0 2px var(--blue), 0 0 0 10px rgba(59,130,246,0.15); }
+    }
+
+    .timeline-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .timeline-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .timeline-badge {
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .timeline-badge.system {
+      background: var(--green-light);
+      color: #16a34a;
+    }
+
+    .timeline-badge.customer {
+      background: var(--brand-light);
+      color: var(--brand);
+    }
+
+    .timeline-time {
+      color: var(--text-tertiary);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .timeline-body {
+      border-radius: 8px;
+      margin-top: 6px;
+      padding: 10px 14px;
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .timeline-body strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .timeline-duration {
+      margin-top: 6px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+    }
+
+    .email-content {
+      border-radius: 8px;
+      padding: 16px 20px;
+      background: var(--bg);
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .email-content p {
+      margin-bottom: 8px;
+    }
+
+    .email-content p:last-child {
+      margin-bottom: 0;
+    }
+
+    .sidebar-card {
+      margin-bottom: 20px;
+      padding: 20px 24px;
+    }
+
+    .sidebar-card h4 {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      padding: 8px 0;
+      font-size: 13px;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-row .label {
+      color: var(--text-tertiary);
+    }
+
+    .info-row .value {
+      color: var(--text-primary);
+      font-weight: 500;
+      text-align: right;
+    }
+
+    .sla-bar {
+      margin-top: 12px;
+    }
+
+    .sla-track {
+      height: 6px;
+      border-radius: 3px;
+      margin-top: 8px;
+      overflow: hidden;
+      background: var(--border);
+    }
+
+    .sla-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.8s ease;
+    }
+
+    .sla-fill.normal {
+      background: var(--green);
+    }
+
+    .sla-fill.warning {
+      background: var(--orange);
+    }
+
+    .sla-text {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    .sla-text .used {
+      color: var(--text-secondary);
+    }
+
+    .sla-text .total {
+      color: var(--text-tertiary);
+    }
+
+    .latest-progress {
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: var(--brand-light);
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .latest-progress strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--brand);
+      font-weight: 600;
+    }
+
+    .action-bar {
+      display: flex;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .action-btn {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .action-btn.primary {
+      background: var(--brand);
+      color: #fff;
+    }
+
+    .action-btn.primary:hover {
+      background: #3b5de7;
+    }
+
+    .page-footer {
+      padding: 20px;
+      color: var(--text-tertiary);
+      font-size: 12px;
+      text-align: center;
+    }
+
+    @media (max-width: 768px) {
+      .page-wrapper {
+        padding: 18px 14px 48px;
+      }
+
+      .top-bar,
+      .ticket-header-top,
+      .timeline-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .ticket-header-card,
+      .progress-card,
+      .timeline-card,
+      .email-card {
+        padding: 20px;
+      }
+
+      .ticket-meta-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrapper">
+    <div class="top-bar">
+      <div class="logo-area">
+        <div class="logo-icon">M</div>
+        <div class="logo-text">邮件工单服务平台</div>
+      </div>
+      <div class="top-right">
+        查询时间：2026-08-21 11:36 · 令牌有效期：<span>2026-08-24 10:15</span>
+      </div>
+    </div>
+
+    <section class="ticket-header-card">
+      <div class="ticket-header-top">
+        <div class="ticket-id-block">
+          <div class="ticket-id">工单编号：TCK-260821101500-482931</div>
+          <div class="ticket-title">关于订单发货状态和发票信息的咨询</div>
+        </div>
+        <div class="status-badge processing">
+          <span class="dot"></span>
+          处理中
+        </div>
+      </div>
+      <div class="ticket-meta-grid">
+        <div class="meta-item">
+          <div class="meta-label">客户邮箱</div>
+          <div class="meta-value">customer@example.com</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">来源渠道</div>
+          <div class="meta-value">邮件来信</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">创建时间</div>
+          <div class="meta-value">2026-08-21 10:15</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">更新时间</div>
+          <div class="meta-value">2026-08-21 11:32</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">首次响应</div>
+          <div class="meta-value ok">已响应</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">SLA 状态</div>
+          <div class="meta-value ok">正常</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">首次响应截止</div>
+          <div class="meta-value">2026-08-21 14:15</div>
+        </div>
+        <div class="meta-item">
+          <div class="meta-label">预计解决时间</div>
+          <div class="meta-value">2026-08-22 18:00</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="progress-card">
+      <h3>处理进度</h3>
+      <div class="progress-steps">
+        <div class="progress-line"></div>
+        <div class="progress-line-fill"></div>
+        <div class="step done">
+          <div class="step-circle">✓</div>
+          <div class="step-label">已接收</div>
+          <div class="step-time">08-21 10:15</div>
+        </div>
+        <div class="step done">
+          <div class="step-circle">✓</div>
+          <div class="step-label">已进入处理</div>
+          <div class="step-time">08-21 10:18</div>
+        </div>
+        <div class="step done">
+          <div class="step-circle">✓</div>
+          <div class="step-label">已首次回复</div>
+          <div class="step-time">08-21 11:20</div>
+        </div>
+        <div class="step current">
+          <div class="step-circle">●</div>
+          <div class="step-label">处理中</div>
+          <div class="step-time">当前阶段</div>
+        </div>
+        <div class="step">
+          <div class="step-circle">5</div>
+          <div class="step-label">已关闭</div>
+          <div class="step-time">—</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="content-grid">
+      <div>
+        <section class="timeline-card">
+          <h3>处理时间线 <span class="count">· 客户可见记录</span></h3>
+          <div class="timeline">
+            <div class="timeline-item done">
+              <div class="timeline-dot"></div>
+              <div class="timeline-header">
+                <div class="timeline-status">
+                  工单已创建
+                  <span class="timeline-badge system">系统</span>
+                </div>
+                <div class="timeline-time">2026-08-21 10:15</div>
+              </div>
+              <div class="timeline-body">
+                系统已收到您的邮件并创建工单，工单编号为 <strong>TCK-260821101500-482931</strong>。
+              </div>
+              <div class="timeline-duration">邮件接收后自动生成</div>
+            </div>
+
+            <div class="timeline-item done">
+              <div class="timeline-dot"></div>
+              <div class="timeline-header">
+                <div class="timeline-status">
+                  已进入处理
+                  <span class="timeline-badge system">系统</span>
+                </div>
+                <div class="timeline-time">2026-08-21 10:18</div>
+              </div>
+              <div class="timeline-body">
+                工单已进入处理队列，后续处理进度会通过邮件或本页面同步。
+              </div>
+              <div class="timeline-duration">距上一节点：3 分钟</div>
+            </div>
+
+            <div class="timeline-item done">
+              <div class="timeline-dot"></div>
+              <div class="timeline-header">
+                <div class="timeline-status">
+                  已首次回复
+                  <span class="timeline-badge customer">邮件通知</span>
+                </div>
+                <div class="timeline-time">2026-08-21 11:20</div>
+              </div>
+              <div class="timeline-body">
+                客服已通过邮件回复，首次响应在 SLA 时限内完成。
+              </div>
+              <div class="timeline-duration">响应耗时：1 小时 5 分</div>
+            </div>
+
+            <div class="timeline-item current">
+              <div class="timeline-dot"></div>
+              <div class="timeline-header">
+                <div class="timeline-status">
+                  处理中
+                  <span class="timeline-badge customer">当前进展</span>
+                </div>
+                <div class="timeline-time">2026-08-21 11:32</div>
+              </div>
+              <div class="timeline-body">
+                当前正在核实订单发货状态和发票信息，预计在 <strong>2026-08-22 18:00</strong> 前给出处理结果。
+              </div>
+              <div class="timeline-duration">当前进行中</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="email-card">
+          <h3>邮件信息</h3>
+          <div class="email-content">
+            <p><strong>发件人：</strong>customer@example.com</p>
+            <p><strong>发送时间：</strong>2026-08-21 10:13</p>
+            <p><strong>主题：</strong>关于订单发货状态和发票信息的咨询</p>
+            <p style="margin-top:12px;">您好，我想确认订单 SO-20260821001 当前的发货状态，同时需要补开发票。</p>
+            <p>如需要补充资料，请直接回复邮件告知。谢谢。</p>
+          </div>
+        </section>
+      </div>
+
+      <aside>
+        <section class="sidebar-card">
+          <h4>SLA 情况</h4>
+          <div class="info-row">
+            <span class="label">首次响应</span>
+            <span class="value" style="color: var(--green);">已达标</span>
+          </div>
+          <div class="sla-bar">
+            <div class="sla-text">
+              <span class="used">响应耗时：1 小时 5 分</span>
+              <span class="total">目标：4 小时</span>
+            </div>
+            <div class="sla-track">
+              <div class="sla-fill normal" style="width: 28%;"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:16px;">
+            <div class="info-row" style="border-bottom:none;padding-bottom:0;">
+              <span class="label">预计解决</span>
+              <span class="value" style="color: var(--orange);">进行中</span>
+            </div>
+          </div>
+          <div class="sla-bar">
+            <div class="sla-text">
+              <span class="used">已用时：1 小时 17 分</span>
+              <span class="total">预计：08-22 18:00</span>
+            </div>
+            <div class="sla-track">
+              <div class="sla-fill warning" style="width: 18%;"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sidebar-card">
+          <h4>工单信息</h4>
+          <div class="info-row">
+            <span class="label">当前状态</span>
+            <span class="value">处理中</span>
+          </div>
+          <div class="info-row">
+            <span class="label">SLA 状态</span>
+            <span class="value" style="color: var(--green);">正常</span>
+          </div>
+          <div class="info-row">
+            <span class="label">来源渠道</span>
+            <span class="value">邮件来信</span>
+          </div>
+          <div class="info-row">
+            <span class="label">令牌有效期</span>
+            <span class="value">2026-08-24 10:15</span>
+          </div>
+          <div class="info-row">
+            <span class="label">首次响应</span>
+            <span class="value">08-21 11:20</span>
+          </div>
+        </section>
+
+        <section class="sidebar-card">
+          <h4>最新进展</h4>
+          <div class="latest-progress">
+            <strong>正在核实订单和发票信息</strong>
+            预计在 2026-08-22 18:00 前给出处理结果。
+          </div>
+        </section>
+
+        <div class="action-bar">
+          <button class="action-btn primary" type="button">刷新进度</button>
+        </div>
+      </aside>
+    </div>
+
+    <div class="page-footer">
+      本页面由邮件工单服务平台自动生成 · 如需补充信息，请直接回复原邮件并保留工单编号
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', function() {
+      var fill = document.querySelector('.progress-line-fill');
+      if (fill) {
+        var targetWidth = 'calc((100% - 64px) * 0.75)';
+        fill.style.width = '0';
+        setTimeout(function() {
+          fill.style.width = targetWidth;
+        }, 300);
+      }
+    });
+  </script>
+</body>
+</html>

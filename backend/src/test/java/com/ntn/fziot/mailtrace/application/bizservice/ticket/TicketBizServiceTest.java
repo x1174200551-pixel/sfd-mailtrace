@@ -44,6 +44,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
@@ -80,6 +81,8 @@ class TicketBizServiceTest {
     private TicketNumberRuleService ticketNumberRuleService;
     @Mock
     private AutoReplyService autoReplyService;
+    @Mock
+    private CustomerTicketAccessService customerTicketAccessService;
     @Mock
     private MailSendService mailSendService;
     @Mock
@@ -121,6 +124,11 @@ class TicketBizServiceTest {
         lenient().when(userMapper.selectById(2L)).thenReturn(agent(2L, "张三", "agent@example.com"));
         lenient().when(assignmentRuleService.matchForTicket(any(), any(), any(), any())).thenReturn(null);
         lenient().when(slaDeadlineService.calculateForNewTicket(any())).thenReturn(SlaDeadlineResult.none());
+        lenient().when(customerTicketAccessService.createAccess()).thenReturn(new CustomerTicketAccessService.CustomerTicketAccess(
+                "123456",
+                "encoded-customer-access-code",
+                LocalDateTime.parse("2026-07-30T10:00:00")
+        ));
     }
 
     private void allowAdminAndAgentOperationalPermissions() {
@@ -288,6 +296,24 @@ class TicketBizServiceTest {
     }
 
     @Test
+    void updateStatusToClosed_shouldWriteClosedEventWithChineseStatus() {
+        TicketEntity ticket = ticket(110L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(110L)).thenReturn(ticket);
+
+        ticketBizService.updateStatus(admin, 110L, new TicketStatusRequest("CLOSED", "后台手动关闭"));
+
+        ArgumentCaptor<TicketEntity> updateCaptor = ArgumentCaptor.forClass(TicketEntity.class);
+        verify(ticketMapper, org.mockito.Mockito.atLeastOnce()).updateById(updateCaptor.capture());
+        assertTrue(updateCaptor.getAllValues().stream().anyMatch(update -> update.getClosedAt() != null));
+
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_CLOSED, eventCaptor.getValue().getEventType());
+        assertTrue(eventCaptor.getValue().getEventContent().contains("处理中 → 已关闭"));
+        assertTrue(eventCaptor.getValue().getEventContent().contains("说明：后台手动关闭"));
+    }
+
+    @Test
     void handleCustomerFollowUp_whenClosed_shouldReopenToProcessing() {
         TicketEntity ticket = ticket(105L, TicketBizService.STATUS_CLOSED);
         when(ticketMapper.selectById(105L)).thenReturn(ticket);
@@ -425,6 +451,33 @@ class TicketBizServiceTest {
     }
 
     @Test
+    void createTicket_whenTicketNoDuplicate_shouldRetryInsertWithNewTicketNo() {
+        when(ticketNumberRuleService.generateNextTicketNo())
+                .thenReturn("TCK-260821120000-111111", "TCK-260821120000-222222");
+        int[] insertCount = {0};
+        List<String> attemptedTicketNos = new java.util.ArrayList<>();
+        when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
+            insertCount[0]++;
+            TicketEntity ticket = invocation.getArgument(0);
+            attemptedTicketNos.add(ticket.getTicketNo());
+            if (insertCount[0] == 1) {
+                throw new DuplicateKeyException("Duplicate entry for uk_mt_ticket_no");
+            }
+            ticket.setId(211L);
+            return 1;
+        });
+
+        Long ticketId = ticketBizService.createTicket(
+                11L, "并发咨询", "customer@example.com", "客户",
+                "正文", "<p>正文</p>", "<msg-211@example.com>",
+                null, null, LocalDateTime.now());
+
+        assertEquals(211L, ticketId);
+        verify(ticketMapper, org.mockito.Mockito.times(2)).insert(any(TicketEntity.class));
+        assertEquals(List.of("TCK-260821120000-111111", "TCK-260821120000-222222"), attemptedTicketNos);
+    }
+
+    @Test
     void createTicket_shouldApplySlaDeadlines() {
         LocalDateTime mailSentAt = LocalDateTime.parse("2026-07-27T10:00:00");
         LocalDateTime responseDeadline = LocalDateTime.parse("2026-07-27T14:00:00");
@@ -457,6 +510,9 @@ class TicketBizServiceTest {
         assertEquals(false, saved.getSlaWarningSent());
         assertEquals(false, saved.getSlaBreachNotified());
         assertEquals(mailSentAt, saved.getLastCustomerMailAt());
+        assertEquals("encoded-customer-access-code", saved.getCustomerAccessCodeHash());
+        assertEquals(LocalDateTime.parse("2026-07-30T10:00:00"), saved.getCustomerAccessExpiresAt());
+        assertEquals(true, saved.getCustomerAccessEnabled());
     }
 
     @Test
@@ -468,7 +524,7 @@ class TicketBizServiceTest {
             ticket.setId(203L);
             return 1;
         });
-        when(autoReplyService.sendAutoReply(203L, 11L))
+        when(autoReplyService.sendAutoReply(203L, 11L, "123456"))
                 .thenReturn(new AutoReplyService.AutoReplyResult(
                         true,
                         "OK",

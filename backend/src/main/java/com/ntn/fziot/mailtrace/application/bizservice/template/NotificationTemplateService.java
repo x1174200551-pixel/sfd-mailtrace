@@ -188,14 +188,17 @@ public class NotificationTemplateService {
 
     private Map<String, String> buildSampleData(Map<String, String> requestSampleData) {
         Map<String, String> sampleData = new LinkedHashMap<>();
-        sampleData.put("ticket_no", "TCK-20260722-0001");
+        sampleData.put("ticket_no", "TCK-260821093012-482931");
         sampleData.put("subject", "订单物流查询");
         sampleData.put("customer_email", "customer@example.com");
         sampleData.put("customer_name", "张先生");
         sampleData.put("assignee_name", "李强");
         sampleData.put("mailbox_email", "service@ntn.fziot");
         sampleData.put("sla_deadline", "2026-07-22 18:00");
-        sampleData.put("ticket_link", "https://mailtrace.local/tickets/TCK-20260722-0001");
+        sampleData.put("ticket_link", "https://mailtrace.local/tickets/TCK-260821093012-482931");
+        sampleData.put("customer_ticket_url", "https://mailtrace.local/customer/tickets/TCK-260821093012-482931");
+        sampleData.put("customer_ticket_code", "482931");
+        sampleData.put("customer_ticket_expires_at", "2026-08-24 09:30");
         if (requestSampleData != null) {
             requestSampleData.forEach((key, value) -> {
                 if (key != null && value != null) {
@@ -251,14 +254,17 @@ public class NotificationTemplateService {
 
     private static Map<String, TemplateVariableVO> buildVariables() {
         Map<String, TemplateVariableVO> variables = new LinkedHashMap<>();
-        variables.put("{ticket_no}", new TemplateVariableVO("{ticket_no}", "工单号", "TCK-20260722-0001"));
+        variables.put("{ticket_no}", new TemplateVariableVO("{ticket_no}", "工单号", "TCK-260821093012-482931"));
         variables.put("{subject}", new TemplateVariableVO("{subject}", "工单主题", "订单物流查询"));
         variables.put("{customer_email}", new TemplateVariableVO("{customer_email}", "客户邮箱", "customer@example.com"));
         variables.put("{customer_name}", new TemplateVariableVO("{customer_name}", "客户名称", "张先生"));
         variables.put("{assignee_name}", new TemplateVariableVO("{assignee_name}", "处理人", "李强"));
         variables.put("{mailbox_email}", new TemplateVariableVO("{mailbox_email}", "服务邮箱", "service@ntn.fziot"));
         variables.put("{sla_deadline}", new TemplateVariableVO("{sla_deadline}", "SLA 截止时间", "2026-07-22 18:00"));
-        variables.put("{ticket_link}", new TemplateVariableVO("{ticket_link}", "工单链接", "https://mailtrace.local/tickets/TCK-20260722-0001"));
+        variables.put("{ticket_link}", new TemplateVariableVO("{ticket_link}", "工单链接", "https://mailtrace.local/tickets/TCK-260821093012-482931"));
+        variables.put("{customer_ticket_url}", new TemplateVariableVO("{customer_ticket_url}", "客户查看链接", "https://mailtrace.local/customer/tickets/TCK-260821093012-482931"));
+        variables.put("{customer_ticket_code}", new TemplateVariableVO("{customer_ticket_code}", "客户查看校验码", "482931"));
+        variables.put("{customer_ticket_expires_at}", new TemplateVariableVO("{customer_ticket_expires_at}", "客户查看有效期", "2026-08-24 09:30"));
         return variables;
     }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { systemConfigApi } from '../api/system-config'
 import { emptyTicketRuleForm } from '../constants/system-config'
-import type { TicketNumberRule, TicketRuleFormState } from '../types/system-config'
+import type { TicketNumberRule, TicketRuleFormState, TicketRulePayload } from '../types/system-config'
 
 type UseTicketNumberRuleManagementParams = {
   activeMenu: string
@@ -18,6 +18,19 @@ function toTicketRuleForm(rule: TicketNumberRule): TicketRuleFormState {
     seqLength: rule.seqLength,
     separator: rule.separator,
     description: rule.description,
+  }
+}
+
+function buildTicketRulePayload(form: TicketRuleFormState): TicketRulePayload | null {
+  if (form.seqLength === '' || !Number.isInteger(form.seqLength)) {
+    return null
+  }
+  if (form.seqLength < 1 || form.seqLength > 6) {
+    return null
+  }
+  return {
+    ...form,
+    seqLength: form.seqLength,
   }
 }
 
@@ -73,11 +86,17 @@ export function useTicketNumberRuleManagement({
 
   const previewTicketRule = useCallback(async () => {
     if (!token) return
+    const payload = buildTicketRulePayload(ticketRuleForm)
+    if (!payload) {
+      setTicketRuleError('随机数位数请输入 1-6 的正整数')
+      setTicketRuleMessage('')
+      return
+    }
     setTicketRulePreviewLoading(true)
     setTicketRuleError('')
     setTicketRuleMessage('')
     try {
-      const data = await systemConfigApi.previewTicketNumberRule(ticketRuleForm)
+      const data = await systemConfigApi.previewTicketNumberRule(payload)
       setTicketRule(data)
       setTicketRuleForm(toTicketRuleForm(data))
     } catch (error) {
@@ -90,11 +109,18 @@ export function useTicketNumberRuleManagement({
 
   const saveTicketRule = useCallback(async () => {
     if (!token) return
+    const payload = buildTicketRulePayload(ticketRuleForm)
+    if (!payload) {
+      setTicketRuleError('随机数位数请输入 1-6 的正整数')
+      setTicketRuleMessage('')
+      setTicketRuleConfirmOpen(false)
+      return
+    }
     setTicketRuleSaving(true)
     setTicketRuleError('')
     setTicketRuleMessage('')
     try {
-      const data = await systemConfigApi.saveTicketNumberRule(ticketRuleForm)
+      const data = await systemConfigApi.saveTicketNumberRule(payload)
       setTicketRule(data)
       setTicketRuleForm(toTicketRuleForm(data))
       setTicketRuleDirty(false)
@@ -118,11 +144,21 @@ export function useTicketNumberRuleManagement({
     setTicketRuleMessage('')
   }, [])
 
+  const openTicketRuleConfirm = useCallback(() => {
+    if (!buildTicketRulePayload(ticketRuleForm)) {
+      setTicketRuleError('随机数位数请输入 1-6 的正整数')
+      setTicketRuleMessage('')
+      return
+    }
+    setTicketRuleError('')
+    setTicketRuleConfirmOpen(true)
+  }, [ticketRuleForm])
+
   return {
     clearTicketRuleFeedback,
     closeTicketRuleConfirm: () => setTicketRuleConfirmOpen(false),
     fetchTicketRule,
-    openTicketRuleConfirm: () => setTicketRuleConfirmOpen(true),
+    openTicketRuleConfirm,
     previewTicketRule,
     resetTicketRule,
     saveTicketRule,

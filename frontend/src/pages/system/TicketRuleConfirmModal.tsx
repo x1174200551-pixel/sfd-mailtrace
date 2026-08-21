@@ -22,6 +22,9 @@ export function TicketRuleConfirmModal({
         <p>保存后系统会用新规则生成后续工单号，历史工单号不受影响。请确认规则预览无误。</p>
         <div className="confirm-target">
           <strong>{rule?.nextTicketNo || `${ticketRuleForm.prefix || 'TCK'} 规则`}</strong>
+          <span>
+            {`日期格式：${ticketRuleForm.dateFormat}；随机数位数：${ticketRuleForm.seqLength}；分隔符：${ticketRuleForm.separator || '无'}`}
+          </span>
           <span>影响范围：后续客户来信自动建单、自动回执、主题工单号匹配。</span>
         </div>
         <div className="user-modal__foot">
