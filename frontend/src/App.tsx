@@ -1233,12 +1233,18 @@ function AdminApp() {
 }
 
 function customerTicketNoFromPath() {
-  const prefix = '/customer/tickets/'
   const path = window.location.pathname
-  if (!path.startsWith(prefix)) {
-    return ''
+  const base = import.meta.env.BASE_URL || '/'
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`
+  const prefixes = Array.from(new Set([`${normalizedBase}customer/tickets/`, '/customer/tickets/']))
+
+  for (const prefix of prefixes) {
+    if (path.startsWith(prefix)) {
+      return decodeURIComponent(path.slice(prefix.length).split('/')[0] || '').trim()
+    }
   }
-  return decodeURIComponent(path.slice(prefix.length).split('/')[0] || '').trim()
+
+  return ''
 }
 
 function App() {
