@@ -1,3 +1,4 @@
+# 本文件作为本地兜底和开发参考；启用 Nacos 时以 ntn-cmp-mailtrace-api.yaml 为准。
 server:
   port: ${SERVER_PORT:8080}
   servlet:
@@ -5,6 +6,7 @@ server:
 
 spring:
   application:
+    # 需要和 Nacos Data ID 前缀一致。
     name: ${APPLICATION_NAME:ntn-cmp-mailtrace-api}
   jackson:
     time-zone: Asia/Shanghai
@@ -13,6 +15,7 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
   datasource:
+    # 本地兜底数据库。
     url: ${MAILTRACE_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/mailtrace?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
     username: ${MAILTRACE_DATASOURCE_USERNAME:root}
     password: ${MAILTRACE_DATASOURCE_PASSWORD:root123}
@@ -55,11 +58,30 @@ mailtrace:
   holiday:
     national-api-url-template: ${MAILTRACE_HOLIDAY_NATIONAL_API_URL_TEMPLATE:https://api.jiejiariapi.com/v1/holidays/{year}}
     national-api-timeout-ms: ${MAILTRACE_HOLIDAY_NATIONAL_API_TIMEOUT_MS:5000}
+  customer-view:
+    # 客户查看链接基础地址，模板变量 customer_ticket_url 使用。
+    base-url: ${MAILTRACE_CUSTOMER_VIEW_BASE_URL:http://localhost:5174/customer/tickets}
+    access-ttl-hours: ${MAILTRACE_CUSTOMER_VIEW_ACCESS_TTL_HOURS:72}
+    code-length: ${MAILTRACE_CUSTOMER_VIEW_CODE_LENGTH:6}
   storage:
+    # 文件存储类型：oss 或 minio。
     enabled: ${MAILTRACE_STORAGE_ENABLED:true}
-    endpoint: ${MAILTRACE_STORAGE_ENDPOINT:http://127.0.0.1:9000}
-    public-endpoint: ${MAILTRACE_STORAGE_PUBLIC_ENDPOINT:http://127.0.0.1:9000}
-    region: ${MAILTRACE_STORAGE_REGION:us-east-1}
-    access-key: ${MAILTRACE_STORAGE_ACCESS_KEY:minioadmin}
-    secret-key: ${MAILTRACE_STORAGE_SECRET_KEY:minioadmin123}
-    bucket: ${MAILTRACE_STORAGE_BUCKET:mailtrace-attachments}
+    type: ${MAILTRACE_STORAGE_TYPE:oss}
+    minio:
+      # 仅 type=minio 时生效。
+      endpoint: ${MAILTRACE_MINIO_ENDPOINT:http://127.0.0.1:9000}
+      public-endpoint: ${MAILTRACE_MINIO_PUBLIC_ENDPOINT:http://127.0.0.1:9000}
+      region: ${MAILTRACE_MINIO_REGION:us-east-1}
+      access-key: ${MAILTRACE_MINIO_ACCESS_KEY:minioadmin}
+      secret-key: ${MAILTRACE_MINIO_SECRET_KEY:minioadmin123}
+      bucket: ${MAILTRACE_MINIO_BUCKET:mailtrace-attachments}
+
+aliyun:
+  oss:
+    # 仅 type=oss 时生效。
+    endpoint: ${ALIYUN_OSS_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
+    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+    bucket-name: ${ALIYUN_OSS_BUCKET_NAME:smarty-cmp-test}
+    # OSS 对象目录前缀。
+    dir: ${ALIYUN_OSS_DIR:ets-dev}

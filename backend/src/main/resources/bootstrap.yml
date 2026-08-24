@@ -8,10 +8,10 @@ spring:
         - javax.sql.DataSource
     nacos:
       # Nacos 地址。
-      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      server-addr: ${NACOS_SERVER_ADDR:124.221.245.91:8848}
       # Nacos 账号密码。
-      username: ${NACOS_USERNAME:}
-      password: ${NACOS_PASSWORD:}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
       discovery:
         fail-fast: false
         retry:
