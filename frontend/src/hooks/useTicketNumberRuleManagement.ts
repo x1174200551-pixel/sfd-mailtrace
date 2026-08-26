@@ -81,6 +81,7 @@ export function useTicketNumberRuleManagement({
   const updateTicketRuleForm = useCallback((patch: Partial<TicketRuleFormState>) => {
     setTicketRuleForm((value) => ({ ...value, ...patch }))
     setTicketRuleDirty(true)
+    setTicketRuleError('')
     setTicketRuleMessage('')
   }, [])
 
