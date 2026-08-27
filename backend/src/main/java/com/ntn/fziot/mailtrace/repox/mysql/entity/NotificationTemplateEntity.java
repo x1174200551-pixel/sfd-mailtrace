@@ -18,6 +18,8 @@ public class NotificationTemplateEntity {
 
     private String templateCode;
 
+    private String templateType;
+
     private String templateName;
 
     private String subjectTpl;

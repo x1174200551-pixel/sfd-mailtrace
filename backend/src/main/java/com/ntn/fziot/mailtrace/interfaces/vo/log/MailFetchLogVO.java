@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Schema(description = "邮件拉取日志")
 public record MailFetchLogVO(
         @Schema(description = "日志ID") Long id,
+        @Schema(description = "企业ID") Long enterpriseId,
         @Schema(description = "邮箱ID") Long mailboxId,
         @Schema(description = "邮箱名称") String mailboxName,
         @Schema(description = "邮箱地址") String emailAddress,

@@ -1,5 +1,5 @@
 import { requestApi } from '../shared/api/request'
-import type { ManagedUser, RoleCode, UserPageResponse } from '../types/user'
+import type { ManagedUser, RoleCode, UserDataGrantDetail, UserPageResponse } from '../types/user'
 
 export type UserQuery = {
   enabled?: string | boolean
@@ -15,9 +15,10 @@ export type UserCreatePayload = {
   displayName: string
   email: string
   enabled: boolean
+  enterpriseIds: number[]
+  mailboxIds: number[]
   password: string
   roleCode: RoleCode
-  roleCodes: string[]
 }
 
 export type UserUpdatePayload = {
@@ -25,8 +26,15 @@ export type UserUpdatePayload = {
   displayName: string
   email: string
   enabled: boolean
+  enterpriseIds: number[]
+  mailboxIds: number[]
   roleCode: RoleCode
-  roleCodes: string[]
+}
+
+export type AssignableUserQuery = {
+  assignmentRuleGroupId?: number
+  enterpriseId?: number
+  mailboxId?: number
 }
 
 function toQuery(params: Record<string, string | number | boolean | null | undefined>) {
@@ -43,6 +51,10 @@ function toQuery(params: Record<string, string | number | boolean | null | undef
 export const userApi = {
   list(params: UserQuery) {
     return requestApi<UserPageResponse>(`/api/v1/users${toQuery(params)}`)
+  },
+
+  assignableOptions(params: AssignableUserQuery) {
+    return requestApi<ManagedUser[]>(`/api/v1/users/options${toQuery(params)}`)
   },
 
   create(payload: UserCreatePayload) {
@@ -70,6 +82,17 @@ export const userApi = {
     return requestApi<ManagedUser>(`/api/v1/users/${userId}/enabled`, {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
+    })
+  },
+
+  getDataGrants(userId: number) {
+    return requestApi<UserDataGrantDetail>(`/api/v1/users/${userId}/data-grants`)
+  },
+
+  saveDataGrants(userId: number, enterpriseIds: number[], mailboxIds: number[]) {
+    return requestApi<UserDataGrantDetail>(`/api/v1/users/${userId}/data-grants`, {
+      method: 'PUT',
+      body: JSON.stringify({ enterpriseIds, mailboxIds }),
     })
   },
 }

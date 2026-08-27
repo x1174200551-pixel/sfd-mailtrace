@@ -1,5 +1,7 @@
 export type CustomerReadonly = {
   id: number | null
+  enterpriseId: number
+  enterpriseName: string | null
   email: string
   displayName: string | null
   remark: string | null

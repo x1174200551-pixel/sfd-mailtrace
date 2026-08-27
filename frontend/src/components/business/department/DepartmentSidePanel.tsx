@@ -1,14 +1,12 @@
 import dayjs from 'dayjs'
-import type { DepartmentNode, DepartmentStats } from '../../../types/department'
+import type { DepartmentNode } from '../../../types/department'
 
 type DepartmentSidePanelProps = {
   selectedDeptNode: DepartmentNode | null
   orgDeptOptions: DepartmentNode[]
-  stats: DepartmentStats | null
-  selectedDeptTotalMemberCount: number
 }
 
-export function DepartmentSidePanel({ selectedDeptNode, orgDeptOptions, stats, selectedDeptTotalMemberCount }: DepartmentSidePanelProps) {
+export function DepartmentSidePanel({ selectedDeptNode, orgDeptOptions }: DepartmentSidePanelProps) {
   return (
     <aside className="org-side">
       <section className="org-card">
@@ -32,20 +30,6 @@ export function DepartmentSidePanel({ selectedDeptNode, orgDeptOptions, stats, s
         </div>
       </section>
 
-      <section className="org-card">
-        <div className="org-card-head">
-          <div className="org-card-title">数据权限范围</div>
-          <span className="org-tag blue">预览</span>
-        </div>
-        <div className="org-card-body">
-          <div className="scope-list">
-            <div className="scope-card"><div><strong>全部数据</strong><span className="org-tag orange">{stats?.memberCount ?? 0} 人</span></div><p>可查看当前工作空间内所有部门成员相关数据。</p></div>
-            <div className="scope-card"><div><strong>仅本人</strong><span className="org-tag">1 人</span></div><p>只能查看自己负责或参与处理的数据。</p></div>
-            <div className="scope-card"><div><strong>仅本部门</strong><span className="org-tag blue">{selectedDeptNode?.memberCount ?? 0} 人</span></div><p>只能查看当前部门直属成员相关数据。</p></div>
-            <div className="scope-card"><div><strong>本部门及下级部门</strong><span className="org-tag green">{selectedDeptTotalMemberCount} 人</span></div><p>可查看当前部门及下级部门相关数据。</p></div>
-          </div>
-        </div>
-      </section>
     </aside>
   )
 }

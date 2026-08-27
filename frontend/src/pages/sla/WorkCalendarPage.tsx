@@ -15,6 +15,7 @@ import type {
   WorkCalendarListResponse,
   WorkCalendarPolicy,
 } from '../../types/work-calendar'
+import type { EnterpriseOption } from '../../types/enterprise'
 
 type WorkCalendarPageProps = {
   actionLoading: boolean
@@ -76,6 +77,8 @@ type WorkCalendarPageProps = {
   timeInvalid: boolean
   workCalendarData: WorkCalendarListResponse | null
   workCalendarDefaultFilter: string
+  workCalendarEnterpriseFilter: string
+  workCalendarEnterpriseOptions: EnterpriseOption[]
   workCalendarDirty: boolean
   workCalendarError: string
   workCalendarForm: WorkCalendarFormState
@@ -83,6 +86,7 @@ type WorkCalendarPageProps = {
   workCalendarSaving: boolean
   workCalendarsLoading: boolean
   workdayLabel: (workdays?: number[]) => string
+  onWorkCalendarEnterpriseFilterChange: (value: string) => void
 }
 
 function weekdayIndex(date: MonthCell['date']) {
@@ -150,6 +154,8 @@ export function WorkCalendarPage({
   timeInvalid,
   workCalendarData,
   workCalendarDefaultFilter,
+  workCalendarEnterpriseFilter,
+  workCalendarEnterpriseOptions,
   workCalendarDirty,
   workCalendarError,
   workCalendarForm,
@@ -157,6 +163,7 @@ export function WorkCalendarPage({
   workCalendarSaving,
   workCalendarsLoading,
   workdayLabel,
+  onWorkCalendarEnterpriseFilterChange,
 }: WorkCalendarPageProps) {
   const workCalendarRecords = workCalendarData?.records ?? []
   const workCalendarSummary = workCalendarData?.summary
@@ -272,6 +279,12 @@ export function WorkCalendarPage({
               <Col xs={24} xl={8}>
                 <Card title="日历列表">
                   <Space wrap style={{ width: '100%', marginBottom: 16 }}>
+                    <Select
+                      style={{ width: 180 }}
+                      value={workCalendarEnterpriseFilter}
+                      onChange={onWorkCalendarEnterpriseFilterChange}
+                      options={workCalendarEnterpriseOptions.map((enterprise) => ({ value: String(enterprise.id), label: enterprise.enterpriseName }))}
+                    />
                     <Input
                       allowClear
                       prefix={<SearchOutlined />}
@@ -367,6 +380,15 @@ export function WorkCalendarPage({
                 >
                   <Row gutter={[12, 12]}>
                     <Col span={24}>
+                      <Typography.Text strong>所属企业</Typography.Text>
+                      <Select
+                        value={workCalendarForm.enterpriseId || undefined}
+                        onChange={(value) => onUpdateWorkCalendarForm({ enterpriseId: value })}
+                        options={workCalendarEnterpriseOptions.map((enterprise) => ({ value: String(enterprise.id), label: enterprise.enterpriseName }))}
+                        style={{ width: '100%', marginTop: 8 }}
+                      />
+                    </Col>
+                    <Col span={24}>
                       <Typography.Text strong>日历名称</Typography.Text>
                       <Input
                         value={workCalendarForm.calendarName}
@@ -453,7 +475,7 @@ export function WorkCalendarPage({
                     <Button
                       type="primary"
                       loading={workCalendarSaving}
-                      disabled={!canCreateWorkCalendars || !workCalendarForm.calendarName.trim() || workCalendarForm.workdays.length === 0 || timeInvalid}
+                      disabled={!canCreateWorkCalendars || !workCalendarForm.enterpriseId || !workCalendarForm.calendarName.trim() || workCalendarForm.workdays.length === 0 || timeInvalid}
                       onClick={() => void onSaveWorkCalendar()}
                     >
                       保存日历

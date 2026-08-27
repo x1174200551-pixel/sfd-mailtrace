@@ -1,8 +1,10 @@
 import type { FormEvent } from 'react'
 import {
   Check,
+  Building2,
   Edit3,
   LockKeyhole,
+  Mail,
   Plus,
   Power,
   PowerOff,
@@ -16,6 +18,9 @@ import {
 import { getRoleProfile, roleLabel, roleProfiles } from '../../constants/roles'
 import type { DepartmentNode } from '../../types/department'
 import type { ManagedUser, RoleCode, UserConfirmAction, UserFormMode, UserFormState, UserPageResponse } from '../../types/user'
+import type { UserDataGrantForm } from '../../types/user'
+import type { EnterpriseOption } from '../../types/enterprise'
+import type { MailboxOption } from '../../types/mailbox'
 
 type RoleOption = {
   label: string
@@ -64,6 +69,12 @@ type UserManagePageProps = {
   usersData: UserPageResponse | null
   usersError: string
   usersLoading: boolean
+  userGrantEnterpriseOptions: EnterpriseOption[]
+  userGrantForm: UserDataGrantForm
+  userGrantLoading: boolean
+  userGrantMailboxOptions: MailboxOption[]
+  onToggleUserGrantEnterprise: (enterpriseId: number) => void
+  onToggleUserGrantMailbox: (mailboxId: number) => void
 }
 
 export function UserManagePage({
@@ -108,8 +119,13 @@ export function UserManagePage({
   usersData,
   usersError,
   usersLoading,
+  userGrantEnterpriseOptions,
+  userGrantForm,
+  userGrantLoading,
+  userGrantMailboxOptions,
+  onToggleUserGrantEnterprise,
+  onToggleUserGrantMailbox,
 }: UserManagePageProps) {
-  const selectedRoleProfile = getRoleProfile(userForm.roleCode)
   const selectedDepartmentName = departmentOptions.find((department) => department.id === userForm.departmentId)?.deptName || '默认部门'
   const selectedRoleLabel = roleOptions.find((role) => role.value === userForm.roleCode)?.label || roleLabel(userForm.roleCode)
 
@@ -230,7 +246,7 @@ export function UserManagePage({
                       <th>角色</th>
                       <th>主部门</th>
                       <th>菜单范围</th>
-                      <th>数据范围</th>
+                      <th>数据授权</th>
                       <th>状态</th>
                       <th>最近登录</th>
                       <th>操作</th>
@@ -256,7 +272,7 @@ export function UserManagePage({
                           </td>
                           <td>{managedUser.departmentName || '默认部门'}</td>
                           <td>{profile.menuScope}</td>
-                          <td>{profile.dataScope}</td>
+                          <td>{managedUser.roleCode === 'ADMIN' ? '全部数据可见' : '按企业 / 邮箱授权'}</td>
                           <td>
                             <span className={managedUser.enabled ? 'state-pill enabled' : 'state-pill disabled'}>
                               {managedUser.enabled ? '启用' : '停用'}
@@ -391,17 +407,54 @@ export function UserManagePage({
                     <option key={department.id} value={department.id}>{department.deptName}</option>
                   ))}
                 </select>
-                <small>{departmentsError || '用于后续主管视角和部门数据范围。'}</small>
+                <small>{departmentsError || '用于组织归属、成员管理和负责人识别。'}</small>
               </label>
               <div className="role-preview">
                 <span>角色生效预览</span>
                 <strong>{selectedRoleLabel}</strong>
-                <small>{selectedRoleProfile.dataScope}；一个用户同一时间只绑定一个角色，保存后刷新当前用户信息即可按新权限生效。</small>
+                <small>一个用户只绑定一个角色和一个主部门；菜单与操作权限由角色决定，业务数据由下方企业/邮箱授权决定。</small>
                 <div>
                   <em>{selectedDepartmentName}</em>
                   <em>{selectedRoleLabel}</em>
                 </div>
               </div>
+              <section className="user-grant-editor">
+                <div className="user-grant-head">
+                  <div><strong>数据授权</strong><small>企业授权自动包含该企业未来新增邮箱；单邮箱授权只包含勾选项。</small></div>
+                  <span>{userForm.roleCode === 'ADMIN' ? '全部数据可见' : `已选 ${userGrantForm.enterpriseIds.length} 个企业 / ${userGrantForm.mailboxIds.length} 个邮箱`}</span>
+                </div>
+                {userForm.roleCode === 'ADMIN' ? (
+                  <div className="user-grant-admin"><ShieldCheck size={20} /><div><strong>管理员无需逐条授权</strong><small>管理员始终可见所有企业、邮箱及历史数据。</small></div></div>
+                ) : userGrantLoading ? (
+                  <div className="user-grant-loading">正在加载数据授权...</div>
+                ) : (
+                  <div className="user-grant-groups">
+                    {userGrantEnterpriseOptions.map((enterprise) => {
+                      const enterpriseSelected = userGrantForm.enterpriseIds.includes(enterprise.id)
+                      const enterpriseMailboxes = userGrantMailboxOptions.filter((mailbox) => mailbox.enterpriseId === enterprise.id)
+                      return (
+                        <article key={enterprise.id}>
+                          <label className="user-grant-enterprise">
+                            <input checked={enterpriseSelected} disabled={userFormSubmitting} onChange={() => onToggleUserGrantEnterprise(enterprise.id)} type="checkbox" />
+                            <Building2 size={16} />
+                            <strong>{enterprise.enterpriseName}</strong>
+                            <small>{enterpriseSelected ? '已授权整个企业' : '可单独选择邮箱'}</small>
+                          </label>
+                          <div className="user-grant-mailboxes">
+                            {enterpriseMailboxes.length ? enterpriseMailboxes.map((mailbox) => (
+                              <label key={mailbox.id}>
+                                <input checked={enterpriseSelected || userGrantForm.mailboxIds.includes(mailbox.id)} disabled={userFormSubmitting || enterpriseSelected} onChange={() => onToggleUserGrantMailbox(mailbox.id)} type="checkbox" />
+                                <Mail size={14} /><span>{mailbox.mailboxName}</span><small>{mailbox.emailAddress}</small>
+                              </label>
+                            )) : <small>该企业暂无邮箱</small>}
+                          </div>
+                        </article>
+                      )
+                    })}
+                    {userGrantEnterpriseOptions.length === 0 && <div className="user-grant-loading">暂无可授权企业</div>}
+                  </div>
+                )}
+              </section>
               {userFormMode === 'create' && (
                 <label>
                   <span>初始密码</span>
@@ -430,7 +483,7 @@ export function UserManagePage({
               <button disabled={userFormSubmitting} onClick={onCloseUserForm} type="button">
                 取消
               </button>
-              <button className="primary-action" disabled={userFormSubmitting} type="submit">
+              <button className="primary-action" disabled={userFormSubmitting || userGrantLoading} type="submit">
                 <Check size={16} />
                 {userFormSubmitting ? '保存中...' : userFormMode === 'create' ? '保存并创建' : '保存修改'}
               </button>

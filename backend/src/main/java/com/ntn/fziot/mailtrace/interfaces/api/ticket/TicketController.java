@@ -49,13 +49,15 @@ public class TicketController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Boolean slaBreached,
             @RequestParam(required = false) Long assigneeId,
+            @RequestParam(required = false) Long enterpriseId,
             @RequestParam(required = false) Long mailboxId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdTo,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         return BasicResult.ok(ticketBizService.pageTickets(
-                principal, keyword, status, slaBreached, assigneeId, mailboxId, createdFrom, createdTo, page, size));
+                principal, keyword, status, slaBreached, assigneeId, enterpriseId, mailboxId,
+                createdFrom, createdTo, page, size));
     }
 
     @Operation(summary = "工单详情")

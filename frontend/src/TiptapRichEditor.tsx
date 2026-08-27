@@ -93,6 +93,8 @@ export default function TiptapRichEditor({ placeholder = '请输入内容...', o
     extensions: [
       StarterKit.configure({
         heading: { levels: [3] },
+        link: false,
+        underline: false,
       }),
       Underline,
       LinkExtension.configure({

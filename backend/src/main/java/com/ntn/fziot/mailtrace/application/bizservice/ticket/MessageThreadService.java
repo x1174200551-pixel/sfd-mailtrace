@@ -37,11 +37,16 @@ public class MessageThreadService {
      * 解析邮件应归属的工单 ID。
      *
      * @param mail 已解析的邮件
+     * @param enterpriseId 来源邮箱所属企业 ID
      * @return 工单 ID，null 表示未匹配到任何已有工单
      */
-    public Long resolveTicketId(ParsedMail mail) {
+    public Long resolveTicketId(ParsedMail mail, Long enterpriseId) {
+        if (enterpriseId == null) {
+            log.warn("线程关联跳过：来源邮箱缺少企业归属 messageId={}", mail.messageId());
+            return null;
+        }
         // 优先级 1：In-Reply-To / References 匹配
-        Long byMessageId = resolveByMessageId(mail);
+        Long byMessageId = resolveByMessageId(mail, enterpriseId);
         if (byMessageId != null) {
             log.info("线程关联：通过 Message-ID 匹配到工单 ticketId={} messageId={}",
                     byMessageId, mail.messageId());
@@ -49,7 +54,7 @@ public class MessageThreadService {
         }
 
         // 优先级 2：主题提取工单号
-        Long byTicketNo = resolveByTicketNo(mail);
+        Long byTicketNo = resolveByTicketNo(mail, enterpriseId);
         if (byTicketNo != null) {
             log.info("线程关联：通过工单号匹配到工单 ticketId={} subject={}",
                     byTicketNo, mail.subject());
@@ -65,11 +70,11 @@ public class MessageThreadService {
     /**
      * 通过 In-Reply-To / References 头匹配已有消息的 Message-ID。
      */
-    private Long resolveByMessageId(ParsedMail mail) {
+    private Long resolveByMessageId(ParsedMail mail, Long enterpriseId) {
         // 优先检查 In-Reply-To
         if (mail.inReplyTo() != null && !mail.inReplyTo().isBlank()) {
             String refId = extractMessageId(mail.inReplyTo());
-            Long ticketId = findTicketIdByMessageId(refId);
+            Long ticketId = findTicketIdByMessageId(refId, enterpriseId);
             if (ticketId != null) return ticketId;
         }
 
@@ -77,7 +82,7 @@ public class MessageThreadService {
         if (mail.references() != null && !mail.references().isBlank()) {
             String refId = extractLastMessageId(mail.references());
             if (refId != null) {
-                Long ticketId = findTicketIdByMessageId(refId);
+                Long ticketId = findTicketIdByMessageId(refId, enterpriseId);
                 if (ticketId != null) return ticketId;
             }
         }
@@ -115,7 +120,7 @@ public class MessageThreadService {
     /**
      * 根据 Message-ID 查 mt_ticket_message，返回 ticketId。
      */
-    private Long findTicketIdByMessageId(String messageId) {
+    private Long findTicketIdByMessageId(String messageId, Long enterpriseId) {
         String normalized = normalizeMessageId(messageId);
         if (normalized == null || normalized.isBlank()) return null;
         String bracketed = "<" + normalized + ">";
@@ -126,13 +131,17 @@ public class MessageThreadService {
                                 .or()
                                 .eq(TicketMessageEntity::getMessageId, bracketed))
                         .last("LIMIT 1"));
-        return msg != null ? msg.getTicketId() : null;
+        if (msg == null || msg.getTicketId() == null) {
+            return null;
+        }
+        TicketEntity ticket = ticketMapper.selectById(msg.getTicketId());
+        return ticket != null && enterpriseId.equals(ticket.getEnterpriseId()) ? ticket.getId() : null;
     }
 
     /**
      * 从邮件主题中提取工单号并匹配工单。
      */
-    private Long resolveByTicketNo(ParsedMail mail) {
+    private Long resolveByTicketNo(ParsedMail mail, Long enterpriseId) {
         if (mail.subject() == null || mail.subject().isBlank()) return null;
         Matcher matcher = TICKET_NO_PATTERN.matcher(mail.subject());
         if (matcher.find()) {
@@ -140,8 +149,9 @@ public class MessageThreadService {
             TicketEntity ticket = ticketMapper.selectOne(
                     new LambdaQueryWrapper<TicketEntity>()
                             .eq(TicketEntity::getTicketNo, ticketNo)
+                            .eq(TicketEntity::getEnterpriseId, enterpriseId)
                             .last("LIMIT 1"));
-            return ticket != null ? ticket.getId() : null;
+            return ticket != null && enterpriseId.equals(ticket.getEnterpriseId()) ? ticket.getId() : null;
         }
         return null;
     }

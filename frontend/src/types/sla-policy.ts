@@ -2,6 +2,7 @@ import type { Dayjs } from 'dayjs'
 
 export type SlaPolicy = {
   id: number
+  enterpriseId: number
   policyName: string
   enabled: boolean
   defaultPolicy: boolean
@@ -28,6 +29,7 @@ export type SlaPolicyListResponse = {
 
 export type SlaPolicyFormState = {
   id: number | null
+  enterpriseId: string
   policyName: string
   enabled: boolean
   defaultPolicy: boolean
@@ -45,6 +47,7 @@ export type SlaPolicyConfirmAction = {
 
 export type SlaWorkCalendar = {
   id: number
+  enterpriseId?: number
   calendarName: string
   timezone: string
   workdays: number[]

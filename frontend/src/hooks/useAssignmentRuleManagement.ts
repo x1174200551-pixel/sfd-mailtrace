@@ -1,31 +1,36 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { message } from 'antd'
-import { assignmentRuleApi } from '../api/assignment-rules'
+import { assignmentRuleApi, assignmentRuleGroupApi } from '../api/assignment-rules'
+import { enterpriseApi } from '../api/enterprises'
 import { userApi } from '../api/users'
 import { emptyAssignmentRuleForm, emptyAssignmentRuleTestForm } from '../constants/assignment-rules'
 import type {
   AssignmentRule,
   AssignmentRuleConfirmAction,
   AssignmentRuleFormState,
+  AssignmentRuleGroup,
+  AssignmentRuleGroupFormState,
+  AssignmentRuleGroupListResponse,
   AssignmentRuleListResponse,
   AssignmentRuleMatchResponse,
   AssignmentRuleTestForm,
 } from '../types/assignment-rule'
-import type { Mailbox } from '../types/mailbox'
+import type { MailboxOption } from '../types/mailbox'
 import type { ManagedUser } from '../types/user'
+import type { EnterpriseOption } from '../types/enterprise'
 
 type UseAssignmentRuleManagementParams = {
   activeMenu: string
   canReadAssignmentRules: boolean
-  canReadUsers: boolean
   handleAuthExpired: (error: unknown) => boolean
-  mailboxes: Mailbox[]
+  mailboxes: MailboxOption[]
   token: string
 }
 
 function toAssignmentRuleForm(rule: AssignmentRule): AssignmentRuleFormState {
   return {
     id: rule.id,
+    groupId: String(rule.groupId),
     ruleName: rule.ruleName,
     enabled: rule.enabled,
     priorityOrder: rule.priorityOrder,
@@ -40,7 +45,6 @@ function toAssignmentRuleForm(rule: AssignmentRule): AssignmentRuleFormState {
 export function useAssignmentRuleManagement({
   activeMenu,
   canReadAssignmentRules,
-  canReadUsers,
   handleAuthExpired,
   mailboxes,
   token,
@@ -60,6 +64,55 @@ export function useAssignmentRuleManagement({
   const [assignmentTestForm, setAssignmentTestForm] = useState<AssignmentRuleTestForm>(emptyAssignmentRuleTestForm)
   const [assignmentTesting, setAssignmentTesting] = useState(false)
   const [assignmentMatchResult, setAssignmentMatchResult] = useState<AssignmentRuleMatchResponse | null>(null)
+  const [assignmentEnterpriseOptions, setAssignmentEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [selectedAssignmentEnterpriseId, setSelectedAssignmentEnterpriseId] = useState('')
+  const [assignmentGroupsData, setAssignmentGroupsData] = useState<AssignmentRuleGroupListResponse | null>(null)
+  const [assignmentGroupsLoading, setAssignmentGroupsLoading] = useState(false)
+  const [assignmentGroupSaving, setAssignmentGroupSaving] = useState(false)
+  const [selectedAssignmentGroupId, setSelectedAssignmentGroupId] = useState<number | null>(null)
+  const [assignmentGroupForm, setAssignmentGroupForm] = useState<AssignmentRuleGroupFormState>({
+    id: null, enterpriseId: '', groupName: '', enabled: true, remark: '',
+  })
+
+  useEffect(() => {
+    if (!token || activeMenu !== '分配规则') return
+    void enterpriseApi.options(true)
+      .then((options) => {
+        setAssignmentEnterpriseOptions(options)
+        setSelectedAssignmentEnterpriseId((value) => value || (options[0] ? String(options[0].id) : ''))
+      })
+      .catch((error) => {
+        if (!handleAuthExpired(error)) setAssignmentRulesError(error instanceof Error ? error.message : '企业选项加载失败')
+      })
+  }, [activeMenu, handleAuthExpired, token])
+
+  const fetchAssignmentGroups = useCallback(async () => {
+    if (!token || activeMenu !== '分配规则' || !selectedAssignmentEnterpriseId) return
+    setAssignmentGroupsLoading(true)
+    try {
+      const data = await assignmentRuleGroupApi.list({ enterpriseId: Number(selectedAssignmentEnterpriseId) })
+      setAssignmentGroupsData(data)
+      const selected = data.records.find((group) => group.id === selectedAssignmentGroupId) || data.records[0] || null
+      setSelectedAssignmentGroupId(selected?.id ?? null)
+      setAssignmentGroupForm(selected ? {
+        id: selected.id,
+        enterpriseId: String(selected.enterpriseId),
+        groupName: selected.groupName,
+        enabled: selected.enabled,
+        remark: selected.remark || '',
+      } : { id: null, enterpriseId: selectedAssignmentEnterpriseId, groupName: '', enabled: true, remark: '' })
+      setAssignmentForm((value) => ({ ...value, groupId: selected ? String(selected.id) : '' }))
+    } catch (error) {
+      if (handleAuthExpired(error)) return
+      setAssignmentRulesError(error instanceof Error ? error.message : '分配规则组加载失败')
+    } finally {
+      setAssignmentGroupsLoading(false)
+    }
+  }, [activeMenu, handleAuthExpired, selectedAssignmentEnterpriseId, selectedAssignmentGroupId, token])
+
+  useEffect(() => {
+    void fetchAssignmentGroups()
+  }, [fetchAssignmentGroups])
 
   const fetchAssignmentRules = useCallback(async () => {
     if (!token || activeMenu !== '分配规则') return
@@ -69,10 +122,16 @@ export function useAssignmentRuleManagement({
       return
     }
 
+    if (!selectedAssignmentGroupId) {
+      setAssignmentRulesData(null)
+      setAssignmentForm((value) => ({ ...emptyAssignmentRuleForm, groupId: value.groupId }))
+      return
+    }
     setAssignmentRulesLoading(true)
     setAssignmentRulesError('')
     try {
       const data = await assignmentRuleApi.list({
+        groupId: selectedAssignmentGroupId,
         enabled: assignmentEnabledFilter !== 'ALL' ? assignmentEnabledFilter : undefined,
         keyword: assignmentKeyword.trim() || undefined,
         matchType: assignmentMatchTypeFilter !== 'ALL' ? assignmentMatchTypeFilter : undefined,
@@ -84,7 +143,7 @@ export function useAssignmentRuleManagement({
         setAssignmentMatchResult(null)
       }
       if (!selected && !assignmentRuleDirty) {
-        setAssignmentForm(emptyAssignmentRuleForm)
+        setAssignmentForm({ ...emptyAssignmentRuleForm, groupId: String(selectedAssignmentGroupId) })
         setAssignmentMatchResult(null)
       }
     } catch (error) {
@@ -103,6 +162,7 @@ export function useAssignmentRuleManagement({
     canReadAssignmentRules,
     handleAuthExpired,
     token,
+    selectedAssignmentGroupId,
   ])
 
   useEffect(() => {
@@ -110,15 +170,18 @@ export function useAssignmentRuleManagement({
   }, [fetchAssignmentRules])
 
   const fetchAssignmentAssignees = useCallback(async () => {
-    if (!token || activeMenu !== '分配规则' || !canReadUsers) return
+    if (!token || activeMenu !== '分配规则') return
+    if (!selectedAssignmentGroupId) {
+      setAssignmentAssignees([])
+      return
+    }
     try {
-      const data = await userApi.list({ page: 1, size: 100, roleCode: 'AGENT', enabled: true })
-      setAssignmentAssignees(data.records)
+      setAssignmentAssignees(await userApi.assignableOptions({ assignmentRuleGroupId: selectedAssignmentGroupId }))
     } catch (error) {
       if (handleAuthExpired(error)) return
       setAssignmentAssignees([])
     }
-  }, [activeMenu, canReadUsers, handleAuthExpired, token])
+  }, [activeMenu, handleAuthExpired, selectedAssignmentGroupId, token])
 
   useEffect(() => {
     void fetchAssignmentAssignees()
@@ -133,12 +196,7 @@ export function useAssignmentRuleManagement({
   const updateAssignmentForm = useCallback((patch: Partial<AssignmentRuleFormState>) => {
     setAssignmentForm((value) => {
       const next = { ...value, ...patch }
-      if (patch.matchType === 'DEFAULT') {
-        next.defaultRule = true
-        next.matchValue = ''
-      } else if (patch.matchType) {
-        next.defaultRule = false
-      }
+      next.defaultRule = false
       return next
     })
     setAssignmentRuleDirty(true)
@@ -156,24 +214,77 @@ export function useAssignmentRuleManagement({
   const openCreateAssignmentRule = useCallback(() => {
     setAssignmentForm({
       ...emptyAssignmentRuleForm,
+      groupId: selectedAssignmentGroupId ? String(selectedAssignmentGroupId) : '',
       priorityOrder: (assignmentRulesData?.records.length ?? 0) * 10 + 10,
       assigneeId: assignmentAssignees[0] ? String(assignmentAssignees[0].id) : '',
     })
     setAssignmentRuleDirty(true)
     setAssignmentMatchResult(null)
     setAssignmentRulesError('')
-  }, [assignmentAssignees, assignmentRulesData])
+  }, [assignmentAssignees, assignmentRulesData, selectedAssignmentGroupId])
 
   const buildAssignmentRulePayload = useCallback(() => ({
+    groupId: Number(assignmentForm.groupId),
     ruleName: assignmentForm.ruleName.trim(),
     enabled: assignmentForm.enabled,
     priorityOrder: Number(assignmentForm.priorityOrder),
-    defaultRule: assignmentForm.matchType === 'DEFAULT',
+    defaultRule: false,
     matchType: assignmentForm.matchType,
-    matchValue: assignmentForm.matchType === 'DEFAULT' ? '' : assignmentForm.matchValue.trim(),
+    matchValue: assignmentForm.matchValue.trim(),
     assigneeId: assignmentForm.assigneeId ? Number(assignmentForm.assigneeId) : null,
     notifyEnabled: assignmentForm.notifyEnabled,
   }), [assignmentForm])
+
+  const selectAssignmentGroup = useCallback((group: AssignmentRuleGroup) => {
+    setSelectedAssignmentGroupId(group.id)
+    setAssignmentGroupForm({
+      id: group.id,
+      enterpriseId: String(group.enterpriseId),
+      groupName: group.groupName,
+      enabled: group.enabled,
+      remark: group.remark || '',
+    })
+    setAssignmentForm({ ...emptyAssignmentRuleForm, groupId: String(group.id) })
+    setAssignmentRuleDirty(false)
+    setAssignmentMatchResult(null)
+  }, [])
+
+  const openCreateAssignmentGroup = useCallback(() => {
+    setAssignmentGroupForm({ id: null, enterpriseId: selectedAssignmentEnterpriseId, groupName: '', enabled: true, remark: '' })
+  }, [selectedAssignmentEnterpriseId])
+
+  const saveAssignmentGroup = useCallback(async () => {
+    if (!assignmentGroupForm.enterpriseId || !assignmentGroupForm.groupName.trim()) return
+    setAssignmentGroupSaving(true)
+    setAssignmentRulesError('')
+    try {
+      const saved = await assignmentRuleGroupApi.save(assignmentGroupForm.id, {
+        enterpriseId: Number(assignmentGroupForm.enterpriseId),
+        groupName: assignmentGroupForm.groupName.trim(),
+        enabled: assignmentGroupForm.enabled,
+        remark: assignmentGroupForm.remark.trim(),
+      })
+      setSelectedAssignmentGroupId(saved.id)
+      await fetchAssignmentGroups()
+      message.success('分配规则组已保存')
+    } catch (error) {
+      if (!handleAuthExpired(error)) setAssignmentRulesError(error instanceof Error ? error.message : '分配规则组保存失败')
+    } finally {
+      setAssignmentGroupSaving(false)
+    }
+  }, [assignmentGroupForm, fetchAssignmentGroups, handleAuthExpired])
+
+  const toggleAssignmentGroup = useCallback(async (group: AssignmentRuleGroup) => {
+    setAssignmentGroupSaving(true)
+    try {
+      await assignmentRuleGroupApi.setEnabled(group.id, !group.enabled)
+      await fetchAssignmentGroups()
+    } catch (error) {
+      if (!handleAuthExpired(error)) setAssignmentRulesError(error instanceof Error ? error.message : '规则组状态更新失败')
+    } finally {
+      setAssignmentGroupSaving(false)
+    }
+  }, [fetchAssignmentGroups, handleAuthExpired])
 
   const saveAssignmentRule = useCallback(async () => {
     if (!token) return
@@ -295,6 +406,11 @@ export function useAssignmentRuleManagement({
 
   return {
     assignmentActionLoading,
+    assignmentEnterpriseOptions,
+    assignmentGroupForm,
+    assignmentGroupSaving,
+    assignmentGroupsData,
+    assignmentGroupsLoading,
     assignmentAssigneeOptions,
     assignmentAssignees,
     assignmentConfirmAction,
@@ -312,20 +428,33 @@ export function useAssignmentRuleManagement({
     assignmentTestForm,
     assignmentTesting,
     fetchAssignmentRules,
+    fetchAssignmentGroups,
     moveAssignmentRule,
     openCreateAssignmentRule,
+    openCreateAssignmentGroup,
     resetAssignmentFilters,
     runAssignmentRuleTest,
     saveAssignmentRule,
+    saveAssignmentGroup,
     selectAssignmentRule,
+    selectAssignmentGroup,
+    selectedAssignmentEnterpriseId,
+    selectedAssignmentGroupId,
     selectedAssignmentRule,
     setAssignmentConfirmAction,
     setAssignmentEnabledFilter,
     setAssignmentKeyword,
     setAssignmentMatchTypeFilter,
     setAssignmentTestForm,
+    setAssignmentGroupForm: (patch: Partial<AssignmentRuleGroupFormState>) => setAssignmentGroupForm((value) => ({ ...value, ...patch })),
+    setSelectedAssignmentEnterpriseId: (value: string) => {
+      setSelectedAssignmentEnterpriseId(value)
+      setSelectedAssignmentGroupId(null)
+      setAssignmentRulesData(null)
+    },
     submitAssignmentConfirm,
     toggleAssignmentRule,
+    toggleAssignmentGroup,
     updateAssignmentForm,
   }
 }

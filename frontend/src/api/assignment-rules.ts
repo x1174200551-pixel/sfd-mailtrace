@@ -1,18 +1,22 @@
 import { requestApi } from '../shared/api/request'
 import type {
   AssignmentRule,
+  AssignmentRuleGroup,
+  AssignmentRuleGroupListResponse,
   AssignmentRuleListResponse,
   AssignmentRuleMatchResponse,
   AssignmentRuleMatchType,
 } from '../types/assignment-rule'
 
 export type AssignmentRuleQuery = {
+  groupId?: number
   enabled?: string
   keyword?: string
   matchType?: string
 }
 
 export type AssignmentRulePayload = {
+  groupId: number
   assigneeId: number | null
   defaultRule: boolean
   enabled: boolean
@@ -86,5 +90,39 @@ export const assignmentRuleApi = {
     return requestApi<void>(`/api/v1/assignment-rules/${ruleId}`, {
       method: 'DELETE',
     })
+  },
+}
+
+export type AssignmentRuleGroupPayload = {
+  enterpriseId: number
+  groupName: string
+  enabled: boolean
+  remark: string
+}
+
+export const assignmentRuleGroupApi = {
+  list(params: { enterpriseId?: number; keyword?: string; enabled?: boolean } = {}) {
+    return requestApi<AssignmentRuleGroupListResponse>(`/api/v1/assignment-rule-groups${toQuery(params)}`)
+  },
+
+  options(enterpriseId?: number, enabled = true) {
+    return requestApi<AssignmentRuleGroup[]>(`/api/v1/assignment-rule-groups/options${toQuery({ enterpriseId, enabled })}`)
+  },
+
+  save(groupId: number | null, payload: AssignmentRuleGroupPayload) {
+    return requestApi<AssignmentRuleGroup>(
+      groupId ? `/api/v1/assignment-rule-groups/${groupId}` : '/api/v1/assignment-rule-groups',
+      { method: groupId ? 'PUT' : 'POST', body: JSON.stringify(payload) },
+    )
+  },
+
+  setEnabled(groupId: number, enabled: boolean) {
+    return requestApi<AssignmentRuleGroup>(`/api/v1/assignment-rule-groups/${groupId}/enabled`, {
+      method: 'PATCH', body: JSON.stringify({ enabled }),
+    })
+  },
+
+  delete(groupId: number) {
+    return requestApi<void>(`/api/v1/assignment-rule-groups/${groupId}`, { method: 'DELETE' })
   },
 }

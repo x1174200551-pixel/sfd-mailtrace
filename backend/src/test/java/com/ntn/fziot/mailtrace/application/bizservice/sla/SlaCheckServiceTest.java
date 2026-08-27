@@ -4,10 +4,12 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.SlaPolicyEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEventEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketEventMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
@@ -46,6 +48,8 @@ class SlaCheckServiceTest {
     @Mock
     private NotificationTemplateMapper notificationTemplateMapper;
     @Mock
+    private MailboxMapper mailboxMapper;
+    @Mock
     private UserMapper userMapper;
     @Mock
     private MailSendService mailSendService;
@@ -69,7 +73,10 @@ class SlaCheckServiceTest {
         lenient().when(slaPolicyMapper.selectById(20L)).thenReturn(policy(20L, 1));
         lenient().when(ticketMapper.update(eq(null), any())).thenReturn(1);
         lenient().when(userMapper.selectById(2L)).thenReturn(agent());
-        lenient().when(mailSendService.sendRawMail(any(), any(), any(), any(), any()))
+        MailboxEntity mailbox = new MailboxEntity();
+        mailbox.setId(11L);
+        lenient().when(mailboxMapper.selectById(11L)).thenReturn(mailbox);
+        lenient().when(mailSendService.sendRawMail(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(MailSendService.SendResult.ok("发送成功"));
     }
 
@@ -91,7 +98,8 @@ class SlaCheckServiceTest {
         assertEquals(SlaCheckService.EVENT_SLA_WARNING, eventCaptor.getValue().getEventType());
         assertTrue(eventCaptor.getValue().getEventContent().contains("首次响应 SLA 即将超时"));
         verify(mailSendService).sendRawMail(eq(11L), eq("agent@example.com"),
-                any(), any(), eq(SlaCheckService.EVENT_SLA_WARNING));
+                any(), any(), eq(SlaCheckService.EVENT_SLA_WARNING),
+                eq(100L), eq(null), eq(SlaCheckService.EVENT_SLA_WARNING));
     }
 
     @Test
@@ -112,7 +120,8 @@ class SlaCheckServiceTest {
         assertEquals(SlaCheckService.EVENT_SLA_BREACH, eventCaptor.getValue().getEventType());
         assertTrue(eventCaptor.getValue().getEventContent().contains("首次响应 SLA 已超时"));
         verify(mailSendService).sendRawMail(eq(11L), eq("agent@example.com"),
-                any(), any(), eq(SlaCheckService.EVENT_SLA_BREACH));
+                any(), any(), eq(SlaCheckService.EVENT_SLA_BREACH),
+                eq(101L), eq(null), eq(SlaCheckService.EVENT_SLA_BREACH));
     }
 
     @Test
@@ -130,7 +139,7 @@ class SlaCheckServiceTest {
         assertEquals(0, result.breachCount());
         verify(ticketMapper, never()).update(eq(null), any());
         verify(ticketEventMapper, never()).insert(any());
-        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any());
+        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -148,7 +157,7 @@ class SlaCheckServiceTest {
         assertEquals(0, result.warningCount());
         assertEquals(0, result.breachCount());
         verify(ticketEventMapper, never()).insert(any());
-        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any());
+        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -183,12 +192,13 @@ class SlaCheckServiceTest {
         assertEquals(0, result.warningCount());
         assertEquals(0, result.breachCount());
         verify(ticketMapper, never()).update(eq(null), any());
-        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any());
+        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     private TicketEntity ticket(Long id) {
         TicketEntity ticket = new TicketEntity();
         ticket.setId(id);
+        ticket.setEnterpriseId(1L);
         ticket.setTicketNo("TCK-20260727-" + id);
         ticket.setSubject("SLA 测试");
         ticket.setStatus("PROCESSING");

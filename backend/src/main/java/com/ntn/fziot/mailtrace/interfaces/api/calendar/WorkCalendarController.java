@@ -37,9 +37,11 @@ public class WorkCalendarController {
     @RequirePermission(value = "work_calendar:read", message = "无权查看工作日历")
     public BasicResult<WorkCalendarListResponse> listCalendars(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean defaultCalendar) {
-        return BasicResult.ok(workCalendarService.listCalendars(principal, keyword, defaultCalendar));
+        return BasicResult.ok(workCalendarService.listCalendars(
+                principal, enterpriseId, keyword, defaultCalendar));
     }
 
     @Operation(summary = "新建工作日历")

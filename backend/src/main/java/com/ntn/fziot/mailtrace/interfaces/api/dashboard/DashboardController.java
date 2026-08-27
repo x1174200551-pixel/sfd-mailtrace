@@ -27,8 +27,11 @@ public class DashboardController {
     @Operation(summary = "工作台统计摘要")
     @GetMapping("/summary")
     @RequirePermission(value = "dashboard:read", message = "无权查看工作台")
-    public BasicResult<DashboardSummaryVO> summary(@AuthenticationPrincipal CurrentUserPrincipal principal) {
-        return BasicResult.ok(dashboardService.summary(principal));
+    public BasicResult<DashboardSummaryVO> summary(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
+            @RequestParam(required = false) Long mailboxId) {
+        return BasicResult.ok(dashboardService.summary(principal, enterpriseId, mailboxId));
     }
 
     @Operation(summary = "我的待办")
@@ -36,14 +39,19 @@ public class DashboardController {
     @RequirePermission(value = "dashboard:read", message = "无权查看工作台")
     public BasicResult<DashboardTodoListResponse> myTodos(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
+            @RequestParam(required = false) Long mailboxId,
             @RequestParam(required = false) Integer limit) {
-        return BasicResult.ok(dashboardService.myTodos(principal, limit));
+        return BasicResult.ok(dashboardService.myTodos(principal, enterpriseId, mailboxId, limit));
     }
 
     @Operation(summary = "工作台运营报表")
     @GetMapping("/report")
     @RequirePermission(value = "dashboard:read", message = "无权查看工作台")
-    public BasicResult<DashboardReportVO> report(@AuthenticationPrincipal CurrentUserPrincipal principal) {
-        return BasicResult.ok(dashboardService.report(principal));
+    public BasicResult<DashboardReportVO> report(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
+            @RequestParam(required = false) Long mailboxId) {
+        return BasicResult.ok(dashboardService.report(principal, enterpriseId, mailboxId));
     }
 }

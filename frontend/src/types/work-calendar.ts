@@ -3,6 +3,7 @@ import type { SlaPolicy } from './sla-policy'
 
 export type WorkCalendar = {
   id: number
+  enterpriseId: number
   calendarName: string
   timezone: string
   workdays: number[]
@@ -23,6 +24,7 @@ export type WorkCalendarListResponse = {
 
 export type WorkCalendarFormState = {
   id: number | null
+  enterpriseId: string
   calendarName: string
   timezone: string
   workdays: number[]

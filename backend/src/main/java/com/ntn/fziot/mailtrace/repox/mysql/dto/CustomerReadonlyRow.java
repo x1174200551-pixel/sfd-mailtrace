@@ -9,6 +9,8 @@ public class CustomerReadonlyRow {
 
     private Long id;
 
+    private Long enterpriseId;
+
     private String email;
 
     private String displayName;

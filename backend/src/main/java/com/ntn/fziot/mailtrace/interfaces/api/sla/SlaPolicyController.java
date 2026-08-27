@@ -38,10 +38,12 @@ public class SlaPolicyController {
     @RequirePermission(value = "sla_policy:read", message = "无权查看 SLA 策略")
     public BasicResult<SlaPolicyListResponse> listPolicies(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) Boolean defaultPolicy) {
-        return BasicResult.ok(slaPolicyService.listPolicies(principal, keyword, enabled, defaultPolicy));
+        return BasicResult.ok(slaPolicyService.listPolicies(
+                principal, enterpriseId, keyword, enabled, defaultPolicy));
     }
 
     @Operation(summary = "新建 SLA 策略")

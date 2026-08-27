@@ -7,6 +7,7 @@ import type {
 
 export type NotificationTemplateQuery = {
   keyword?: string
+  templateType?: string
 }
 
 export type NotificationTemplatePreviewPayload = {
@@ -19,6 +20,7 @@ export type NotificationTemplateSavePayload = {
   enabled: boolean
   subjectTpl: string
   templateCode: string
+  templateType: string
   templateName: string
 }
 

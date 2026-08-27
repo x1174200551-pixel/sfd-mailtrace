@@ -35,10 +35,33 @@ export type UserFormState = {
   displayName: string
   email: string
   roleCode: RoleCode
-  roleCodes: string[]
   departmentId: number | null
   password: string
   enabled: boolean
+}
+
+export type UserDataGrant = {
+  id: number
+  userId: number
+  grantType: 'ENTERPRISE' | 'MAILBOX'
+  enterpriseId: number | null
+  mailboxId: number | null
+  enabled: boolean
+  remark: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export type UserDataGrantDetail = {
+  userId: number
+  allDataVisible: boolean
+  grants: UserDataGrant[]
+}
+
+export type UserDataGrantForm = {
+  allDataVisible: boolean
+  enterpriseIds: number[]
+  mailboxIds: number[]
 }
 
 export type UserFormMode = 'create' | 'edit'

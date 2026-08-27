@@ -17,6 +17,8 @@ public class WorkCalendarEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long enterpriseId;
+
     private String calendarName;
 
     private String timezone;

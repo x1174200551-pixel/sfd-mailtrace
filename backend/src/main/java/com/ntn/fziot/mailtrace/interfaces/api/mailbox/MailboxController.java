@@ -7,6 +7,7 @@ import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxEnabledRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxOptionVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxVO;
@@ -26,6 +27,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Tag(name = "邮箱配置", description = "企业客服邮箱 IMAP/SMTP 配置、启停和连接测试")
 @RestController
 @RequestMapping("/v1/mailboxes")
@@ -36,15 +39,26 @@ public class MailboxController {
 
     @Operation(summary = "邮箱分页查询")
     @GetMapping
-    @RequirePermission(anyOf = {"mailbox:read", "menu:mailboxes"}, message = "无权查看邮箱配置")
+    @RequirePermission(value = "mailbox:read", message = "无权查看邮箱配置")
     public BasicResult<MailboxPageResponse> pageMailboxes(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
-        return BasicResult.ok(mailboxService.pageMailboxes(principal, keyword, status, enabled, page, size));
+        return BasicResult.ok(mailboxService.pageMailboxes(
+                principal, enterpriseId, keyword, status, enabled, page, size));
+    }
+
+    @Operation(summary = "当前用户可见邮箱选项")
+    @GetMapping("/options")
+    public BasicResult<List<MailboxOptionVO>> listVisibleOptions(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
+            @RequestParam(required = false) Boolean operationalOnly) {
+        return BasicResult.ok(mailboxService.listVisibleOptions(principal, enterpriseId, operationalOnly));
     }
 
     @Operation(summary = "新建邮箱配置")

@@ -2,6 +2,7 @@ import type { MailboxConnectionStatus, MailboxFormState, MailboxStepKey } from '
 
 export const emptyMailboxForm: MailboxFormState = {
   id: null,
+  enterpriseId: '',
   mailboxName: '',
   emailAddress: '',
   enabled: true,
@@ -19,15 +20,22 @@ export const emptyMailboxForm: MailboxFormState = {
   smtpUsername: '',
   smtpPassword: '',
   smtpFromName: '',
-  autoReplyEnabled: true,
+  autoReplyEnabled: false,
   autoReplyTemplateId: '',
+  assignmentNotifyTemplateId: '',
+  agentReplyTemplateId: '',
+  slaWarningTemplateId: '',
+  slaBreachTemplateId: '',
+  slaPolicyId: '',
+  assignmentRuleGroupId: '',
+  assignmentFallbackType: 'NONE',
 }
 
 export const mailboxSteps: Array<{ key: MailboxStepKey; label: string }> = [
   { key: 'basic', label: '基础信息' },
   { key: 'imap', label: '收信配置' },
   { key: 'smtp', label: '发信配置' },
-  { key: 'reply', label: '自动回复' },
+  { key: 'strategy', label: '建单策略' },
   { key: 'test', label: '连接测试' },
 ]
 

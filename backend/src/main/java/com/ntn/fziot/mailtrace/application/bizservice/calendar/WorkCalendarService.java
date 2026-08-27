@@ -10,10 +10,12 @@ import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarVO;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.HolidayEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.SlaPolicyEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.WorkCalendarEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.HolidayMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
@@ -43,7 +45,9 @@ public class WorkCalendarService {
     private static final String MODULE_WORK_CALENDAR = "WORK_CALENDAR";
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
 
+    // P3：工作日历按企业归属和筛选。
     private final WorkCalendarMapper workCalendarMapper;
+    private final EnterpriseMapper enterpriseMapper;
     private final SlaPolicyMapper slaPolicyMapper;
     private final HolidayMapper holidayMapper;
     private final OperationLogMapper operationLogMapper;
@@ -52,12 +56,13 @@ public class WorkCalendarService {
     /**
      * 查询工作日历列表。
      */
-    public WorkCalendarListResponse listCalendars(CurrentUserPrincipal principal, String keyword, Boolean defaultCalendar) {
+    public WorkCalendarListResponse listCalendars(CurrentUserPrincipal principal, Long enterpriseId,
+                                                  String keyword, Boolean defaultCalendar) {
         // 1、仅管理员可进入工作日历配置。
         permissionService.assertPermission(principal, "work_calendar:read", "无权查看工作日历");
 
         // 2、按名称和默认标识筛选，默认日历优先展示。
-        LambdaQueryWrapper<WorkCalendarEntity> wrapper = buildQuery(keyword, defaultCalendar)
+        LambdaQueryWrapper<WorkCalendarEntity> wrapper = buildQuery(enterpriseId, keyword, defaultCalendar)
                 .orderByDesc(WorkCalendarEntity::getDefaultCalendar)
                 .orderByAsc(WorkCalendarEntity::getId);
         List<WorkCalendarVO> records = workCalendarMapper.selectList(wrapper).stream()
@@ -65,7 +70,7 @@ public class WorkCalendarService {
                 .toList();
 
         // 3、返回列表和摘要，供后续 SLA 页面选择日历。
-        return new WorkCalendarListResponse(records, buildSummary());
+        return new WorkCalendarListResponse(records, buildSummary(enterpriseId));
     }
 
     /**
@@ -75,9 +80,10 @@ public class WorkCalendarService {
     public WorkCalendarVO createCalendar(CurrentUserPrincipal principal, WorkCalendarSaveRequest request) {
         // 1、校验管理员权限、工作日、时区和工作时段。
         permissionService.assertPermission(principal, "work_calendar:create", "无权新建工作日历");
+        assertEnterpriseEnabled(request.getEnterpriseId());
         CalendarConfig config = validateCalendar(request);
         boolean defaultCalendar = Boolean.TRUE.equals(request.getDefaultCalendar());
-        ensureDefaultCalendarUnique(defaultCalendar, null);
+        ensureDefaultCalendarUnique(request.getEnterpriseId(), defaultCalendar, null);
 
         // 2、写入日历主体，节假日留到后续 P1-W5-BE-05 单独维护。
         WorkCalendarEntity calendar = new WorkCalendarEntity();
@@ -99,9 +105,13 @@ public class WorkCalendarService {
         // 1、校验权限、日历存在性和字段组合。
         permissionService.assertPermission(principal, "work_calendar:update", "无权编辑工作日历");
         WorkCalendarEntity existing = requireCalendar(id);
+        assertEnterpriseEnabled(request.getEnterpriseId());
         CalendarConfig config = validateCalendar(request);
         boolean defaultCalendar = Boolean.TRUE.equals(request.getDefaultCalendar());
-        ensureDefaultCalendarUnique(defaultCalendar, id);
+        ensureDefaultCalendarUnique(request.getEnterpriseId(), defaultCalendar, id);
+        if (!existing.getEnterpriseId().equals(request.getEnterpriseId()) && isReferenced(id)) {
+            throw new BusinessException(CODE_CONFLICT, "工作日历已被 SLA 策略或节假日引用，不能变更所属企业");
+        }
 
         // 2、覆盖可编辑的工作日历配置。
         WorkCalendarEntity update = new WorkCalendarEntity();
@@ -129,6 +139,7 @@ public class WorkCalendarService {
         }
         workCalendarMapper.update(null, new LambdaUpdateWrapper<WorkCalendarEntity>()
                 .ne(WorkCalendarEntity::getId, id)
+                .eq(WorkCalendarEntity::getEnterpriseId, existing.getEnterpriseId())
                 .eq(WorkCalendarEntity::getDefaultCalendar, true)
                 .set(WorkCalendarEntity::getDefaultCalendar, false)
                 .set(WorkCalendarEntity::getUpdatedBy, principal.account()));
@@ -173,9 +184,13 @@ public class WorkCalendarService {
         recordLog(principal, "DELETE", id, "删除工作日历：" + existing.getCalendarName());
     }
 
-    private LambdaQueryWrapper<WorkCalendarEntity> buildQuery(String keyword, Boolean defaultCalendar) {
+    private LambdaQueryWrapper<WorkCalendarEntity> buildQuery(Long enterpriseId, String keyword,
+                                                               Boolean defaultCalendar) {
         String normalizedKeyword = normalize(keyword);
         LambdaQueryWrapper<WorkCalendarEntity> wrapper = new LambdaQueryWrapper<>();
+        if (enterpriseId != null) {
+            wrapper.eq(WorkCalendarEntity::getEnterpriseId, enterpriseId);
+        }
         if (!normalizedKeyword.isEmpty()) {
             wrapper.like(WorkCalendarEntity::getCalendarName, normalizedKeyword);
         }
@@ -185,10 +200,10 @@ public class WorkCalendarService {
         return wrapper;
     }
 
-    private WorkCalendarSummaryVO buildSummary() {
-        long total = workCalendarMapper.selectCount(new LambdaQueryWrapper<>());
+    private WorkCalendarSummaryVO buildSummary(Long enterpriseId) {
+        long total = workCalendarMapper.selectCount(buildQuery(enterpriseId, null, null));
         long defaultCount = workCalendarMapper.selectCount(
-                new LambdaQueryWrapper<WorkCalendarEntity>().eq(WorkCalendarEntity::getDefaultCalendar, true));
+                buildQuery(enterpriseId, null, true));
         return new WorkCalendarSummaryVO(total, defaultCount);
     }
 
@@ -237,11 +252,12 @@ public class WorkCalendarService {
         }
     }
 
-    private void ensureDefaultCalendarUnique(boolean defaultCalendar, Long excludeId) {
+    private void ensureDefaultCalendarUnique(Long enterpriseId, boolean defaultCalendar, Long excludeId) {
         if (!defaultCalendar) {
             return;
         }
         LambdaQueryWrapper<WorkCalendarEntity> wrapper = new LambdaQueryWrapper<WorkCalendarEntity>()
+                .eq(WorkCalendarEntity::getEnterpriseId, enterpriseId)
                 .eq(WorkCalendarEntity::getDefaultCalendar, true);
         if (excludeId != null) {
             wrapper.ne(WorkCalendarEntity::getId, excludeId);
@@ -250,6 +266,23 @@ public class WorkCalendarService {
         if (count != null && count > 0) {
             throw new BusinessException(CODE_CONFLICT, "默认工作日历已存在，请先编辑原默认日历");
         }
+    }
+
+    private void assertEnterpriseEnabled(Long enterpriseId) {
+        EnterpriseEntity enterprise = enterpriseId == null ? null : enterpriseMapper.selectById(enterpriseId);
+        if (enterprise == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "所属企业不存在");
+        }
+        if (!Boolean.TRUE.equals(enterprise.getEnabled())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "所属企业已停用，不能配置工作日历");
+        }
+    }
+
+    private boolean isReferenced(Long calendarId) {
+        return slaPolicyMapper.selectCount(new LambdaQueryWrapper<SlaPolicyEntity>()
+                .eq(SlaPolicyEntity::getCalendarId, calendarId)) > 0
+                || holidayMapper.selectCount(new LambdaQueryWrapper<HolidayEntity>()
+                .eq(HolidayEntity::getCalendarId, calendarId)) > 0;
     }
 
     private WorkCalendarEntity requireCalendar(Long id) {
@@ -265,6 +298,7 @@ public class WorkCalendarService {
 
     private void fillCalendar(WorkCalendarEntity calendar, WorkCalendarSaveRequest request,
                               CalendarConfig config, String operator) {
+        calendar.setEnterpriseId(request.getEnterpriseId());
         calendar.setCalendarName(normalize(request.getCalendarName()));
         calendar.setTimezone(config.timezone());
         calendar.setWorkdays(config.workdays());
@@ -289,6 +323,7 @@ public class WorkCalendarService {
     private WorkCalendarVO toVO(WorkCalendarEntity calendar) {
         return new WorkCalendarVO(
                 calendar.getId(),
+                calendar.getEnterpriseId(),
                 calendar.getCalendarName(),
                 calendar.getTimezone(),
                 parseWorkdays(calendar.getWorkdays()),

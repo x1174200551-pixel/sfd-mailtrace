@@ -2,7 +2,9 @@ import { requestApi } from '../shared/api/request'
 import type { CustomerPageResponse, CustomerReadonly } from '../types/customer'
 
 export type CustomerQuery = {
+  enterpriseId?: number
   keyword?: string
+  mailboxId?: number
   page: number
   size: number
 }
@@ -23,7 +25,7 @@ export const customerApi = {
     return requestApi<CustomerPageResponse>(`/api/v1/customers${toQuery(params)}`)
   },
 
-  detail(email: string) {
-    return requestApi<CustomerReadonly>(`/api/v1/customers/${encodeURIComponent(email)}`)
+  detail(enterpriseId: number, email: string) {
+    return requestApi<CustomerReadonly>(`/api/v1/customers/${encodeURIComponent(email)}${toQuery({ enterpriseId })}`)
   },
 }

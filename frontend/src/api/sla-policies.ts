@@ -2,12 +2,14 @@ import { requestApi } from '../shared/api/request'
 import type { SlaPolicy, SlaPolicyListResponse } from '../types/sla-policy'
 
 export type SlaPolicyQuery = {
+  enterpriseId?: number
   defaultPolicy?: string
   enabled?: string
   keyword?: string
 }
 
 export type SlaPolicyPayload = {
+  enterpriseId: number
   calendarId: number | null
   defaultPolicy: boolean
   enabled: boolean

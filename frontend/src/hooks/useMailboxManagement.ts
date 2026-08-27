@@ -25,6 +25,7 @@ type UseMailboxManagementParams = {
 function toMailboxForm(mailbox: Mailbox): MailboxFormState {
   return {
     id: mailbox.id,
+    enterpriseId: String(mailbox.enterpriseId),
     mailboxName: mailbox.mailboxName,
     emailAddress: mailbox.emailAddress,
     enabled: mailbox.enabled,
@@ -44,6 +45,13 @@ function toMailboxForm(mailbox: Mailbox): MailboxFormState {
     smtpFromName: mailbox.smtpFromName || '',
     autoReplyEnabled: mailbox.autoReplyEnabled,
     autoReplyTemplateId: mailbox.autoReplyTemplateId == null ? '' : String(mailbox.autoReplyTemplateId),
+    assignmentNotifyTemplateId: mailbox.assignmentNotifyTemplateId == null ? '' : String(mailbox.assignmentNotifyTemplateId),
+    agentReplyTemplateId: mailbox.agentReplyTemplateId == null ? '' : String(mailbox.agentReplyTemplateId),
+    slaWarningTemplateId: mailbox.slaWarningTemplateId == null ? '' : String(mailbox.slaWarningTemplateId),
+    slaBreachTemplateId: mailbox.slaBreachTemplateId == null ? '' : String(mailbox.slaBreachTemplateId),
+    slaPolicyId: mailbox.slaPolicyId == null ? '' : String(mailbox.slaPolicyId),
+    assignmentRuleGroupId: mailbox.assignmentRuleGroupId == null ? '' : String(mailbox.assignmentRuleGroupId),
+    assignmentFallbackType: mailbox.assignmentFallbackType || 'NONE',
   }
 }
 
@@ -60,6 +68,7 @@ export function useMailboxManagement({
 }: UseMailboxManagementParams) {
   const [mailboxKeyword, setMailboxKeyword] = useState('')
   const [mailboxStatusFilter, setMailboxStatusFilter] = useState('ALL')
+  const [mailboxEnterpriseFilter, setMailboxEnterpriseFilter] = useState('ALL')
   const [mailboxPage, setMailboxPage] = useState(1)
   const [mailboxPageSize, setMailboxPageSize] = useState(10)
   const [mailboxesData, setMailboxesData] = useState<MailboxPageResponse | null>(null)
@@ -75,10 +84,14 @@ export function useMailboxManagement({
   const [mailboxActionLoading, setMailboxActionLoading] = useState(false)
 
   const buildMailboxPayload = useCallback(() => ({
+    enterpriseId: Number(mailboxForm.enterpriseId),
     mailboxName: mailboxForm.mailboxName,
     emailAddress: mailboxForm.emailAddress,
     enabled: mailboxForm.enabled,
     defaultAssigneeId: mailboxForm.defaultAssigneeId ? Number(mailboxForm.defaultAssigneeId) : null,
+    slaPolicyId: mailboxForm.slaPolicyId ? Number(mailboxForm.slaPolicyId) : null,
+    assignmentRuleGroupId: mailboxForm.assignmentRuleGroupId ? Number(mailboxForm.assignmentRuleGroupId) : null,
+    assignmentFallbackType: mailboxForm.assignmentFallbackType,
     imapHost: mailboxForm.imapHost,
     imapPort: Number(mailboxForm.imapPort),
     imapSslEnabled: mailboxForm.imapSslEnabled,
@@ -94,6 +107,10 @@ export function useMailboxManagement({
     smtpFromName: mailboxForm.smtpFromName,
     autoReplyEnabled: mailboxForm.autoReplyEnabled,
     autoReplyTemplateId: mailboxForm.autoReplyTemplateId ? Number(mailboxForm.autoReplyTemplateId) : null,
+    assignmentNotifyTemplateId: mailboxForm.assignmentNotifyTemplateId ? Number(mailboxForm.assignmentNotifyTemplateId) : null,
+    agentReplyTemplateId: mailboxForm.agentReplyTemplateId ? Number(mailboxForm.agentReplyTemplateId) : null,
+    slaWarningTemplateId: mailboxForm.slaWarningTemplateId ? Number(mailboxForm.slaWarningTemplateId) : null,
+    slaBreachTemplateId: mailboxForm.slaBreachTemplateId ? Number(mailboxForm.slaBreachTemplateId) : null,
   }), [mailboxForm])
 
   const fetchMailboxes = useCallback(async () => {
@@ -108,6 +125,7 @@ export function useMailboxManagement({
     setMailboxesError('')
     try {
       const data = await mailboxApi.list({
+        enterpriseId: mailboxEnterpriseFilter !== 'ALL' ? Number(mailboxEnterpriseFilter) : undefined,
         keyword: mailboxKeyword.trim(),
         page: mailboxPage,
         size: mailboxPageSize,
@@ -139,6 +157,7 @@ export function useMailboxManagement({
     mailboxDirty,
     mailboxForm.id,
     mailboxKeyword,
+    mailboxEnterpriseFilter,
     mailboxPage,
     mailboxPageSize,
     mailboxStatusFilter,
@@ -152,11 +171,18 @@ export function useMailboxManagement({
   const resetMailboxFilters = useCallback(() => {
     setMailboxKeyword('')
     setMailboxStatusFilter('ALL')
+    setMailboxEnterpriseFilter('ALL')
     setMailboxPage(1)
   }, [])
 
   const updateMailboxForm = useCallback((patch: Partial<MailboxFormState>) => {
-    setMailboxForm((value) => ({ ...value, ...patch }))
+    setMailboxForm((value) => {
+      const next = { ...value, ...patch }
+      if ('autoReplyTemplateId' in patch && !patch.autoReplyTemplateId) {
+        next.autoReplyEnabled = false
+      }
+      return next
+    })
     setMailboxDirty(true)
     setMailboxTestResult(null)
     setMailboxesError('')
@@ -191,6 +217,21 @@ export function useMailboxManagement({
       setMailboxesError(mailboxForm.id ? '当前账号没有编辑邮箱配置权限' : '当前账号没有新建邮箱配置权限')
       return
     }
+    if (mailboxForm.autoReplyEnabled && !mailboxForm.autoReplyTemplateId) {
+      setActiveMailboxStep('strategy')
+      setMailboxesError('启用自动回执前，请先选择全局自动回执模板')
+      return
+    }
+    if (!mailboxForm.assignmentNotifyTemplateId || !mailboxForm.agentReplyTemplateId) {
+      setActiveMailboxStep('strategy')
+      setMailboxesError('请为邮箱选择分配通知模板和处理人回复模板')
+      return
+    }
+    if (mailboxForm.slaPolicyId && (!mailboxForm.slaWarningTemplateId || !mailboxForm.slaBreachTemplateId)) {
+      setActiveMailboxStep('strategy')
+      setMailboxesError('绑定 SLA 策略时，请同时选择 SLA 预警和超时模板')
+      return
+    }
     setMailboxSaving(true)
     setMailboxesError('')
     try {
@@ -204,7 +245,7 @@ export function useMailboxManagement({
     } finally {
       setMailboxSaving(false)
     }
-  }, [buildMailboxPayload, canCreateMailboxes, canUpdateMailboxes, fetchMailboxes, handleAuthExpired, mailboxForm.id, token])
+  }, [buildMailboxPayload, canCreateMailboxes, canUpdateMailboxes, fetchMailboxes, handleAuthExpired, mailboxForm, token])
 
   const testMailboxConnection = useCallback(async (testType = 'ALL') => {
     if (!token) return
@@ -293,9 +334,15 @@ export function useMailboxManagement({
     setMailboxPage(1)
   }, [])
 
+  const changeMailboxEnterpriseFilter = useCallback((value: string) => {
+    setMailboxEnterpriseFilter(value)
+    setMailboxPage(1)
+  }, [])
+
   return {
     activeMailboxStep,
     changeMailboxKeyword,
+    changeMailboxEnterpriseFilter,
     changeMailboxPageSize,
     changeMailboxStatusFilter,
     closeMailboxConfirm: () => setMailboxConfirmAction(null),
@@ -303,6 +350,7 @@ export function useMailboxManagement({
     mailboxActionLoading,
     mailboxConfirmAction,
     mailboxDirty,
+    mailboxEnterpriseFilter,
     mailboxForm,
     mailboxKeyword,
     mailboxPage,

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { mailSendLogApi } from '../api/mail-logs'
+import { enterpriseApi } from '../api/enterprises'
+import { mailboxApi } from '../api/mailboxes'
 import { ApiError } from '../shared/api/error-handler'
 import type { MailSendLog, MailSendLogPageResponse, MailSendLogStats } from '../types/mail-logs'
+import type { EnterpriseOption } from '../types/enterprise'
+import type { MailboxOption } from '../types/mailbox'
 
 type UseMailSendLogsParams = {
   activeMenu: string
@@ -19,6 +23,9 @@ export function useMailSendLogs({
   const [sendLogPage, setSendLogPage] = useState(1)
   const [sendLogPageSize, setSendLogPageSize] = useState(10)
   const [sendLogMailboxFilter, setSendLogMailboxFilter] = useState('')
+  const [sendLogEnterpriseFilter, setSendLogEnterpriseFilter] = useState('ALL')
+  const [sendLogEnterpriseOptions, setSendLogEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [sendLogMailboxOptions, setSendLogMailboxOptions] = useState<MailboxOption[]>([])
   const [sendLogTypeFilter, setSendLogTypeFilter] = useState('ALL')
   const [sendLogStatusFilter, setSendLogStatusFilter] = useState('ALL')
   const [sendLogStartFrom, setSendLogStartFrom] = useState('')
@@ -41,6 +48,7 @@ export function useMailSendLogs({
     setSendLogsError('')
     try {
       const data = await mailSendLogApi.list({
+        enterpriseId: sendLogEnterpriseFilter === 'ALL' ? undefined : sendLogEnterpriseFilter,
         mailboxId: sendLogMailboxFilter,
         page: sendLogPage,
         sendStatus: sendLogStatusFilter !== 'ALL' ? sendLogStatusFilter : undefined,
@@ -61,6 +69,7 @@ export function useMailSendLogs({
     canReadSendLogs,
     handleAuthExpired,
     sendLogMailboxFilter,
+    sendLogEnterpriseFilter,
     sendLogPage,
     sendLogPageSize,
     sendLogStartFrom,
@@ -69,6 +78,20 @@ export function useMailSendLogs({
     sendLogTypeFilter,
     token,
   ])
+
+  useEffect(() => {
+    if (!token || activeMenu !== '发件记录') return
+    void Promise.all([
+      enterpriseApi.options(),
+      mailboxApi.options(sendLogEnterpriseFilter === 'ALL' ? undefined : Number(sendLogEnterpriseFilter)),
+    ]).then(([enterprises, mailboxes]) => {
+      setSendLogEnterpriseOptions(enterprises)
+      setSendLogMailboxOptions(mailboxes)
+      setSendLogMailboxFilter((current) => !current || mailboxes.some((mailbox) => String(mailbox.id) === current) ? current : '')
+    }).catch((error) => {
+      if (!handleAuthExpired(error)) setSendLogsError(error instanceof Error ? error.message : '发件筛选项加载失败')
+    })
+  }, [activeMenu, handleAuthExpired, sendLogEnterpriseFilter, token])
 
   const fetchSendLogStats = useCallback(async () => {
     if (!token || !canReadSendLogs) return
@@ -102,11 +125,18 @@ export function useMailSendLogs({
   }, [token, fetchSendPendingCount])
 
   const clearSendLogFilters = useCallback(() => {
+    setSendLogEnterpriseFilter('ALL')
     setSendLogMailboxFilter('')
     setSendLogTypeFilter('ALL')
     setSendLogStatusFilter('ALL')
     setSendLogStartFrom('')
     setSendLogStartTo('')
+    setSendLogPage(1)
+  }, [])
+
+  const changeSendLogEnterpriseFilter = useCallback((value: string) => {
+    setSendLogEnterpriseFilter(value)
+    setSendLogMailboxFilter('')
     setSendLogPage(1)
   }, [])
 
@@ -147,6 +177,7 @@ export function useMailSendLogs({
   }, [])
 
   return {
+    changeSendLogEnterpriseFilter,
     changeSendLogMailboxFilter,
     changeSendLogPage,
     changeSendLogStatusFilter,
@@ -156,7 +187,10 @@ export function useMailSendLogs({
     querySendLogs,
     refreshSendLogs,
     sendLogDetail,
+    sendLogEnterpriseFilter,
+    sendLogEnterpriseOptions,
     sendLogMailboxFilter,
+    sendLogMailboxOptions,
     sendLogPage,
     sendLogPageSize,
     sendLogStartFrom,

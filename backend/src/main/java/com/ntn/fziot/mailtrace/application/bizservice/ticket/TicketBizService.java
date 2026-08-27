@@ -8,6 +8,7 @@ import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleS
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
@@ -26,14 +27,20 @@ import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketStatusRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.CustomerEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketAttachmentEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEventEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketMessageEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.CustomerMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketEventMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMessageMapper;
@@ -50,6 +57,7 @@ import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -78,6 +86,7 @@ public class TicketBizService {
     public static final String EVENT_CANCELLED = "CANCELLED";
     public static final String EVENT_CUSTOMER_FOLLOWUP = "CUSTOMER_FOLLOWUP";
     public static final String EVENT_REOPENED = "REOPENED";
+    public static final String EVENT_AUTO_REPLY_SKIPPED = "AUTO_REPLY_SKIPPED";
 
     // ---------- 消息方向 ----------
     public static final String DIRECTION_OUTBOUND = "OUTBOUND";
@@ -104,8 +113,11 @@ public class TicketBizService {
     private final TicketEventMapper ticketEventMapper;
     private final TicketMessageMapper ticketMessageMapper;
     private final MailboxMapper mailboxMapper;
+    private final CustomerMapper customerMapper;
+    private final EnterpriseMapper enterpriseMapper;
     private final UserMapper userMapper;
     private final OperationLogMapper operationLogMapper;
+    private final NotificationTemplateMapper notificationTemplateMapper;
     private final TicketNumberRuleService ticketNumberRuleService;
     private final AutoReplyService autoReplyService;
     private final MailSendService mailSendService;
@@ -116,6 +128,7 @@ public class TicketBizService {
     private final PermissionService permissionService;
     private final FileStorageService fileStorageService;
     private final CustomerTicketAccessService customerTicketAccessService;
+    private final EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     // ==================== 创建工单（系统内部调用） ====================
 
@@ -152,13 +165,27 @@ public class TicketBizService {
                              String inReplyTo, String references, LocalDateTime mailSentAt,
                              List<String> toAddresses, List<String> ccAddresses, List<String> bccAddresses,
                              String rawHeaders, byte[] rawEml, List<AttachmentInfo> attachments) {
-        // 1、创建工单，并在入库前计算首次响应/解决 SLA 截止时间。
+        // 1、来源邮箱和所属企业必须可用于新业务；邮箱是本次建单唯一策略入口。
+        enterpriseMailboxAccessService.assertSystemMailboxOperational(mailboxId);
+        MailboxEntity sourceMailbox = mailboxMapper.selectById(mailboxId);
+        if (sourceMailbox == null || sourceMailbox.getEnterpriseId() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "来源邮箱或所属企业不存在");
+        }
+        String normalizedCustomerEmail = normalizeCustomerEmail(customerEmail);
+        LocalDateTime customerMailAt = mailSentAt != null ? mailSentAt : LocalDateTime.now();
+        CustomerEntity customer = upsertCustomer(
+                sourceMailbox.getEnterpriseId(), normalizedCustomerEmail, customerName, customerMailAt);
+
+        // 2、创建工单并固化企业、邮箱和当前规则组配置快照。
         TicketEntity ticket = new TicketEntity();
+        ticket.setEnterpriseId(sourceMailbox.getEnterpriseId());
         ticket.setSubject(subject);
         ticket.setStatus(STATUS_PENDING_ASSIGN);
         ticket.setPriority("NORMAL");
         ticket.setMailboxId(mailboxId);
-        ticket.setCustomerEmail(customerEmail);
+        ticket.setCustomerId(customer.getId());
+        ticket.setCustomerEmail(normalizedCustomerEmail);
+        ticket.setAssignmentRuleGroupId(sourceMailbox.getAssignmentRuleGroupId());
         ticket.setLinkSuspect(false);
         ticket.setSlaBreached(false);
         ticket.setSlaWarningSent(false);
@@ -167,19 +194,19 @@ public class TicketBizService {
         ticket.setCustomerAccessCodeHash(customerAccess.codeHash());
         ticket.setCustomerAccessExpiresAt(customerAccess.expiresAt());
         ticket.setCustomerAccessEnabled(true);
-        applySlaDeadlines(ticket, mailSentAt);
+        applySlaDeadlines(ticket, mailboxId, customerMailAt);
         ticket.setCreatedBy(OPERATOR_SYSTEM);
         ticket.setUpdatedBy(OPERATOR_SYSTEM);
-        insertTicketWithRetry(ticket, mailboxId, customerEmail, subject);
+        insertTicketWithRetry(ticket, mailboxId, normalizedCustomerEmail, subject);
 
-        // 2、保存原始邮件消息
+        // 3、保存原始邮件消息
         TicketMessageEntity msg = new TicketMessageEntity();
         msg.setTicketId(ticket.getId());
         msg.setDirection(DIRECTION_INBOUND);
         msg.setMessageId(MessageThreadService.normalizeMessageId(messageId));
         msg.setInReplyTo(MessageThreadService.normalizeMessageId(inReplyTo));
         msg.setMailReferences(references);
-        msg.setFromAddress(customerEmail);
+        msg.setFromAddress(normalizedCustomerEmail);
         msg.setToAddress(joinAddresses(toAddresses));
         msg.setToAddresses(joinAddresses(toAddresses));
         msg.setCcAddresses(joinAddresses(ccAddresses));
@@ -199,17 +226,22 @@ public class TicketBizService {
             ticketMessageMapper.updateById(msg);
         }
 
-        // 3、记录生命周期事件：CREATED
+        // 4、记录生命周期事件：CREATED
         recordEvent(ticket.getId(), EVENT_CREATED, "工单已创建，来源邮箱ID：" + mailboxId, OPERATOR_SYSTEM, LocalDateTime.now());
 
-        // 4、尝试自动分配（分配规则优先，邮箱默认处理人兜底）
-        autoAssignByRules(ticket, mailboxId, subject, customerEmail);
+        // 5、按邮箱绑定规则组尝试自动分配，fallback 由邮箱显式决定。
+        autoAssignByRules(ticket, sourceMailbox, subject, normalizedCustomerEmail);
 
-        // 5、发送自动回执（失败不影响工单）
+        // 6、按邮箱绑定模板发送自动回执（失败不影响工单）。
         AutoReplyService.AutoReplyResult autoReplyResult = autoReplyService.sendAutoReply(
                 ticket.getId(), mailboxId, customerAccess.code());
+        if (autoReplyResult != null && !autoReplyResult.success()) {
+            recordEvent(ticket.getId(), EVENT_AUTO_REPLY_SKIPPED,
+                    "自动回复未发送：" + truncateContent(autoReplyResult.message()),
+                    OPERATOR_SYSTEM, LocalDateTime.now());
+        }
 
-        // 6、保存自动回执消息到会话（OUTBOUND）
+        // 7、保存自动回执消息到会话（OUTBOUND）
         if (autoReplyResult != null && autoReplyResult.success()) {
             try {
                 MailboxEntity mb = mailboxMapper.selectById(mailboxId);
@@ -218,7 +250,7 @@ public class TicketBizService {
                 autoReplyMsg.setTicketId(ticket.getId());
                 autoReplyMsg.setDirection(DIRECTION_OUTBOUND);
                 autoReplyMsg.setFromAddress(mailFrom);
-                autoReplyMsg.setToAddress(customerEmail);
+                autoReplyMsg.setToAddress(normalizedCustomerEmail);
                 autoReplyMsg.setSubject(autoReplyResult.subject());
                 autoReplyMsg.setContentText(autoReplyResult.contentText());
                 autoReplyMsg.setContentHtml(autoReplyResult.contentHtml());
@@ -275,28 +307,34 @@ public class TicketBizService {
      * @param references   References头
      * @param sentAt       邮件发送时间
      */
-    public void handleCustomerFollowUp(Long ticketId, String subject, String fromAddress,
+    public void handleCustomerFollowUp(Long sourceMailboxId, Long ticketId, String subject, String fromAddress,
                                        String contentText, String contentHtml,
                                        String messageId, String inReplyTo, String references,
                                        LocalDateTime sentAt) {
         handleCustomerFollowUp(
-                ticketId, subject, fromAddress, contentText, contentHtml,
+                sourceMailboxId, ticketId, subject, fromAddress, contentText, contentHtml,
                 messageId, inReplyTo, references, sentAt,
                 List.of(), List.of(), List.of(), null, null, List.of()
         );
     }
 
     @Transactional
-    public void handleCustomerFollowUp(Long ticketId, String subject, String fromAddress,
+    public void handleCustomerFollowUp(Long sourceMailboxId, Long ticketId, String subject, String fromAddress,
                                        String contentText, String contentHtml,
                                        String messageId, String inReplyTo, String references,
                                        LocalDateTime sentAt,
                                        List<String> toAddresses, List<String> ccAddresses, List<String> bccAddresses,
                                        String rawHeaders, byte[] rawEml, List<AttachmentInfo> attachments) {
+        enterpriseMailboxAccessService.assertSystemMailboxOperational(sourceMailboxId);
+        MailboxEntity sourceMailbox = mailboxMapper.selectById(sourceMailboxId);
         TicketEntity ticket = ticketMapper.selectById(ticketId);
         if (ticket == null) {
             log.warn("客户追信跳过：工单不存在 ticketId={}", ticketId);
             return;
+        }
+        if (sourceMailbox == null || sourceMailbox.getEnterpriseId() == null
+                || !sourceMailbox.getEnterpriseId().equals(ticket.getEnterpriseId())) {
+            throw new BusinessException(40302, "来源邮箱与目标工单不属于同一企业，拒绝关联追信");
         }
 
         // 1、保存客户追信消息
@@ -453,14 +491,14 @@ public class TicketBizService {
      * 工单分页查询，ADMIN/AGENT 均可查看。
      */
     public TicketPageResponse pageTickets(CurrentUserPrincipal principal, String keyword, String status,
-                                          Boolean slaBreached, Long assigneeId, Long mailboxId,
+                                          Boolean slaBreached, Long assigneeId, Long enterpriseId, Long mailboxId,
                                           LocalDateTime createdFrom, LocalDateTime createdTo,
                                           Integer page, Integer size) {
         permissionService.assertPermission(principal, "ticket:read", "无权查看工单");
-
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
-        LambdaQueryWrapper<TicketEntity> wrapper = buildPageQuery(keyword, status, slaBreached, assigneeId, mailboxId, createdFrom, createdTo);
+        LambdaQueryWrapper<TicketEntity> wrapper = buildPageQuery(
+                keyword, status, slaBreached, assigneeId, enterpriseId, mailboxId, createdFrom, createdTo);
         dataScopeService.applyTicketScope(wrapper, principal);
         wrapper.orderByDesc(TicketEntity::getCreatedAt)
                 .orderByDesc(TicketEntity::getId);
@@ -525,6 +563,7 @@ public class TicketBizService {
         if (assignee == null) {
             throw new BusinessException(CODE_BAD_REQUEST, "处理人不存在");
         }
+        enterpriseMailboxAccessService.assertAssigneeCanAccessMailbox(request.assigneeId(), ticket.getMailboxId());
 
         // 更新处理人
         updateTicket(ticket.getId(), Map.of(
@@ -564,7 +603,7 @@ public class TicketBizService {
     public TicketVO claimTicket(CurrentUserPrincipal principal, Long id) {
         permissionService.assertPermission(principal, "ticket:claim", "无权领取工单");
         TicketEntity ticket = requireTicket(id);
-        dataScopeService.assertTicketVisible(principal, ticket);
+        dataScopeService.assertTicketOperable(principal, ticket);
         assertActive(ticket);
         if (principal.id() == null) {
             throw new BusinessException(CODE_BAD_REQUEST, "当前用户缺少用户ID，无法领取工单");
@@ -629,7 +668,13 @@ public class TicketBizService {
         }
 
         String direction = isInternal ? DIRECTION_INTERNAL : DIRECTION_OUTBOUND;
-        String messageSubject = isInternal ? ticket.getSubject() : buildAgentReplySubject(ticket);
+        MailboxEntity outboundMailbox = isInternal ? null : mailboxMapper.selectById(ticket.getMailboxId());
+        String requestedHtmlContent = request.htmlContent() != null && !request.htmlContent().isBlank()
+                ? request.htmlContent() : content;
+        RenderedMail agentReply = isInternal ? null : renderAgentReply(ticket, outboundMailbox, requestedHtmlContent);
+        String messageSubject = isInternal
+                ? ticket.getSubject()
+                : agentReply == null ? buildAgentReplySubject(ticket) : agentReply.subject();
 
         // 记录消息
         TicketMessageEntity message = new TicketMessageEntity();
@@ -690,11 +735,10 @@ public class TicketBizService {
 
             // SMTP 发送回复邮件给客户
             try {
-                MailboxEntity mailbox = mailboxMapper.selectById(ticket.getMailboxId());
-                if (mailbox != null) {
-                    String htmlContent = request.htmlContent() != null && !request.htmlContent().isBlank() ? request.htmlContent() : content;
+                if (outboundMailbox != null && agentReply != null) {
                     MailSendService.SendResult sendResult = mailSendService.sendRawMail(
-                            mailbox.getId(), ticket.getCustomerEmail(), messageSubject, htmlContent, "AGENT_REPLY");
+                            outboundMailbox.getId(), ticket.getCustomerEmail(), agentReply.subject(), agentReply.content(),
+                            "AGENT_REPLY", ticket.getId(), agentReply.templateId(), agentReply.templateType());
                     if (sendResult.success()) {
                         String sentMessageId = MessageThreadService.normalizeMessageId(sendResult.messageId());
                         if (sentMessageId != null) {
@@ -708,7 +752,7 @@ public class TicketBizService {
                         log.warn("回复邮件发送失败 ticketId={} reason={}", ticket.getId(), sendResult.message());
                     }
                 } else {
-                    log.warn("回复邮件跳过：邮箱配置不存在 mailboxId={}", ticket.getMailboxId());
+                    log.warn("回复邮件跳过：邮箱或处理人回复模板不可用 mailboxId={}", ticket.getMailboxId());
                 }
             } catch (Exception e) {
                 log.warn("回复邮件发送异常，不影响工单 ticketId={}", ticket.getId(), e);
@@ -727,6 +771,28 @@ public class TicketBizService {
         String ticketNo = ticket.getTicketNo() == null ? "" : ticket.getTicketNo();
         String subject = ticket.getSubject() == null ? "" : ticket.getSubject();
         return "关于工单 " + ticketNo + " 的回复：" + subject;
+    }
+
+    private RenderedMail renderAgentReply(TicketEntity ticket, MailboxEntity mailbox, String replyContent) {
+        if (mailbox == null || mailbox.getAgentReplyTemplateId() == null) {
+            return null;
+        }
+        NotificationTemplateEntity template = notificationTemplateMapper.selectById(mailbox.getAgentReplyTemplateId());
+        if (template == null || !Boolean.TRUE.equals(template.getEnabled())
+                || !"AGENT_REPLY".equals(template.getTemplateType())) {
+            return null;
+        }
+        Map<String, String> variables = Map.of(
+                "ticket_no", safe(ticket.getTicketNo()),
+                "subject", safe(ticket.getSubject()),
+                "customer_email", safe(ticket.getCustomerEmail()),
+                "reply_content", safe(replyContent),
+                "ticket_link", "请登录系统查看工单详情");
+        return new RenderedMail(
+                renderTemplate(template.getSubjectTpl(), variables),
+                renderTemplate(template.getContentTpl(), variables),
+                template.getId(),
+                template.getTemplateType());
     }
 
     // ==================== 变更状态 ====================
@@ -831,16 +897,29 @@ public class TicketBizService {
 
     // ==================== 内部方法 ====================
 
-    private void autoAssignByRules(TicketEntity ticket, Long mailboxId, String subject, String customerEmail) {
-        // 1、加载来源邮箱，用于 MAILBOX 规则匹配、通知发信和旧逻辑兜底。
-        MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
+    private void autoAssignByRules(TicketEntity ticket, MailboxEntity mailbox,
+                                   String subject, String customerEmail) {
+        Long mailboxId = mailbox.getId();
+        // 1、规则引擎只读取邮箱绑定且启用的同企业规则组。
         AssignmentRuleMatchResult matchResult = assignmentRuleService.matchForTicket(
-                mailboxId, mailbox == null ? null : mailbox.getEmailAddress(), subject, customerEmail);
+                mailboxId, mailbox.getEmailAddress(), subject, customerEmail);
 
         // 2、优先应用启用的分配规则：按 priority_order 命中的第一条有效规则生效。
         if (matchResult != null) {
+            try {
+                enterpriseMailboxAccessService.assertAssigneeCanAccessMailbox(matchResult.assigneeId(), mailboxId);
+            } catch (BusinessException exception) {
+                log.warn("分配规则处理人无邮箱权限，忽略本次命中 ticketId={} mailboxId={} assigneeId={} ruleId={}",
+                        ticket.getId(), mailboxId, matchResult.assigneeId(), matchResult.ruleId());
+                if ("DEFAULT_ASSIGNEE".equalsIgnoreCase(normalize(mailbox.getAssignmentFallbackType()))) {
+                    autoAssignByMailboxDefault(ticket, mailbox, mailboxId);
+                }
+                return;
+            }
             ticket.setAssigneeId(matchResult.assigneeId());
             ticket.setStatus(STATUS_PROCESSING);
+            ticket.setAssignmentRuleGroupId(matchResult.groupId());
+            ticket.setAssignmentRuleId(matchResult.ruleId());
             ticketMapper.updateById(ticket);
 
             String content = "自动分配处理人：" + matchResult.assigneeName()
@@ -858,17 +937,21 @@ public class TicketBizService {
             return;
         }
 
-        // 4、没有规则命中时，保留原邮箱默认处理人逻辑，避免无配置场景回退。
-        autoAssignByMailboxDefault(ticket, mailbox, mailboxId);
+        // 4、无规则命中时仅在邮箱明确配置 DEFAULT_ASSIGNEE 时使用默认处理人。
+        if ("DEFAULT_ASSIGNEE".equalsIgnoreCase(normalize(mailbox.getAssignmentFallbackType()))) {
+            autoAssignByMailboxDefault(ticket, mailbox, mailboxId);
+        } else {
+            log.info("分配规则未命中且邮箱 fallback=NONE，工单保持待分配 ticketId={} mailboxId={}",
+                    ticket.getId(), mailboxId);
+        }
     }
 
-    private void applySlaDeadlines(TicketEntity ticket, LocalDateTime mailSentAt) {
-        // 1、以客户来信时间作为 SLA 起算时间；缺失时使用当前建单时间兜底。
-        LocalDateTime startAt = mailSentAt != null ? mailSentAt : LocalDateTime.now();
+    private void applySlaDeadlines(TicketEntity ticket, Long mailboxId, LocalDateTime startAt) {
+        // 1、以客户来信时间作为 SLA 起算时间。
         ticket.setLastCustomerMailAt(startAt);
         try {
-            // 2、调用 SLA 计算服务，写入命中策略和首次响应/解决截止时间。
-            SlaDeadlineResult deadline = slaDeadlineService.calculateForNewTicket(startAt);
+            // 2、只按邮箱绑定 SLA 计算并写入实际使用的策略快照。
+            SlaDeadlineResult deadline = slaDeadlineService.calculateForNewTicket(mailboxId, startAt);
             ticket.setSlaPolicyId(deadline.policyId());
             ticket.setSlaResponseDeadline(deadline.responseDeadline());
             ticket.setSlaResolveDeadline(deadline.resolveDeadline());
@@ -890,6 +973,13 @@ public class TicketBizService {
         UserEntity assignee = userMapper.selectById(mailbox.getDefaultAssigneeId());
         if (assignee == null || !Boolean.TRUE.equals(assignee.getEnabled())) {
             log.info("默认处理人无效或已停用，工单保持待分配 ticketId={} assigneeId={}", ticket.getId(), mailbox.getDefaultAssigneeId());
+            return;
+        }
+        try {
+            enterpriseMailboxAccessService.assertAssigneeCanAccessMailbox(assignee.getId(), mailboxId);
+        } catch (BusinessException exception) {
+            log.info("默认处理人无邮箱权限，工单保持待分配 ticketId={} assigneeId={} mailboxId={}",
+                    ticket.getId(), assignee.getId(), mailboxId);
             return;
         }
 
@@ -920,22 +1010,37 @@ public class TicketBizService {
             log.info("分配通知跳过：处理人无邮箱 ticketId={} assigneeId={}", ticket.getId(), assigneeId);
             return;
         }
-        String subject = "新工单分配：" + ticket.getTicketNo() + " " + ticket.getSubject();
+        if (mailbox.getAssignmentNotifyTemplateId() == null) {
+            log.warn("分配通知跳过：邮箱未绑定分配通知模板 ticketId={} mailboxId={}",
+                    ticket.getId(), mailbox.getId());
+            return;
+        }
+        NotificationTemplateEntity template = notificationTemplateMapper.selectById(
+                mailbox.getAssignmentNotifyTemplateId());
+        if (template == null || !Boolean.TRUE.equals(template.getEnabled())
+                || !"ASSIGN_NOTIFY".equals(template.getTemplateType())) {
+            log.warn("分配通知跳过：绑定模板不可用 ticketId={} mailboxId={} templateId={}",
+                    ticket.getId(), mailbox.getId(), mailbox.getAssignmentNotifyTemplateId());
+            return;
+        }
         String priorityLabel = switch (ticket.getPriority()) {
             case "HIGH" -> "高";
             case "URGENT" -> "紧急";
             default -> "普通";
         };
-        String content = "您好，" + assigneeName + "，\n\n"
-                + "系统已将以下工单分配给您，请及时处理：\n\n"
-                + "工单号：" + ticket.getTicketNo() + "\n"
-                + "主题：" + ticket.getSubject() + "\n"
-                + "客户：" + ticket.getCustomerEmail() + "\n"
-                + "优先级：" + priorityLabel + "\n\n"
-                + "请登录系统查看详情。";
+        Map<String, String> variables = Map.of(
+                "ticket_no", safe(ticket.getTicketNo()),
+                "subject", safe(ticket.getSubject()),
+                "customer_email", safe(ticket.getCustomerEmail()),
+                "assignee_name", safe(assigneeName),
+                "priority", priorityLabel,
+                "ticket_link", "请登录系统查看工单详情");
+        String subject = renderTemplate(template.getSubjectTpl(), variables);
+        String content = renderTemplate(template.getContentTpl(), variables);
 
         MailSendService.SendResult result = mailSendService.sendRawMail(
-                mailbox.getId(), assigneeEmail, subject, content, "ASSIGN_NOTIFY");
+                mailbox.getId(), assigneeEmail, subject, content, "ASSIGN_NOTIFY",
+                ticket.getId(), template.getId(), template.getTemplateType());
         if (result.success()) {
             log.info("分配通知已发送 ticketId={} to={}", ticket.getId(), assigneeEmail);
         } else {
@@ -985,7 +1090,7 @@ public class TicketBizService {
     }
 
     private LambdaQueryWrapper<TicketEntity> buildPageQuery(String keyword, String status, Boolean slaBreached,
-                                                            Long assigneeId, Long mailboxId,
+                                                            Long assigneeId, Long enterpriseId, Long mailboxId,
                                                             LocalDateTime createdFrom, LocalDateTime createdTo) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<>();
         String normalizedKeyword = normalize(keyword);
@@ -1006,6 +1111,9 @@ public class TicketBizService {
         }
         if (assigneeId != null) {
             wrapper.eq(TicketEntity::getAssigneeId, assigneeId);
+        }
+        if (enterpriseId != null) {
+            wrapper.eq(TicketEntity::getEnterpriseId, enterpriseId);
         }
         if (mailboxId != null) {
             wrapper.eq(TicketEntity::getMailboxId, mailboxId);
@@ -1056,10 +1164,14 @@ public class TicketBizService {
     private TicketSummaryVO toSummaryVO(TicketEntity ticket) {
         String assigneeName = resolveUserName(ticket.getAssigneeId());
         String mailboxName = resolveMailboxName(ticket.getMailboxId());
+        String enterpriseName = resolveEnterpriseName(ticket.getEnterpriseId());
         return new TicketSummaryVO(
                 ticket.getId(), ticket.getTicketNo(), ticket.getSubject(), ticket.getStatus(), ticket.getPriority(),
+                ticket.getEnterpriseId(), enterpriseName,
                 ticket.getCustomerEmail(), ticket.getAssigneeId(), assigneeName,
                 ticket.getMailboxId(), mailboxName,
+                ticket.getSlaPolicyId(), ticket.getAutoReplyTemplateId(),
+                ticket.getAssignmentRuleGroupId(), ticket.getAssignmentRuleId(),
                 ticket.getLinkSuspect(), ticket.getFirstReplyAt() != null,
                 ticket.getSlaResponseDeadline(), ticket.getSlaBreached(),
                 ticket.getRemark(),
@@ -1070,6 +1182,7 @@ public class TicketBizService {
     private TicketVO toDetailVO(TicketEntity ticket) {
         String assigneeName = resolveUserName(ticket.getAssigneeId());
         String mailboxName = resolveMailboxName(ticket.getMailboxId());
+        String enterpriseName = resolveEnterpriseName(ticket.getEnterpriseId());
 
         List<TicketAttachmentEntity> attachments = ticketAttachmentMapper.selectList(
                 new LambdaQueryWrapper<TicketAttachmentEntity>()
@@ -1095,7 +1208,10 @@ public class TicketBizService {
 
         return new TicketVO(
                 ticket.getId(), ticket.getTicketNo(), ticket.getSubject(), ticket.getStatus(), ticket.getPriority(),
+                ticket.getEnterpriseId(), enterpriseName,
                 ticket.getMailboxId(), mailboxName,
+                ticket.getSlaPolicyId(), ticket.getAutoReplyTemplateId(),
+                ticket.getAssignmentRuleGroupId(), ticket.getAssignmentRuleId(),
                 ticket.getCustomerId(), ticket.getCustomerEmail(),
                 ticket.getAssigneeId(), assigneeName,
                 ticket.getLinkSuspect(),
@@ -1174,6 +1290,35 @@ public class TicketBizService {
         return mailbox == null ? null : mailbox.getMailboxName();
     }
 
+    private String resolveEnterpriseName(Long enterpriseId) {
+        if (enterpriseId == null) return null;
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        return enterprise == null ? null : enterprise.getEnterpriseName();
+    }
+
+    private CustomerEntity upsertCustomer(Long enterpriseId, String email, String customerName,
+                                          LocalDateTime lastMailAt) {
+        String displayName = normalize(customerName);
+        customerMapper.upsertIncomingCustomer(
+                enterpriseId, email, displayName.isEmpty() ? null : displayName, lastMailAt, OPERATOR_SYSTEM);
+        CustomerEntity customer = customerMapper.selectOne(new LambdaQueryWrapper<CustomerEntity>()
+                .eq(CustomerEntity::getEnterpriseId, enterpriseId)
+                .eq(CustomerEntity::getEmail, email)
+                .last("LIMIT 1"));
+        if (customer == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "客户档案创建失败");
+        }
+        return customer;
+    }
+
+    private String normalizeCustomerEmail(String email) {
+        String normalized = normalize(email).toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            throw new BusinessException(CODE_BAD_REQUEST, "客户邮箱不能为空");
+        }
+        return normalized;
+    }
+
     private void recordLog(CurrentUserPrincipal principal, String actionCode, Long bizId, String content) {
         OperationLogEntity log = new OperationLogEntity();
         log.setOperator(principal.account());
@@ -1223,8 +1368,23 @@ public class TicketBizService {
         return Math.min(size, 100);
     }
 
+    private String renderTemplate(String template, Map<String, String> variables) {
+        String rendered = safe(template);
+        for (Map.Entry<String, String> entry : variables.entrySet()) {
+            rendered = rendered.replace("{" + entry.getKey() + "}", safe(entry.getValue()));
+        }
+        return rendered;
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
     private String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private record RenderedMail(String subject, String content, Long templateId, String templateType) {
     }
 
     public record RawMailDownload(String fileName, Long fileSize, InputStream inputStream) {

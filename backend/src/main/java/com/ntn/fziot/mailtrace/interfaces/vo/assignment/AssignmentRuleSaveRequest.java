@@ -12,6 +12,11 @@ import lombok.Data;
 @Schema(description = "分配规则保存请求")
 public class AssignmentRuleSaveRequest {
 
+    @NotNull(message = "请选择所属分配规则组")
+    @Min(value = 1, message = "规则组ID需大于 0")
+    @Schema(description = "所属分配规则组ID")
+    private Long groupId;
+
     @NotBlank(message = "请输入规则名称")
     @Size(max = 64, message = "规则名称不能超过 64 个字符")
     @Schema(description = "规则名称", example = "VIP 客户优先分配")
@@ -25,11 +30,11 @@ public class AssignmentRuleSaveRequest {
     @Schema(description = "匹配优先级，数字越小越优先", example = "10")
     private Integer priorityOrder = 100;
 
-    @Schema(description = "是否默认规则", example = "false")
+    @Schema(description = "旧版默认规则兼容字段；P3 页面固定为 false", example = "false")
     private Boolean defaultRule = false;
 
     @NotBlank(message = "请选择匹配类型")
-    @Schema(description = "匹配类型：DEFAULT/SUBJECT_KEYWORD/MAILBOX/FROM_EMAIL", example = "SUBJECT_KEYWORD")
+    @Schema(description = "匹配类型：SUBJECT_KEYWORD/MAILBOX/FROM_EMAIL", example = "SUBJECT_KEYWORD")
     private String matchType;
 
     @Size(max = 256, message = "匹配值不能超过 256 个字符")

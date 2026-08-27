@@ -17,6 +17,8 @@ public class TicketEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long enterpriseId;
+
     private String ticketNo;
 
     private String subject;
@@ -49,6 +51,12 @@ public class TicketEntity {
     private LocalDateTime closedAt;
 
     private Long slaPolicyId;
+
+    private Long autoReplyTemplateId;
+
+    private Long assignmentRuleGroupId;
+
+    private Long assignmentRuleId;
 
     private LocalDateTime slaResponseDeadline;
 

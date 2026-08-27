@@ -1,5 +1,6 @@
 package com.ntn.fziot.mailtrace.application.bizservice.mailsend;
 
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
@@ -34,6 +35,7 @@ public class MailSendService {
     private final MailSendLogMapper mailSendLogMapper;
     private final MailPasswordCipher mailPasswordCipher;
     private final PermissionService permissionService;
+    private final EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     /**
      * 发送一封指定内容的邮件（供自动回执、分配通知等内部调用）。
@@ -46,6 +48,12 @@ public class MailSendService {
      * @return 发送结果
      */
     public SendResult sendRawMail(Long mailboxId, String toAddress, String subject, String content, String sendType) {
+        return sendRawMail(mailboxId, toAddress, subject, content, sendType, null, null, sendType);
+    }
+
+    public SendResult sendRawMail(Long mailboxId, String toAddress, String subject, String content, String sendType,
+                                  Long ticketId, Long templateId, String templateType) {
+        enterpriseMailboxAccessService.assertSystemMailboxOperational(mailboxId);
         MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
         if (mailbox == null) {
             return SendResult.fail("邮箱不存在：" + mailboxId);
@@ -56,7 +64,8 @@ public class MailSendService {
         } catch (Exception e) {
             return SendResult.fail("SMTP 密码解密失败");
         }
-        return doSend(mailbox, smtpPassword, toAddress, getFromAddress(mailbox), subject, content, sendType);
+        return doSend(mailbox, smtpPassword, toAddress, getFromAddress(mailbox), subject, content, sendType,
+                ticketId, templateId, templateType);
     }
 
     public SendResult sendRawMail(Long mailboxId, String toAddress, String subject, String content) {
@@ -72,6 +81,7 @@ public class MailSendService {
      */
     public SendResult sendTestMail(Long mailboxId, String toAddress) {
         // 1、查邮箱配置
+        enterpriseMailboxAccessService.assertSystemMailboxOperational(mailboxId);
         MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
         if (mailbox == null) {
             return SendResult.fail("邮箱不存在：" + mailboxId);
@@ -93,11 +103,12 @@ public class MailSendService {
         return doSend(mailbox, smtpPassword, toAddress,
                 getFromAddress(mailbox), "MailTrace 测试邮件",
                 "这是一封来自 MailTrace 邮件工单系统的测试邮件。\n\n如果您收到此邮件，说明 SMTP 配置正确，发信服务正常工作。",
-                "TEST");
+                "TEST", null, null, "TEST");
     }
 
     public SendResult sendTestMail(CurrentUserPrincipal principal, Long mailboxId, String toAddress) {
         permissionService.assertPermission(principal, "mail_send:test", "无权发送测试邮件");
+        enterpriseMailboxAccessService.assertMailboxOperational(principal, mailboxId);
         return sendTestMail(mailboxId, toAddress);
     }
 
@@ -106,10 +117,12 @@ public class MailSendService {
      */
     private SendResult doSend(MailboxEntity mailbox, String smtpPassword,
                               String toAddress, String fromAddress,
-                              String subject, String content, String sendType) {
+                              String subject, String content, String sendType,
+                              Long ticketId, Long templateId, String templateType) {
         long start = System.currentTimeMillis();
         Transport transport = null;
-        MailSendLogEntity logEntity = createLog(mailbox.getId(), toAddress, subject, content, sendType);
+        MailSendLogEntity logEntity = createLog(
+                mailbox, ticketId, templateId, templateType, toAddress, subject, content, sendType);
 
         try {
             // 建立 SMTP 连接
@@ -176,6 +189,7 @@ public class MailSendService {
         if (!"FAILED".equals(logEntity.getSendStatus())) {
             return SendResult.fail("只有失败状态的记录可以重试，当前状态：" + logEntity.getSendStatus());
         }
+        enterpriseMailboxAccessService.assertSystemMailboxOperational(logEntity.getMailboxId());
         // 2、查邮箱配置
         MailboxEntity mailbox = mailboxMapper.selectById(logEntity.getMailboxId());
         if (mailbox == null) {
@@ -194,6 +208,10 @@ public class MailSendService {
 
     public SendResult retrySend(CurrentUserPrincipal principal, Long sendLogId) {
         permissionService.assertPermission(principal, "mail_send:retry", "无权重试发送邮件");
+        MailSendLogEntity logEntity = mailSendLogMapper.selectById(sendLogId);
+        if (logEntity != null) {
+            enterpriseMailboxAccessService.assertMailboxOperational(principal, logEntity.getMailboxId());
+        }
         return retrySend(sendLogId);
     }
 
@@ -266,10 +284,15 @@ public class MailSendService {
         return "noreply@ntn.fziot";
     }
 
-    private MailSendLogEntity createLog(Long mailboxId, String toAddress, String subject, String contentBody, String sendType) {
+    private MailSendLogEntity createLog(MailboxEntity mailbox, Long ticketId, Long templateId, String templateType,
+                                        String toAddress, String subject, String contentBody, String sendType) {
         MailSendLogEntity log = new MailSendLogEntity();
-        log.setMailboxId(mailboxId);
+        log.setTicketId(ticketId);
+        log.setMailboxId(mailbox.getId());
+        log.setEnterpriseId(mailbox.getEnterpriseId());
         log.setSendType(sendType);
+        log.setTemplateId(templateId);
+        log.setTemplateType(templateType == null || templateType.isBlank() ? sendType : templateType);
         log.setToAddress(toAddress);
         log.setSubject(subject);
         log.setContentBody(contentBody);

@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { message } from 'antd'
 import { ticketApi } from '../api/tickets'
+import { enterpriseApi } from '../api/enterprises'
+import { mailboxApi } from '../api/mailboxes'
 import { ApiError } from '../shared/api/error-handler'
 import type { TicketAttachment, TicketDetail, TicketPageResponse, TicketStats } from '../types/ticket'
+import type { EnterpriseOption } from '../types/enterprise'
+import type { MailboxOption } from '../types/mailbox'
 
 type UseTicketManagementParams = {
   activeMenu: string
@@ -24,6 +28,10 @@ export function useTicketManagement({
   const [ticketStatusTab, setTicketStatusTab] = useState('ALL')
   const [ticketSlaBreachedOnly, setTicketSlaBreachedOnly] = useState(false)
   const [ticketKeyword, setTicketKeyword] = useState('')
+  const [ticketEnterpriseFilter, setTicketEnterpriseFilter] = useState('ALL')
+  const [ticketMailboxFilter, setTicketMailboxFilter] = useState('ALL')
+  const [ticketEnterpriseOptions, setTicketEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [ticketMailboxOptions, setTicketMailboxOptions] = useState<MailboxOption[]>([])
   const [ticketPage, setTicketPage] = useState(1)
   const [ticketPageSize] = useState(10)
   const [ticketsData, setTicketsData] = useState<TicketPageResponse | null>(null)
@@ -49,7 +57,9 @@ export function useTicketManagement({
     setTicketsError('')
     try {
       const data = await ticketApi.list({
+        enterpriseId: ticketEnterpriseFilter === 'ALL' ? undefined : Number(ticketEnterpriseFilter),
         keyword: ticketKeyword.trim() || undefined,
+        mailboxId: ticketMailboxFilter === 'ALL' ? undefined : Number(ticketMailboxFilter),
         page: ticketPage,
         size: ticketPageSize,
         slaBreached: ticketSlaBreachedOnly || undefined,
@@ -67,12 +77,28 @@ export function useTicketManagement({
     canReadTickets,
     handleAuthExpired,
     ticketKeyword,
+    ticketEnterpriseFilter,
+    ticketMailboxFilter,
     ticketPage,
     ticketPageSize,
     ticketSlaBreachedOnly,
     ticketStatusTab,
     token,
   ])
+
+  useEffect(() => {
+    if (!token || activeMenu !== '全部工单') return
+    void Promise.all([
+      enterpriseApi.options(),
+      mailboxApi.options(ticketEnterpriseFilter === 'ALL' ? undefined : Number(ticketEnterpriseFilter)),
+    ]).then(([enterprises, mailboxes]) => {
+      setTicketEnterpriseOptions(enterprises)
+      setTicketMailboxOptions(mailboxes)
+      setTicketMailboxFilter((current) => current === 'ALL' || mailboxes.some((mailbox) => String(mailbox.id) === current) ? current : 'ALL')
+    }).catch((error) => {
+      if (!handleAuthExpired(error)) message.error(error instanceof Error ? error.message : '工单筛选项加载失败')
+    })
+  }, [activeMenu, handleAuthExpired, ticketEnterpriseFilter, token])
 
   const fetchTicketStats = useCallback(async () => {
     if (!token) return
@@ -106,6 +132,8 @@ export function useTicketManagement({
 
   const resetTicketFilters = useCallback(() => {
     setTicketKeyword('')
+    setTicketEnterpriseFilter('ALL')
+    setTicketMailboxFilter('ALL')
     setTicketStatusTab('ALL')
     setTicketSlaBreachedOnly(false)
     setTicketPage(1)
@@ -113,6 +141,17 @@ export function useTicketManagement({
 
   const changeTicketKeyword = useCallback((value: string) => {
     setTicketKeyword(value)
+    setTicketPage(1)
+  }, [])
+
+  const changeTicketEnterpriseFilter = useCallback((value: string) => {
+    setTicketEnterpriseFilter(value)
+    setTicketMailboxFilter('ALL')
+    setTicketPage(1)
+  }, [])
+
+  const changeTicketMailboxFilter = useCallback((value: string) => {
+    setTicketMailboxFilter(value)
     setTicketPage(1)
   }, [])
 
@@ -239,7 +278,9 @@ export function useTicketManagement({
   }, [handleOpenDetail, onActiveMenuChange])
 
   return {
+    changeTicketEnterpriseFilter,
     changeTicketKeyword,
+    changeTicketMailboxFilter,
     changeTicketStatus,
     fetchTicketStats,
     fetchTickets,
@@ -267,7 +308,11 @@ export function useTicketManagement({
     ticketAttachments,
     ticketDetail,
     ticketDetailTab,
+    ticketEnterpriseFilter,
+    ticketEnterpriseOptions,
     ticketKeyword,
+    ticketMailboxFilter,
+    ticketMailboxOptions,
     ticketPage,
     ticketPageSize,
     ticketsData,

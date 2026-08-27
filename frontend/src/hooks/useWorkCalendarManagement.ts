@@ -3,6 +3,8 @@ import { message } from 'antd'
 import dayjs from 'dayjs'
 import { slaPolicyApi } from '../api/sla-policies'
 import { holidayApi, workCalendarApi } from '../api/work-calendars'
+import { enterpriseApi } from '../api/enterprises'
+import type { EnterpriseOption } from '../types/enterprise'
 import { emptyHolidayForm, emptyWorkCalendarForm } from '../constants/work-calendars'
 import type { SlaPolicy } from '../types/sla-policy'
 import type {
@@ -63,6 +65,16 @@ export function useWorkCalendarManagement({
   const [calendarPreviewCreatedAt, setCalendarPreviewCreatedAt] = useState(calendarPreviewBaseTime.format('YYYY-MM-DDTHH:mm:ss'))
   const [calendarPreviewResponseHours, setCalendarPreviewResponseHours] = useState('2')
   const [calendarPreviewResolveHours, setCalendarPreviewResolveHours] = useState('16')
+  const [workCalendarEnterpriseOptions, setWorkCalendarEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [workCalendarEnterpriseFilter, setWorkCalendarEnterpriseFilter] = useState('ALL')
+
+  useEffect(() => {
+    if (!token || activeMenu !== '工作日历') return
+    void enterpriseApi.options().then((options) => {
+      setWorkCalendarEnterpriseOptions(options)
+      setWorkCalendarEnterpriseFilter((value) => value === 'ALL' && options[0] ? String(options[0].id) : value)
+    }).catch(() => setWorkCalendarEnterpriseOptions([]))
+  }, [activeMenu, token])
 
   const fetchWorkCalendarsPage = useCallback(async () => {
     if (!token || activeMenu !== '工作日历') return
@@ -76,6 +88,7 @@ export function useWorkCalendarManagement({
     setWorkCalendarError('')
     try {
       const data = await workCalendarApi.list({
+        enterpriseId: workCalendarEnterpriseFilter === 'ALL' ? undefined : Number(workCalendarEnterpriseFilter),
         keyword: workCalendarKeyword.trim(),
         defaultCalendar: workCalendarDefaultFilter !== 'ALL' ? workCalendarDefaultFilter : undefined,
       })
@@ -89,7 +102,7 @@ export function useWorkCalendarManagement({
         }))
       }
       if (!selected && !workCalendarDirty) {
-        setWorkCalendarForm(emptyWorkCalendarForm)
+        setWorkCalendarForm({ ...emptyWorkCalendarForm, enterpriseId: workCalendarEnterpriseFilter === 'ALL' ? '' : workCalendarEnterpriseFilter })
         setHolidayForm(emptyHolidayForm)
       }
     } catch (error) {
@@ -107,6 +120,7 @@ export function useWorkCalendarManagement({
     workCalendarDirty,
     workCalendarForm.id,
     workCalendarKeyword,
+    workCalendarEnterpriseFilter,
   ])
 
   useEffect(() => {
@@ -116,13 +130,13 @@ export function useWorkCalendarManagement({
   const fetchCalendarSlaPolicies = useCallback(async () => {
     if (!token || activeMenu !== '工作日历' || !canReadSlaPolicies) return
     try {
-      const data = await slaPolicyApi.list()
+      const data = await slaPolicyApi.list({ enterpriseId: workCalendarEnterpriseFilter === 'ALL' ? undefined : Number(workCalendarEnterpriseFilter) })
       setCalendarSlaPolicies(data.records)
     } catch (error) {
       if (handleAuthExpired(error)) return
       setWorkCalendarError(error instanceof Error ? error.message : 'SLA 策略引用加载失败')
     }
-  }, [activeMenu, canReadSlaPolicies, handleAuthExpired, token])
+  }, [activeMenu, canReadSlaPolicies, handleAuthExpired, token, workCalendarEnterpriseFilter])
 
   useEffect(() => {
     void fetchCalendarSlaPolicies()
@@ -199,14 +213,20 @@ export function useWorkCalendarManagement({
   }, [holidayMonth])
 
   const openCreateWorkCalendar = useCallback(() => {
-    setWorkCalendarForm(emptyWorkCalendarForm)
+    setWorkCalendarForm({
+      ...emptyWorkCalendarForm,
+      enterpriseId: workCalendarEnterpriseFilter === 'ALL'
+        ? (workCalendarEnterpriseOptions[0] ? String(workCalendarEnterpriseOptions[0].id) : '')
+        : workCalendarEnterpriseFilter,
+    })
     setWorkCalendarDirty(true)
     setWorkCalendarError('')
     setHolidayForm(emptyHolidayForm)
     setHolidayDirty(false)
-  }, [])
+  }, [workCalendarEnterpriseFilter, workCalendarEnterpriseOptions])
 
   const buildWorkCalendarPayload = useCallback(() => ({
+    enterpriseId: Number(workCalendarForm.enterpriseId),
     calendarName: workCalendarForm.calendarName.trim(),
     timezone: workCalendarForm.timezone.trim() || 'Asia/Shanghai',
     workdays: [...workCalendarForm.workdays].sort((a, b) => a - b),
@@ -484,6 +504,9 @@ export function useWorkCalendarManagement({
     workCalendarKeyword,
     workCalendarSaving,
     workCalendarsLoading,
+    workCalendarEnterpriseFilter,
+    workCalendarEnterpriseOptions,
+    setWorkCalendarEnterpriseFilter,
     workCalendarTimeInvalid,
   }
 }

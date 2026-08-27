@@ -3,7 +3,7 @@ package com.ntn.fziot.mailtrace.infrastructure.storage;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -24,7 +24,7 @@ import java.net.URI;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "mailtrace.storage", name = "type", havingValue = "minio", matchIfMissing = true)
+@ConditionalOnExpression("'${mailtrace.storage.enabled:true}' == 'true' && '${mailtrace.storage.type:oss}' == 'minio'")
 public class MinioFileStorageClient implements FileStorageClient {
 
     private final StorageProperties properties;

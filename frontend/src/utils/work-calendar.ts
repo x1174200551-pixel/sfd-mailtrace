@@ -9,6 +9,7 @@ export const calendarPreviewBaseTime = dayjs('2026-10-01T15:30:00')
 export function toSlaPolicyForm(policy: SlaPolicy): SlaPolicyFormState {
   return {
     id: policy.id,
+    enterpriseId: String(policy.enterpriseId),
     policyName: policy.policyName,
     enabled: policy.enabled,
     defaultPolicy: policy.defaultPolicy,
@@ -23,6 +24,7 @@ export function toSlaPolicyForm(policy: SlaPolicy): SlaPolicyFormState {
 export function toWorkCalendarForm(calendar: WorkCalendar): WorkCalendarFormState {
   return {
     id: calendar.id,
+    enterpriseId: String(calendar.enterpriseId),
     calendarName: calendar.calendarName,
     timezone: calendar.timezone,
     workdays: calendar.workdays,

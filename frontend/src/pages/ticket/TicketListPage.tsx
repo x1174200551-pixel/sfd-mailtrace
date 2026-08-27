@@ -17,13 +17,19 @@ import {
   statusLabel,
 } from '../../constants/status'
 import type { TicketPageResponse, TicketStats, TicketSummary } from '../../types/ticket'
+import type { EnterpriseOption } from '../../types/enterprise'
+import type { MailboxOption } from '../../types/mailbox'
 
 type TicketListPageProps = {
   isAdmin: boolean
+  enterpriseFilter: string
+  enterpriseOptions: EnterpriseOption[]
   keyword: string
   loading: boolean
   onClearFilters: () => void
+  onEnterpriseFilterChange: (value: string) => void
   onKeywordChange: (value: string) => void
+  onMailboxFilterChange: (value: string) => void
   onOpenDetail: (id: number) => void
   onPageChange: (page: number, size?: number) => void
   onRefresh: () => void
@@ -32,6 +38,8 @@ type TicketListPageProps = {
   onStatusChange: (status: string) => void
   page: number
   pageSize: number
+  mailboxFilter: string
+  mailboxOptions: MailboxOption[]
   slaBreachedOnly: boolean
   stats: TicketStats | null
   statusTab: string
@@ -61,11 +69,15 @@ function ticketStatusClass(ticket: TicketSummary) {
 }
 
 export function TicketListPage({
+  enterpriseFilter,
+  enterpriseOptions,
   isAdmin,
   keyword,
   loading,
   onClearFilters,
+  onEnterpriseFilterChange,
   onKeywordChange,
+  onMailboxFilterChange,
   onOpenDetail,
   onPageChange,
   onRefresh,
@@ -74,6 +86,8 @@ export function TicketListPage({
   onStatusChange,
   page,
   pageSize,
+  mailboxFilter,
+  mailboxOptions,
   slaBreachedOnly,
   stats,
   statusTab,
@@ -187,11 +201,27 @@ export function TicketListPage({
           </header>
 
         <section className="tickets-inline-filters" aria-label="筛选条件">
+            <div className="tickets-scope-filters">
+              <Select
+                aria-label="企业筛选"
+                size="small"
+                value={enterpriseFilter}
+                onChange={onEnterpriseFilterChange}
+                options={[{ value: 'ALL', label: '全部企业' }, ...enterpriseOptions.map((item) => ({ value: String(item.id), label: item.enterpriseName }))]}
+              />
+              <Select
+                aria-label="邮箱筛选"
+                size="small"
+                value={mailboxFilter}
+                onChange={onMailboxFilterChange}
+                options={[{ value: 'ALL', label: '全部邮箱' }, ...mailboxOptions.map((item) => ({ value: String(item.id), label: item.mailboxName }))]}
+              />
+            </div>
             <label className="tickets-search-box">
               <Search size={14} />
               <Input
                 allowClear
-                bordered={false}
+                variant="borderless"
                 placeholder="搜索工单号、主题、客户"
                 size="small"
                 value={keyword}
@@ -230,6 +260,7 @@ export function TicketListPage({
             <div className="tickets-table">
               <div className="tickets-table-head">
                 <span>工单</span>
+                <span>企业 / 邮箱</span>
                 <span>客户</span>
                 <span>处理人</span>
                 <span>状态</span>
@@ -253,8 +284,12 @@ export function TicketListPage({
                       {ticket.linkSuspect && <Tag color="warning">疑似断链</Tag>}
                     </span>
                     <span className="ticket-muted-cell">
+                      <strong>{ticket.enterpriseName || `企业 #${ticket.enterpriseId}`}</strong>
+                      <small>{ticket.mailboxName || `邮箱 #${ticket.mailboxId}`}</small>
+                    </span>
+                    <span className="ticket-muted-cell">
                       <strong>{ticket.customerEmail}</strong>
-                      <small>{ticket.mailboxName || '客户邮件'}</small>
+                      <small>客户档案</small>
                     </span>
                     <span>
                       {ticket.assigneeName ? (

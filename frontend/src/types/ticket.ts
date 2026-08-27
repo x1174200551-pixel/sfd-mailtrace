@@ -4,11 +4,17 @@ export type TicketSummary = {
   subject: string
   status: string
   priority: string
+  enterpriseId: number
+  enterpriseName: string | null
   customerEmail: string
   assigneeId: number | null
   assigneeName: string | null
   mailboxId: number
   mailboxName: string | null
+  slaPolicyId: number | null
+  autoReplyTemplateId: number | null
+  assignmentRuleGroupId: number | null
+  assignmentRuleId: number | null
   linkSuspect: boolean
   hasReplied: boolean
   createdAt: string
@@ -68,9 +74,15 @@ export type TicketDetail = {
   subject: string
   status: string
   priority: string
+  enterpriseId: number
+  enterpriseName: string | null
   customerEmail: string
   mailboxId: number
   mailboxName: string | null
+  slaPolicyId: number | null
+  autoReplyTemplateId: number | null
+  assignmentRuleGroupId: number | null
+  assignmentRuleId: number | null
   assigneeId: number | null
   assigneeName: string | null
   linkSuspect: boolean

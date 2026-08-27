@@ -19,11 +19,18 @@ function toTemplateForm(template: NotificationTemplate): TemplateFormState {
   return {
     id: template.id,
     templateCode: template.templateCode,
+    templateType: template.templateType,
     templateName: template.templateName,
     subjectTpl: template.subjectTpl,
     contentTpl: template.contentTpl,
     enabled: template.enabled,
   }
+}
+
+function createInternalTemplateCode() {
+  const timestamp = Date.now().toString(36).toUpperCase()
+  const random = Math.random().toString(36).slice(2, 8).toUpperCase()
+  return `TPL_${timestamp}_${random}`
 }
 
 export function useNotificationTemplateManagement({
@@ -44,6 +51,7 @@ export function useNotificationTemplateManagement({
   const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false)
   const [templatePreview, setTemplatePreview] = useState<TemplatePreviewResponse | null>(null)
   const [templatePreviewLoading, setTemplatePreviewLoading] = useState(false)
+  const [templateTypeFilter, setTemplateTypeFilter] = useState('ALL')
 
   const fetchTemplates = useCallback(async () => {
     if (!token || activeMenu !== '通知模板') return
@@ -52,11 +60,13 @@ export function useNotificationTemplateManagement({
       setTemplatesError('当前账号没有通知模板管理权限')
       return
     }
-
     setTemplatesLoading(true)
     setTemplatesError('')
     try {
-      const data = await notificationTemplateApi.list({ keyword: templateKeyword.trim() || undefined })
+      const data = await notificationTemplateApi.list({
+        templateType: templateTypeFilter === 'ALL' ? undefined : templateTypeFilter,
+        keyword: templateKeyword.trim() || undefined,
+      })
       setTemplatesData(data)
       if (templateDraftMode) {
         return
@@ -79,7 +89,7 @@ export function useNotificationTemplateManagement({
     } finally {
       setTemplatesLoading(false)
     }
-  }, [activeMenu, canReadTemplates, handleAuthExpired, selectedTemplateId, templateDraftMode, templateKeyword, token])
+  }, [activeMenu, canReadTemplates, handleAuthExpired, selectedTemplateId, templateDraftMode, templateKeyword, templateTypeFilter, token])
 
   useEffect(() => {
     void fetchTemplates()
@@ -100,7 +110,8 @@ export function useNotificationTemplateManagement({
     setTemplateKeyword('')
     setTemplateForm({
       id: null,
-      templateCode: '',
+      templateCode: createInternalTemplateCode(),
+      templateType: 'AUTO_REPLY',
       templateName: '自定义通知模板',
       subjectTpl: '通知：{ticket_no}',
       contentTpl: '您好，工单 {ticket_no} 有新的通知。\n\n工单主题：{subject}',
@@ -145,6 +156,7 @@ export function useNotificationTemplateManagement({
         enabled: templateForm.enabled,
         subjectTpl: templateForm.subjectTpl,
         templateCode: templateForm.templateCode,
+        templateType: templateForm.templateType,
         templateName: templateForm.templateName,
       })
       setSelectedTemplateId(saved.id)
@@ -177,9 +189,11 @@ export function useNotificationTemplateManagement({
     templatePreview,
     templatePreviewLoading,
     templateSaving,
+    templateTypeFilter,
     templatesData,
     templatesError,
     templatesLoading,
     updateTemplateForm,
+    setTemplateTypeFilter,
   }
 }

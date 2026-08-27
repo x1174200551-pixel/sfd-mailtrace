@@ -8,11 +8,13 @@ import type {
 } from '../types/work-calendar'
 
 export type WorkCalendarQuery = {
+  enterpriseId?: number
   defaultCalendar?: string
   keyword?: string
 }
 
 export type WorkCalendarPayload = {
+  enterpriseId: number
   calendarName: string
   defaultCalendar: boolean
   timezone: string

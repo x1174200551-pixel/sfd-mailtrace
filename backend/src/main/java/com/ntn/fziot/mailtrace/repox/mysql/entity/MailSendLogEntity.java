@@ -20,7 +20,13 @@ public class MailSendLogEntity {
 
     private Long mailboxId;
 
+    private Long enterpriseId;
+
     private String sendType;
+
+    private Long templateId;
+
+    private String templateType;
 
     private String toAddress;
 

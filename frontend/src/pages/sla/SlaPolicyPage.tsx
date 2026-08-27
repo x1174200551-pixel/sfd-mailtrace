@@ -10,6 +10,7 @@ import type {
   SlaPolicyPreview,
   SlaWorkCalendar,
 } from '../../types/sla-policy'
+import type { EnterpriseOption } from '../../types/enterprise'
 
 type SelectOption = {
   value: string
@@ -23,13 +24,14 @@ type SlaPolicyPageProps = {
   canCreateSlaPolicies: boolean
   canReadSlaPolicies: boolean
   confirmAction: SlaPolicyConfirmAction
-  defaultFilter: string
   enabledFilter: string
+  enterpriseFilter: string
+  enterpriseOptions: EnterpriseOption[]
   form: SlaPolicyFormState
   keyword: string
   onCancelConfirm: () => void
-  onDefaultFilterChange: (value: string) => void
   onEnabledFilterChange: (value: string) => void
+  onEnterpriseFilterChange: (value: string) => void
   onFetchSlaPolicies: () => void
   onKeywordChange: (value: string) => void
   onOpenCreatePolicy: () => void
@@ -37,7 +39,6 @@ type SlaPolicyPageProps = {
   onResetFilters: () => void
   onSavePolicy: () => void
   onSelectPolicy: (policy: SlaPolicy) => void
-  onSetDefaultPolicy: (policy: SlaPolicy) => void
   onSubmitConfirm: () => void
   onTogglePolicy: (policy: SlaPolicy, enabled: boolean) => void
   onUpdateForm: (patch: Partial<SlaPolicyFormState>) => void
@@ -64,13 +65,14 @@ export function SlaPolicyPage({
   canCreateSlaPolicies,
   canReadSlaPolicies,
   confirmAction,
-  defaultFilter,
   enabledFilter,
+  enterpriseFilter,
+  enterpriseOptions,
   form,
   keyword,
   onCancelConfirm,
-  onDefaultFilterChange,
   onEnabledFilterChange,
+  onEnterpriseFilterChange,
   onFetchSlaPolicies,
   onKeywordChange,
   onOpenCreatePolicy,
@@ -78,7 +80,6 @@ export function SlaPolicyPage({
   onResetFilters,
   onSavePolicy,
   onSelectPolicy,
-  onSetDefaultPolicy,
   onSubmitConfirm,
   onTogglePolicy,
   onUpdateForm,
@@ -120,9 +121,9 @@ export function SlaPolicyPage({
     {
       icon: BellRing,
       tone: 'warning',
-      label: '默认策略',
-      value: summary?.defaultCount ?? '--',
-      detail: '默认策略必须保持启用',
+      label: '建单依据',
+      value: '邮箱绑定',
+      detail: '不再使用全局默认策略',
     },
     {
       icon: CalendarDays,
@@ -184,7 +185,7 @@ export function SlaPolicyPage({
               showIcon
               type={policiesError ? 'error' : 'info'}
               className="sla-inline-alert"
-              message={policiesError || '默认策略只影响后续新建工单；历史工单已有的响应截止、解决截止不自动重算。'}
+              title={policiesError || 'SLA 只通过邮箱显式绑定用于新工单；历史工单的策略快照不回写。'}
               action={policiesError ? <Button size="small" onClick={onFetchSlaPolicies}>重试</Button> : undefined}
             />
 
@@ -217,13 +218,9 @@ export function SlaPolicyPage({
                     ]}
                   />
                   <Select
-                    value={defaultFilter}
-                    onChange={onDefaultFilterChange}
-                    options={[
-                      { value: 'ALL', label: '全部策略' },
-                      { value: 'true', label: '默认策略' },
-                      { value: 'false', label: '非默认' },
-                    ]}
+                    value={enterpriseFilter}
+                    onChange={onEnterpriseFilterChange}
+                    options={enterpriseOptions.map((enterprise) => ({ value: String(enterprise.id), label: enterprise.enterpriseName }))}
                   />
                   <Button onClick={onResetFilters}>清空筛选</Button>
                 </section>
@@ -254,7 +251,6 @@ export function SlaPolicyPage({
                             <Space orientation="vertical" size={4}>
                               <Space wrap>
                                 <Typography.Text strong>{record.policyName}</Typography.Text>
-                                {record.defaultPolicy && <Tag color="blue">默认</Tag>}
                                 <Tag color={record.enabled ? 'green' : 'default'}>{record.enabled ? '启用' : '停用'}</Tag>
                               </Space>
                               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -276,17 +272,9 @@ export function SlaPolicyPage({
                         width: 190,
                         render: (_value: unknown, record: SlaPolicy) => (
                           <Space onClick={(event) => event.stopPropagation()}>
-                            <Button
-                              size="small"
-                              disabled={record.defaultPolicy || !record.enabled || actionLoading}
-                              onClick={() => void onSetDefaultPolicy(record)}
-                            >
-                              默认
-                            </Button>
                             <Switch
                               size="small"
                               checked={record.enabled}
-                              disabled={record.defaultPolicy}
                               loading={actionLoading && form.id === record.id}
                               onChange={(checked) => void onTogglePolicy(record, checked)}
                             />
@@ -313,6 +301,10 @@ export function SlaPolicyPage({
 
                 <div className="sla-form-grid">
                   <label className="sla-form-wide">
+                    <span>所属企业</span>
+                    <Select value={form.enterpriseId || undefined} options={enterpriseOptions.map((enterprise) => ({ value: String(enterprise.id), label: enterprise.enterpriseName }))} onChange={(value) => onUpdateForm({ enterpriseId: value, calendarId: '' })} />
+                  </label>
+                  <label className="sla-form-wide">
                     <span>策略名称</span>
                     <Input value={form.policyName} onChange={(event) => onUpdateForm({ policyName: event.target.value })} placeholder="VIP 客户 2 小时响应" />
                   </label>
@@ -324,17 +316,6 @@ export function SlaPolicyPage({
                       options={[
                         { value: 'true', label: '启用' },
                         { value: 'false', label: '停用' },
-                      ]}
-                    />
-                  </label>
-                  <label>
-                    <span>默认策略</span>
-                    <Select
-                      value={String(form.defaultPolicy)}
-                      onChange={(value) => onUpdateForm({ defaultPolicy: value === 'true' })}
-                      options={[
-                        { value: 'true', label: '设为默认' },
-                        { value: 'false', label: '非默认' },
                       ]}
                     />
                   </label>
@@ -395,15 +376,13 @@ export function SlaPolicyPage({
                     className="sla-form-wide"
                     type={resolveHoursInvalid || warningInvalid ? 'error' : 'info'}
                     showIcon
-                    message={resolveHoursInvalid || warningInvalid ? '策略校验未通过' : '策略校验'}
+                    title={resolveHoursInvalid || warningInvalid ? '策略校验未通过' : '策略校验'}
                     description={
                       resolveHoursInvalid
                         ? '解决时限不能小于首次响应时限。'
                         : warningInvalid
                           ? '预警阈值必须小于首次响应时限。'
-                          : form.defaultPolicy
-                            ? '默认策略必须保持启用，保存后其他策略会取消默认标记。'
-                            : '保存后配置立即生效，仅影响后续新建工单。'
+                          : '保存后可供同企业邮箱显式绑定，仅影响后续新建工单。'
                     }
                   />
                 </div>

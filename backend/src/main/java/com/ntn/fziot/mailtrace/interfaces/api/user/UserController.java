@@ -5,6 +5,8 @@ import com.ntn.fziot.mailtrace.infrastructure.basic.BasicResult;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.infrastructure.security.RequirePermission;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserCreateRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.user.UserDataGrantDetailVO;
+import com.ntn.fziot.mailtrace.interfaces.vo.user.UserDataGrantSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserResetPasswordRequest;
@@ -24,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Tag(name = "用户管理", description = "用户列表、新建、编辑、启停和重置密码")
 @RestController
@@ -46,6 +50,17 @@ public class UserController {
         return BasicResult.ok(userService.pageUsers(principal, keyword, roleCode, enabled, page, size));
     }
 
+    @Operation(summary = "可分配处理人选项")
+    @GetMapping("/options")
+    public BasicResult<List<UserVO>> listAssignableUsers(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
+            @RequestParam(required = false) Long mailboxId,
+            @RequestParam(required = false) Long assignmentRuleGroupId) {
+        return BasicResult.ok(userService.listAssignableUsers(
+                principal, enterpriseId, mailboxId, assignmentRuleGroupId));
+    }
+
     @Operation(summary = "新建用户")
     @PostMapping
     @RequirePermission(value = "user:create", message = "无权新建用户")
@@ -63,6 +78,25 @@ public class UserController {
             @PathVariable Long id,
             @Valid @RequestBody UserUpdateRequest request) {
         return BasicResult.ok(userService.updateUser(principal, id, request));
+    }
+
+    @Operation(summary = "查询用户企业和邮箱数据授权")
+    @GetMapping("/{id}/data-grants")
+    @RequirePermission(value = "user:read", message = "无权查看用户数据授权")
+    public BasicResult<UserDataGrantDetailVO> getDataGrants(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id) {
+        return BasicResult.ok(userService.getDataGrants(principal, id));
+    }
+
+    @Operation(summary = "保存用户企业和邮箱数据授权")
+    @PutMapping("/{id}/data-grants")
+    @RequirePermission(value = "user:update", message = "无权编辑用户数据授权")
+    public BasicResult<UserDataGrantDetailVO> saveDataGrants(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id,
+            @Valid @RequestBody UserDataGrantSaveRequest request) {
+        return BasicResult.ok(userService.saveDataGrants(principal, id, request));
     }
 
     @Operation(summary = "启用或停用用户")

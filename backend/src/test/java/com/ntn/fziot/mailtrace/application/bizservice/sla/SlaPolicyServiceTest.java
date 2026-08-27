@@ -9,8 +9,11 @@ import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyDefaultRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicySaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyVO;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.SlaPolicyEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.WorkCalendarEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.WorkCalendarMapper;
@@ -42,6 +45,10 @@ class SlaPolicyServiceTest {
     @Mock
     private SlaPolicyMapper slaPolicyMapper;
     @Mock
+    private EnterpriseMapper enterpriseMapper;
+    @Mock
+    private MailboxMapper mailboxMapper;
+    @Mock
     private WorkCalendarMapper workCalendarMapper;
     @Mock
     private OperationLogMapper operationLogMapper;
@@ -67,6 +74,8 @@ class SlaPolicyServiceTest {
         allowAdminAndAgentOperationalPermissions();
         lenient().when(slaPolicyMapper.selectCount(any())).thenReturn(0L);
         lenient().when(workCalendarMapper.selectById(1L)).thenReturn(workCalendar(1L));
+        lenient().when(enterpriseMapper.selectById(1L)).thenReturn(enterprise(1L, true));
+        lenient().when(mailboxMapper.selectCount(any())).thenReturn(0L);
     }
 
     private void allowAdminAndAgentOperationalPermissions() {
@@ -157,6 +166,19 @@ class SlaPolicyServiceTest {
     }
 
     @Test
+    void createPolicy_whenCalendarBelongsToAnotherEnterprise_shouldReject() {
+        WorkCalendarEntity otherEnterpriseCalendar = workCalendar(2L);
+        otherEnterpriseCalendar.setEnterpriseId(2L);
+        when(workCalendarMapper.selectById(2L)).thenReturn(otherEnterpriseCalendar);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> slaPolicyService.createPolicy(admin,
+                        saveRequest("跨企业 SLA", true, false, 4, 24, 1, null, 2L)));
+
+        assertTrue(ex.getMessage().contains("工作日历与 SLA 策略不属于同一企业"));
+    }
+
+    @Test
     void updateEnabled_whenDefaultPolicyDisabled_shouldReject() {
         when(slaPolicyMapper.selectById(100L)).thenReturn(policy(100L, "默认 SLA", true, true,
                 4, 24, 1, null, 1L));
@@ -208,9 +230,21 @@ class SlaPolicyServiceTest {
     }
 
     @Test
+    void deletePolicy_whenMailboxReferenced_shouldReject() {
+        when(slaPolicyMapper.selectById(100L)).thenReturn(policy(100L, "邮箱 SLA", true, false,
+                4, 24, 1, null, 1L));
+        when(mailboxMapper.selectCount(any())).thenReturn(1L);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> slaPolicyService.deletePolicy(admin, 100L));
+
+        assertTrue(ex.getMessage().contains("已被邮箱引用"));
+    }
+
+    @Test
     void listPolicies_whenNotAdmin_shouldReject() {
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> slaPolicyService.listPolicies(agent, null, null, null));
+                () -> slaPolicyService.listPolicies(agent, null, null, null, null));
 
         assertTrue(ex.getMessage().contains("无权查看 SLA 策略"));
     }
@@ -220,6 +254,7 @@ class SlaPolicyServiceTest {
                                              Integer warningRemainHours, Integer escalateAfterBreachHours,
                                              Long calendarId) {
         SlaPolicySaveRequest request = new SlaPolicySaveRequest();
+        request.setEnterpriseId(1L);
         request.setPolicyName(policyName);
         request.setEnabled(enabled);
         request.setDefaultPolicy(defaultPolicy);
@@ -237,6 +272,7 @@ class SlaPolicyServiceTest {
                                    Long calendarId) {
         SlaPolicyEntity policy = new SlaPolicyEntity();
         policy.setId(id);
+        policy.setEnterpriseId(1L);
         policy.setPolicyName(policyName);
         policy.setEnabled(enabled);
         policy.setDefaultPolicy(defaultPolicy);
@@ -253,10 +289,18 @@ class SlaPolicyServiceTest {
     private WorkCalendarEntity workCalendar(Long id) {
         WorkCalendarEntity calendar = new WorkCalendarEntity();
         calendar.setId(id);
+        calendar.setEnterpriseId(1L);
         calendar.setCalendarName("标准工作日历");
         calendar.setTimezone("Asia/Shanghai");
         calendar.setWorkdays("1,2,3,4,5");
         return calendar;
+    }
+
+    private EnterpriseEntity enterprise(Long id, boolean enabled) {
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(id);
+        enterprise.setEnabled(enabled);
+        return enterprise;
     }
 
     private static void initTableInfo(MybatisConfiguration configuration, String namespace, Class<?> entityClass) {

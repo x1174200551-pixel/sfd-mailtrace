@@ -8,11 +8,9 @@ import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleDataScopeRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RolePermissionSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleSaveRequest;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.PermissionEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleDataScopeEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RolePermissionEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.PermissionMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleDataScopeMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RolePermissionMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
@@ -31,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.times;
@@ -44,8 +43,6 @@ class RoleManagementServiceTest {
     private PermissionMapper permissionMapper;
     @Mock
     private RolePermissionMapper rolePermissionMapper;
-    @Mock
-    private RoleDataScopeMapper roleDataScopeMapper;
     @Mock
     private UserRoleMapper userRoleMapper;
     @Mock
@@ -64,11 +61,11 @@ class RoleManagementServiceTest {
                 roleMapper,
                 permissionMapper,
                 rolePermissionMapper,
-                roleDataScopeMapper,
                 userRoleMapper,
                 operationLogService,
                 permissionService
         );
+        lenient().when(permissionService.hasRole(admin, "ADMIN")).thenReturn(true);
     }
 
     @Test
@@ -81,6 +78,11 @@ class RoleManagementServiceTest {
 
         when(roleMapper.selectCount(any())).thenReturn(0L);
         when(roleMapper.selectOne(any())).thenReturn(role(20L, "AGENT", "客服处理人", true, true, 20));
+        when(permissionMapper.selectList(any())).thenReturn(List.of(
+                permission(100L, "menu:workspace", 10),
+                permission(101L, "menu:dashboard", 11),
+                permission(102L, "dashboard:read", 1010)
+        ));
         doAnswer(invocation -> {
             RoleEntity role = invocation.getArgument(0);
             role.setId(30L);
@@ -88,7 +90,6 @@ class RoleManagementServiceTest {
         }).when(roleMapper).insert(any(RoleEntity.class));
         when(roleMapper.selectById(30L)).thenReturn(role(30L, "QUALITY_CHECKER", "工单质检", false, true, 30));
         when(rolePermissionMapper.selectList(any())).thenReturn(List.of());
-        when(roleDataScopeMapper.selectList(any())).thenReturn(List.of());
         when(userRoleMapper.selectCount(any())).thenReturn(0L);
 
         roleManagementService.createRole(admin, request);
@@ -100,6 +101,7 @@ class RoleManagementServiceTest {
         assertEquals("工单质检", inserted.getRoleName());
         assertFalse(inserted.getSystemRole());
         assertEquals(30, inserted.getSortOrder());
+        verify(rolePermissionMapper, times(3)).insert(any(RolePermissionEntity.class));
         verify(operationLogService).record(any(), eq("ROLE"), any(), any(), any());
     }
 
@@ -117,7 +119,7 @@ class RoleManagementServiceTest {
     }
 
     @Test
-    void saveRolePermissions_shouldReplacePermissionAndDataScopeRelations() {
+    void saveRolePermissions_shouldReplacePermissionsAndIgnoreLegacyDataScopes() {
         RolePermissionSaveRequest request = new RolePermissionSaveRequest();
         request.setPermissionCodes(List.of("menu:tickets", "ticket:read"));
         RoleDataScopeRequest ticketScope = new RoleDataScopeRequest();
@@ -132,23 +134,17 @@ class RoleManagementServiceTest {
                 permission(102L, "ticket:read", 2010)
         ));
         when(rolePermissionMapper.selectList(any())).thenReturn(List.of());
-        when(roleDataScopeMapper.selectList(any())).thenReturn(List.of());
         when(userRoleMapper.selectCount(any())).thenReturn(0L);
 
         roleManagementService.saveRolePermissions(admin, 30L, request);
 
         verify(rolePermissionMapper).physicalDeleteByRoleId(30L);
-        verify(roleDataScopeMapper).physicalDeleteByRoleId(30L);
         verify(rolePermissionMapper, times(2)).insert(any(RolePermissionEntity.class));
-        ArgumentCaptor<RoleDataScopeEntity> dataScopeCaptor = ArgumentCaptor.forClass(RoleDataScopeEntity.class);
-        verify(roleDataScopeMapper).insert(dataScopeCaptor.capture());
-        assertEquals("TICKET", dataScopeCaptor.getValue().getResourceType());
-        assertEquals("SELF", dataScopeCaptor.getValue().getScopeCode());
         verify(operationLogService).record(any(), eq("ROLE"), any(), any(), any());
     }
 
     @Test
-    void saveRolePermissions_whenDeptAndChildrenScope_shouldAllow() {
+    void saveRolePermissions_whenLegacyDeptScopeProvided_shouldIgnoreAndAllow() {
         RolePermissionSaveRequest request = new RolePermissionSaveRequest();
         request.setPermissionCodes(List.of("menu:tickets", "ticket:read"));
         RoleDataScopeRequest ticketScope = new RoleDataScopeRequest();
@@ -163,19 +159,15 @@ class RoleManagementServiceTest {
                 permission(102L, "ticket:read", 2010)
         ));
         when(rolePermissionMapper.selectList(any())).thenReturn(List.of());
-        when(roleDataScopeMapper.selectList(any())).thenReturn(List.of());
         when(userRoleMapper.selectCount(any())).thenReturn(0L);
 
         roleManagementService.saveRolePermissions(admin, 30L, request);
 
-        ArgumentCaptor<RoleDataScopeEntity> dataScopeCaptor = ArgumentCaptor.forClass(RoleDataScopeEntity.class);
-        verify(roleDataScopeMapper).insert(dataScopeCaptor.capture());
-        assertEquals("TICKET", dataScopeCaptor.getValue().getResourceType());
-        assertEquals("DEPT_AND_CHILDREN", dataScopeCaptor.getValue().getScopeCode());
+        verify(rolePermissionMapper, times(2)).insert(any(RolePermissionEntity.class));
     }
 
     @Test
-    void saveRolePermissions_whenUnsupportedResourceType_shouldReject() {
+    void saveRolePermissions_whenUnsupportedLegacyResourceProvided_shouldIgnoreAndAllow() {
         RolePermissionSaveRequest request = new RolePermissionSaveRequest();
         request.setPermissionCodes(List.of("ticket:read"));
         RoleDataScopeRequest mailboxScope = new RoleDataScopeRequest();
@@ -186,10 +178,36 @@ class RoleManagementServiceTest {
         when(roleMapper.selectById(30L)).thenReturn(role(30L, "QUALITY_CHECKER", "工单质检", false, true, 30));
         when(permissionMapper.selectList(any())).thenReturn(List.of(permission(102L, "ticket:read", 2010)));
 
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> roleManagementService.saveRolePermissions(admin, 30L, request));
+        when(rolePermissionMapper.selectList(any())).thenReturn(List.of());
+        when(userRoleMapper.selectCount(any())).thenReturn(0L);
 
-        assertEquals(40001, ex.getCode());
+        roleManagementService.saveRolePermissions(admin, 30L, request);
+
+        verify(rolePermissionMapper).physicalDeleteByRoleId(30L);
+        verify(rolePermissionMapper).insert(any(RolePermissionEntity.class));
+    }
+
+    @Test
+    void saveRolePermissions_shouldAutomaticallyIncludeMenuAncestors() {
+        RolePermissionSaveRequest request = new RolePermissionSaveRequest();
+        request.setPermissionCodes(List.of("ticket:read"));
+        PermissionEntity root = permission(100L, "menu:workspace", 10);
+        PermissionEntity menu = permission(101L, "menu:tickets", 12);
+        menu.setParentId(100L);
+        PermissionEntity action = permission(102L, "ticket:read", 2010);
+        action.setParentId(101L);
+
+        when(roleMapper.selectById(30L)).thenReturn(role(30L, "QUALITY_CHECKER", "工单质检", false, true, 30));
+        when(permissionMapper.selectList(any())).thenReturn(List.of(root, menu, action));
+        when(rolePermissionMapper.selectList(any())).thenReturn(List.of());
+        when(userRoleMapper.selectCount(any())).thenReturn(0L);
+
+        roleManagementService.saveRolePermissions(admin, 30L, request);
+
+        ArgumentCaptor<RolePermissionEntity> captor = ArgumentCaptor.forClass(RolePermissionEntity.class);
+        verify(rolePermissionMapper, times(3)).insert(captor.capture());
+        assertEquals(List.of(100L, 101L, 102L),
+                captor.getAllValues().stream().map(RolePermissionEntity::getPermissionId).toList());
     }
 
     private RoleEntity role(Long id, String roleCode, String roleName, Boolean systemRole, Boolean enabled, Integer sortOrder) {

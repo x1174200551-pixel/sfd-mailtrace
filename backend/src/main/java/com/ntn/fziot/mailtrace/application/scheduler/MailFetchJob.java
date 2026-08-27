@@ -22,7 +22,10 @@ public class MailFetchJob {
     /**
      * 固定延迟 60 秒执行一轮到期邮箱拉取。
      */
-    @Scheduled(fixedDelayString = "${mailtrace.mail.fetch-fixed-delay-ms:60000}")
+    @Scheduled(
+            fixedDelayString = "${mailtrace.mail.fetch-fixed-delay-ms:60000}",
+            initialDelayString = "${mailtrace.mail.fetch-initial-delay-ms:0}"
+    )
     public void fetchDueMailboxes() {
         // 1、查询到期邮箱，经代理逐个拉取，保证事务生效
         List<Long> dueMailboxIds = mailFetchBizService.listDueMailboxIds();

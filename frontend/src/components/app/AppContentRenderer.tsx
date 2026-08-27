@@ -13,6 +13,11 @@ type AppContentModelKey =
   | 'assignUserId'
   | 'assignUsers'
   | 'assignmentActionLoading'
+  | 'assignmentEnterpriseOptions'
+  | 'assignmentGroupForm'
+  | 'assignmentGroupSaving'
+  | 'assignmentGroupsData'
+  | 'assignmentGroupsLoading'
   | 'assignmentAssigneeOptions'
   | 'assignmentAssignees'
   | 'assignmentConfirmAction'
@@ -39,6 +44,7 @@ type AppContentModelKey =
   | 'canClaimCurrentTicket'
   | 'canCreateAssignmentRules'
   | 'canCreateDepartments'
+  | 'canCreateEnterprises'
   | 'canCreateHolidays'
   | 'canCreateMailboxes'
   | 'canCreateRoles'
@@ -49,6 +55,7 @@ type AppContentModelKey =
   | 'canDeleteMailboxes'
   | 'canDeleteWorkCalendars'
   | 'canEnableDepartments'
+  | 'canEnableEnterprises'
   | 'canEnableMailboxes'
   | 'canEnableRoles'
   | 'canEnableUsers'
@@ -58,6 +65,7 @@ type AppContentModelKey =
   | 'canReadAssignmentRules'
   | 'canReadCustomers'
   | 'canReadDepartments'
+  | 'canReadEnterprises'
   | 'canReadMailboxes'
   | 'canReadRoles'
   | 'canReadSlaPolicies'
@@ -68,6 +76,7 @@ type AppContentModelKey =
   | 'canResetUserPassword'
   | 'canTestMailboxes'
   | 'canUpdateDepartments'
+  | 'canUpdateEnterprises'
   | 'canUpdateHolidays'
   | 'canUpdateMailboxes'
   | 'canUpdateRolePermissions'
@@ -75,20 +84,28 @@ type AppContentModelKey =
   | 'canUpdateTicketNumberRule'
   | 'canUpdateUsers'
   | 'changeCustomerKeyword'
+  | 'changeCustomerEnterpriseFilter'
+  | 'changeCustomerMailboxFilter'
   | 'changeCustomerPage'
+  | 'changeDashboardEnterpriseFilter'
+  | 'changeFetchLogEnterpriseFilter'
   | 'changeFetchLogMailboxFilter'
   | 'changeFetchLogPage'
   | 'changeFetchLogSuccessFilter'
   | 'changeFetchLogTimeRange'
   | 'changeMailboxKeyword'
+  | 'changeMailboxEnterpriseFilter'
   | 'changeMailboxPageSize'
   | 'changeMailboxStatusFilter'
   | 'changeSendLogMailboxFilter'
+  | 'changeSendLogEnterpriseFilter'
   | 'changeSendLogPage'
   | 'changeSendLogStatusFilter'
   | 'changeSendLogTimeRange'
   | 'changeSendLogTypeFilter'
   | 'changeTicketKeyword'
+  | 'changeTicketEnterpriseFilter'
+  | 'changeTicketMailboxFilter'
   | 'changeTicketStatus'
   | 'changeUserEnabledFilter'
   | 'changeUserKeyword'
@@ -111,7 +128,11 @@ type AppContentModelKey =
   | 'customerDetail'
   | 'customerDetailError'
   | 'customerDetailLoading'
+  | 'customerEnterpriseFilter'
+  | 'customerEnterpriseOptions'
   | 'customerKeyword'
+  | 'customerMailboxFilter'
+  | 'customerMailboxOptions'
   | 'customerPage'
   | 'customerPageSize'
   | 'customerTicketsData'
@@ -121,22 +142,43 @@ type AppContentModelKey =
   | 'customersError'
   | 'customersLoading'
   | 'dashboardError'
+  | 'dashboardEnterpriseFilter'
+  | 'dashboardEnterpriseOptions'
   | 'dashboardLoading'
+  | 'dashboardMailboxFilter'
+  | 'dashboardMailboxOptions'
   | 'dashboardReport'
   | 'dashboardSummary'
   | 'dashboardTodos'
   | 'dashboardUpdatedAt'
   | 'departmentOptions'
   | 'departmentsError'
+  | 'enterpriseActionLoading'
+  | 'enterpriseConfirmAction'
+  | 'enterpriseEnabledFilter'
+  | 'enterpriseForm'
+  | 'enterpriseFormOpen'
+  | 'enterpriseKeyword'
+  | 'enterprisePage'
+  | 'enterprisePageSize'
+  | 'enterpriseSaving'
+  | 'enterprisesData'
+  | 'enterprisesError'
+  | 'enterprisesLoading'
   | 'fetchAgentUsers'
   | 'fetchAssignmentRules'
+  | 'fetchAssignmentGroups'
   | 'fetchCustomerDetail'
   | 'fetchCustomerTickets'
   | 'fetchCustomers'
   | 'fetchDashboard'
+  | 'fetchEnterprises'
   | 'fetchHolidays'
   | 'fetchLogDetail'
+  | 'fetchLogEnterpriseFilter'
+  | 'fetchLogEnterpriseOptions'
   | 'fetchLogMailboxFilter'
+  | 'fetchLogMailboxOptions'
   | 'fetchLogPage'
   | 'fetchLogPageSize'
   | 'fetchLogStartFrom'
@@ -188,6 +230,11 @@ type AppContentModelKey =
   | 'mailboxAssignees'
   | 'mailboxConfirmAction'
   | 'mailboxDirty'
+  | 'mailboxEnterpriseFilter'
+  | 'enterpriseOptions'
+  | 'mailboxRuleGroupOptions'
+  | 'mailboxSlaOptions'
+  | 'mailboxTemplateOptions'
   | 'mailboxForm'
   | 'mailboxKeyword'
   | 'mailboxPage'
@@ -207,6 +254,8 @@ type AppContentModelKey =
   | 'msgSortAsc'
   | 'navigateToTickets'
   | 'openCreateAssignmentRule'
+  | 'openCreateAssignmentGroup'
+  | 'openCreateEnterprise'
   | 'openCreateHoliday'
   | 'openCreateMailbox'
   | 'openCreateRole'
@@ -215,6 +264,7 @@ type AppContentModelKey =
   | 'openCreateUser'
   | 'openCreateWorkCalendar'
   | 'openEditUser'
+  | 'openEditEnterprise'
   | 'openEnabledConfirm'
   | 'openMailboxConfirm'
   | 'openResetConfirm'
@@ -257,6 +307,8 @@ type AppContentModelKey =
   | 'rolesLoading'
   | 'runAssignmentRuleTest'
   | 'saveAssignmentRule'
+  | 'saveAssignmentGroup'
+  | 'saveEnterprise'
   | 'saveHoliday'
   | 'saveMailbox'
   | 'saveSlaPolicy'
@@ -267,6 +319,9 @@ type AppContentModelKey =
   | 'searchCustomers'
   | 'searchTickets'
   | 'selectAssignmentRule'
+  | 'selectAssignmentGroup'
+  | 'selectedAssignmentEnterpriseId'
+  | 'selectedAssignmentGroupId'
   | 'selectHoliday'
   | 'selectMailbox'
   | 'selectRole'
@@ -283,7 +338,10 @@ type AppContentModelKey =
   | 'selectedTemplateId'
   | 'selectedWorkCalendar'
   | 'sendLogDetail'
+  | 'sendLogEnterpriseFilter'
+  | 'sendLogEnterpriseOptions'
   | 'sendLogMailboxFilter'
+  | 'sendLogMailboxOptions'
   | 'sendLogPage'
   | 'sendLogPageSize'
   | 'sendLogStartFrom'
@@ -306,14 +364,23 @@ type AppContentModelKey =
   | 'setAssignmentKeyword'
   | 'setAssignmentMatchTypeFilter'
   | 'setAssignmentTestForm'
+  | 'setAssignmentGroupForm'
+  | 'setSelectedAssignmentEnterpriseId'
   | 'setCalendarPreviewCreatedAt'
   | 'setCalendarPreviewResolveHours'
   | 'setCalendarPreviewResponseHours'
   | 'setCloseConfirmed'
   | 'setCloseModalOpen'
   | 'setCloseReason'
+  | 'setDashboardMailboxFilter'
   | 'setDefaultSlaPolicy'
   | 'setDefaultWorkCalendar'
+  | 'setEnterpriseConfirmAction'
+  | 'setEnterpriseEnabledFilter'
+  | 'setEnterpriseFormOpen'
+  | 'setEnterpriseKeyword'
+  | 'setEnterprisePage'
+  | 'setEnterprisePageSize'
   | 'setFetchLogDetail'
   | 'setHolidayKeyword'
   | 'setHolidayMonth'
@@ -359,6 +426,8 @@ type AppContentModelKey =
   | 'slaPolicyForm'
   | 'slaPolicyKeyword'
   | 'slaPolicySaving'
+  | 'slaEnterpriseFilter'
+  | 'slaEnterpriseOptions'
   | 'slaPreview'
   | 'slaPreviewBaseTime'
   | 'slaResolveHoursInvalid'
@@ -368,6 +437,7 @@ type AppContentModelKey =
   | 'statusSending'
   | 'statusValue'
   | 'submitAssignmentConfirm'
+  | 'submitEnterpriseConfirm'
   | 'submitConfirmAction'
   | 'submitMailboxConfirm'
   | 'submitRoleBase'
@@ -383,6 +453,7 @@ type AppContentModelKey =
   | 'templatePreview'
   | 'templatePreviewLoading'
   | 'templateSaving'
+  | 'templateTypeFilter'
   | 'templatesData'
   | 'templatesError'
   | 'templatesLoading'
@@ -390,7 +461,11 @@ type AppContentModelKey =
   | 'ticketAttachments'
   | 'ticketDetail'
   | 'ticketDetailTab'
+  | 'ticketEnterpriseFilter'
+  | 'ticketEnterpriseOptions'
   | 'ticketKeyword'
+  | 'ticketMailboxFilter'
+  | 'ticketMailboxOptions'
   | 'ticketPage'
   | 'ticketPageSize'
   | 'ticketRule'
@@ -409,16 +484,21 @@ type AppContentModelKey =
   | 'ticketsError'
   | 'ticketsLoading'
   | 'toggleAssignmentRule'
+  | 'toggleAssignmentGroup'
+  | 'toggleUserGrantEnterprise'
+  | 'toggleUserGrantMailbox'
   | 'toggleRoleEnabled'
   | 'toggleRolePermission'
   | 'toggleSlaPolicy'
   | 'updateAssignmentForm'
+  | 'updateEnterpriseForm'
   | 'updateHolidayForm'
   | 'updateMailboxForm'
   | 'updateRoleForm'
-  | 'updateRoleScope'
   | 'updateSlaPolicyForm'
+  | 'setSlaEnterpriseFilter'
   | 'updateTemplateForm'
+  | 'setTemplateTypeFilter'
   | 'updateTicketRuleForm'
   | 'updateUserForm'
   | 'updateWorkCalendarForm'
@@ -437,10 +517,16 @@ type AppContentModelKey =
   | 'usersData'
   | 'usersError'
   | 'usersLoading'
+  | 'userGrantEnterpriseOptions'
+  | 'userGrantForm'
+  | 'userGrantLoading'
+  | 'userGrantMailboxOptions'
   | 'workCalendarActionLoading'
   | 'workCalendarConfirmAction'
   | 'workCalendarData'
   | 'workCalendarDefaultFilter'
+  | 'workCalendarEnterpriseFilter'
+  | 'workCalendarEnterpriseOptions'
   | 'workCalendarDirty'
   | 'workCalendarError'
   | 'workCalendarForm'
@@ -448,6 +534,7 @@ type AppContentModelKey =
   | 'workCalendarPageLoading'
   | 'workCalendarSaving'
   | 'workCalendarTimeInvalid'
+  | 'setWorkCalendarEnterpriseFilter'
   | 'workCalendars'
   | 'workCalendarsLoading'
   | 'workdayLabel'
@@ -464,6 +551,10 @@ const RoleManagePage = lazy(() => import('../../pages/system/RoleManagePage').th
 
 const UserManagePage = lazy(() => import('../../pages/system/UserManagePage').then((module) => ({
   default: module.UserManagePage,
+})))
+
+const EnterpriseManagePage = lazy(() => import('../../pages/system/EnterpriseManagePage').then((module) => ({
+  default: module.EnterpriseManagePage,
 })))
 
 const MailboxManagePage = lazy(() => import('../../pages/system/MailboxManagePage').then((module) => ({
@@ -556,14 +647,24 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
           <DashboardPage
             canOpenTicketList={m.canOpenTicketList}
             dashboardError={m.dashboardError}
+            dashboardEnterpriseFilter={m.dashboardEnterpriseFilter}
+            dashboardEnterpriseOptions={m.dashboardEnterpriseOptions}
             dashboardLoading={m.dashboardLoading}
+            dashboardMailboxFilter={m.dashboardMailboxFilter}
+            dashboardMailboxOptions={m.dashboardMailboxOptions}
             dashboardReport={m.dashboardReport}
             dashboardSummary={m.dashboardSummary}
             dashboardTodos={m.dashboardTodos}
             dashboardUpdatedAt={m.dashboardUpdatedAt}
             hasPermission={m.hasPermission}
             onFetchDashboard={() => void m.fetchDashboard()}
-            onNavigateToTickets={m.navigateToTickets}
+            onEnterpriseFilterChange={m.changeDashboardEnterpriseFilter}
+            onMailboxFilterChange={m.setDashboardMailboxFilter}
+            onNavigateToTickets={(status, slaBreachedOnly, enterpriseId, mailboxId) => {
+              if (enterpriseId) m.changeTicketEnterpriseFilter(enterpriseId)
+              if (mailboxId) m.changeTicketMailboxFilter(mailboxId)
+              m.navigateToTickets(status, slaBreachedOnly)
+            }}
             onOpenTicketDetail={(ticketId) => void m.handleOpenDetail(ticketId)}
             onSetActiveMenu={m.setActiveMenu}
           />
@@ -631,11 +732,15 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
         ) : (
           <Suspense fallback={<PageLoadingState label="全部工单" />}>
             <TicketListPage
+              enterpriseFilter={m.ticketEnterpriseFilter}
+              enterpriseOptions={m.ticketEnterpriseOptions}
               isAdmin={m.isAdmin}
               keyword={m.ticketKeyword}
               loading={m.ticketsLoading}
               onClearFilters={m.resetTicketFilters}
+              onEnterpriseFilterChange={m.changeTicketEnterpriseFilter}
               onKeywordChange={m.changeTicketKeyword}
+              onMailboxFilterChange={m.changeTicketMailboxFilter}
               onOpenDetail={(id) => void m.handleOpenDetail(id)}
               onPageChange={(page) => m.setTicketPage(page)}
               onRefresh={m.refreshTickets}
@@ -644,6 +749,8 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
               onStatusChange={m.changeTicketStatus}
               page={m.ticketPage}
               pageSize={m.ticketPageSize}
+              mailboxFilter={m.ticketMailboxFilter}
+              mailboxOptions={m.ticketMailboxOptions}
               slaBreachedOnly={m.ticketSlaBreachedOnly}
               stats={m.ticketStats}
               statusTab={m.ticketStatusTab}
@@ -659,7 +766,11 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             customerDetail={m.customerDetail}
             customerDetailError={m.customerDetailError}
             customerDetailLoading={m.customerDetailLoading}
+            customerEnterpriseFilter={m.customerEnterpriseFilter}
+            customerEnterpriseOptions={m.customerEnterpriseOptions}
             customerKeyword={m.customerKeyword}
+            customerMailboxFilter={m.customerMailboxFilter}
+            customerMailboxOptions={m.customerMailboxOptions}
             customerPage={m.customerPage}
             customerPageSize={m.customerPageSize}
             customerTicketsData={m.customerTicketsData}
@@ -671,7 +782,9 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             onFetchCustomerDetail={m.fetchCustomerDetail}
             onFetchCustomerTickets={m.fetchCustomerTickets}
             onFetchCustomers={m.fetchCustomers}
+            onEnterpriseFilterChange={m.changeCustomerEnterpriseFilter}
             onKeywordChange={m.changeCustomerKeyword}
+            onMailboxFilterChange={m.changeCustomerMailboxFilter}
             onOpenTicket={(ticket, customerEmail) => m.openTicketFromCustomer(ticket.id, customerEmail)}
             onPageChange={m.changeCustomerPage}
             onSearchCustomers={m.searchCustomers}
@@ -688,6 +801,11 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             assignmentEnabledFilter={m.assignmentEnabledFilter}
             canCreateAssignmentRules={m.canCreateAssignmentRules}
             canReadAssignmentRules={m.canReadAssignmentRules}
+            enterpriseOptions={m.assignmentEnterpriseOptions}
+            groupForm={m.assignmentGroupForm}
+            groupSaving={m.assignmentGroupSaving}
+            groupsData={m.assignmentGroupsData}
+            groupsLoading={m.assignmentGroupsLoading}
             confirmAction={m.assignmentConfirmAction}
             form={m.assignmentForm}
             keyword={m.assignmentKeyword}
@@ -697,26 +815,35 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             onCancelConfirm={() => m.setAssignmentConfirmAction(null)}
             onEnabledFilterChange={m.setAssignmentEnabledFilter}
             onFetchAssignmentRules={m.fetchAssignmentRules}
+            onFetchAssignmentGroups={m.fetchAssignmentGroups}
             onKeywordChange={m.setAssignmentKeyword}
             onMatchTypeFilterChange={m.setAssignmentMatchTypeFilter}
             onMoveRule={m.moveAssignmentRule}
             onOpenCreateRule={m.openCreateAssignmentRule}
+            onOpenCreateGroup={m.openCreateAssignmentGroup}
             onRequestDelete={(rule) => m.setAssignmentConfirmAction({ type: 'delete', rule })}
             onResetFilters={m.resetAssignmentFilters}
             onRunTest={m.runAssignmentRuleTest}
             onSaveRule={m.saveAssignmentRule}
+            onSaveGroup={m.saveAssignmentGroup}
+            onSelectGroup={m.selectAssignmentGroup}
             onSelectRule={m.selectAssignmentRule}
             onSubmitConfirm={m.submitAssignmentConfirm}
             onTestFormChange={(patch: Partial<AssignmentRuleTestForm>) => {
               m.setAssignmentTestForm((form: AssignmentRuleTestForm) => ({ ...form, ...patch }))
             }}
             onToggleRule={m.toggleAssignmentRule}
+            onToggleGroup={m.toggleAssignmentGroup}
+            onGroupFormChange={m.setAssignmentGroupForm}
+            onEnterpriseChange={m.setSelectedAssignmentEnterpriseId}
             onUpdateForm={m.updateAssignmentForm}
             ruleDirty={m.assignmentRuleDirty}
             rulesData={m.assignmentRulesData}
             rulesError={m.assignmentRulesError}
             rulesLoading={m.assignmentRulesLoading}
             saving={m.assignmentSaving}
+            selectedEnterpriseId={m.selectedAssignmentEnterpriseId}
+            selectedGroupId={m.selectedAssignmentGroupId}
             selectedRule={m.selectedAssignmentRule}
             testForm={m.assignmentTestForm}
             testing={m.assignmentTesting}
@@ -731,13 +858,14 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             canCreateSlaPolicies={m.canCreateSlaPolicies}
             canReadSlaPolicies={m.canReadSlaPolicies}
             confirmAction={m.slaPolicyConfirmAction}
-            defaultFilter={m.slaPolicyDefaultFilter}
             enabledFilter={m.slaPolicyEnabledFilter}
+            enterpriseFilter={m.slaEnterpriseFilter}
+            enterpriseOptions={m.slaEnterpriseOptions}
             form={m.slaPolicyForm}
             keyword={m.slaPolicyKeyword}
             onCancelConfirm={() => m.setSlaPolicyConfirmAction(null)}
-            onDefaultFilterChange={m.setSlaPolicyDefaultFilter}
             onEnabledFilterChange={m.setSlaPolicyEnabledFilter}
+            onEnterpriseFilterChange={m.setSlaEnterpriseFilter}
             onFetchSlaPolicies={m.fetchSlaPolicies}
             onKeywordChange={m.setSlaPolicyKeyword}
             onOpenCreatePolicy={m.openCreateSlaPolicy}
@@ -745,7 +873,6 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             onResetFilters={m.resetSlaPolicyFilters}
             onSavePolicy={m.saveSlaPolicy}
             onSelectPolicy={m.selectSlaPolicy}
-            onSetDefaultPolicy={m.setDefaultSlaPolicy}
             onSubmitConfirm={m.submitSlaPolicyConfirm}
             onTogglePolicy={m.toggleSlaPolicy}
             onUpdateForm={m.updateSlaPolicyForm}
@@ -827,6 +954,8 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             timeInvalid={m.workCalendarTimeInvalid}
             workCalendarData={m.workCalendarData}
             workCalendarDefaultFilter={m.workCalendarDefaultFilter}
+            workCalendarEnterpriseFilter={m.workCalendarEnterpriseFilter}
+            workCalendarEnterpriseOptions={m.workCalendarEnterpriseOptions}
             workCalendarDirty={m.workCalendarDirty}
             workCalendarError={m.workCalendarError}
             workCalendarForm={m.workCalendarForm}
@@ -834,6 +963,7 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             workCalendarSaving={m.workCalendarSaving}
             workCalendarsLoading={m.workCalendarPageLoading}
             workdayLabel={m.workdayLabel}
+            onWorkCalendarEnterpriseFilterChange={m.setWorkCalendarEnterpriseFilter}
           />
         </Suspense>
       ) : activeMenu === '角色管理' ? (
@@ -855,7 +985,6 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             onSubmitRolePermissions={m.submitRolePermissions}
             onToggleRoleEnabled={m.toggleRoleEnabled}
             onToggleRolePermission={m.toggleRolePermission}
-            onUpdateRoleScope={m.updateRoleScope}
             permissionTree={m.permissionTree}
             permissionTreeLoading={m.permissionTreeLoading}
             roleDraftMode={m.roleDraftMode}
@@ -870,6 +999,39 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             selectedRole={m.selectedRole}
             selectedRoleId={m.selectedRoleId}
             selectedRoleReadonly={m.selectedRoleReadonly}
+          />
+        </Suspense>
+      ) : activeMenu === '企业管理' ? (
+        <Suspense fallback={<PageLoadingState label="企业管理" />}>
+          <EnterpriseManagePage
+            actionLoading={m.enterpriseActionLoading}
+            canCreate={m.canCreateEnterprises}
+            canEnable={m.canEnableEnterprises}
+            canRead={m.canReadEnterprises}
+            canUpdate={m.canUpdateEnterprises}
+            confirmAction={m.enterpriseConfirmAction}
+            data={m.enterprisesData}
+            enabledFilter={m.enterpriseEnabledFilter}
+            error={m.enterprisesError}
+            form={m.enterpriseForm}
+            formOpen={m.enterpriseFormOpen}
+            keyword={m.enterpriseKeyword}
+            loading={m.enterprisesLoading}
+            page={m.enterprisePage}
+            pageSize={m.enterprisePageSize}
+            onCloseForm={() => m.setEnterpriseFormOpen(false)}
+            onConfirmActionChange={m.setEnterpriseConfirmAction}
+            onEnabledFilterChange={m.setEnterpriseEnabledFilter}
+            onFetch={() => void m.fetchEnterprises()}
+            onFormChange={m.updateEnterpriseForm}
+            onKeywordChange={m.setEnterpriseKeyword}
+            onOpenCreate={m.openCreateEnterprise}
+            onOpenEdit={m.openEditEnterprise}
+            onPageChange={m.setEnterprisePage}
+            onPageSizeChange={m.setEnterprisePageSize}
+            onSave={() => void m.saveEnterprise()}
+            onSubmitConfirm={() => void m.submitEnterpriseConfirm()}
+            saving={m.enterpriseSaving}
           />
         </Suspense>
       ) : activeMenu === '用户管理' ? (
@@ -916,6 +1078,12 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             usersData={m.usersData}
             usersError={m.usersError}
             usersLoading={m.usersLoading}
+            userGrantEnterpriseOptions={m.userGrantEnterpriseOptions}
+            userGrantForm={m.userGrantForm}
+            userGrantLoading={m.userGrantLoading}
+            userGrantMailboxOptions={m.userGrantMailboxOptions}
+            onToggleUserGrantEnterprise={m.toggleUserGrantEnterprise}
+            onToggleUserGrantMailbox={m.toggleUserGrantMailbox}
           />
         </Suspense>
       ) : activeMenu === '邮箱配置' ? (
@@ -928,10 +1096,12 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             canReadMailboxes={m.canReadMailboxes}
             canTestMailboxes={m.canTestMailboxes}
             canUpdateMailboxes={m.canUpdateMailboxes}
+            enterpriseOptions={m.enterpriseOptions}
             mailboxActionLoading={m.mailboxActionLoading}
             mailboxAssignees={m.mailboxAssignees}
             mailboxConfirmAction={m.mailboxConfirmAction}
             mailboxDirty={m.mailboxDirty}
+            mailboxEnterpriseFilter={m.mailboxEnterpriseFilter}
             mailboxForm={m.mailboxForm}
             mailboxKeyword={m.mailboxKeyword}
             mailboxPage={m.mailboxPage}
@@ -943,10 +1113,14 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             mailboxStatusFilter={m.mailboxStatusFilter}
             mailboxTesting={m.mailboxTesting}
             mailboxTestResult={m.mailboxTestResult}
+            mailboxTemplateOptions={m.mailboxTemplateOptions}
+            mailboxSlaOptions={m.mailboxSlaOptions}
+            mailboxRuleGroupOptions={m.mailboxRuleGroupOptions}
             onCloseMailboxConfirm={m.closeMailboxConfirm}
             onFetchMailboxes={m.fetchMailboxes}
             onMailboxConfirm={m.openMailboxConfirm}
             onMailboxKeywordChange={m.changeMailboxKeyword}
+            onMailboxEnterpriseFilterChange={m.changeMailboxEnterpriseFilter}
             onMailboxPageChange={m.setMailboxPage}
             onMailboxPageSizeChange={m.changeMailboxPageSize}
             onMailboxStatusFilterChange={m.changeMailboxStatusFilter}
@@ -966,11 +1140,14 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
           <MailFetchLogPage
             detail={m.fetchLogDetail}
             error={m.fetchLogsError}
+            enterpriseFilter={m.fetchLogEnterpriseFilter}
+            enterprises={m.fetchLogEnterpriseOptions}
             loading={m.fetchLogsLoading}
             mailboxFilter={m.fetchLogMailboxFilter}
-            mailboxes={m.mailboxes}
+            mailboxes={m.fetchLogMailboxOptions}
             onClearFilters={m.clearFetchLogFilters}
             onDetailChange={m.setFetchLogDetail}
+            onEnterpriseFilterChange={m.changeFetchLogEnterpriseFilter}
             onMailboxFilterChange={m.changeFetchLogMailboxFilter}
             onPageChange={m.changeFetchLogPage}
             onQuery={m.queryFetchLogs}
@@ -991,11 +1168,14 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
           <MailSendLogPage
             detail={m.sendLogDetail}
             error={m.sendLogsError}
+            enterpriseFilter={m.sendLogEnterpriseFilter}
+            enterprises={m.sendLogEnterpriseOptions}
             loading={m.sendLogsLoading}
             mailboxFilter={m.sendLogMailboxFilter}
-            mailboxes={m.mailboxes}
+            mailboxes={m.sendLogMailboxOptions}
             onClearFilters={m.clearSendLogFilters}
             onDetailChange={m.setSendLogDetail}
+            onEnterpriseFilterChange={m.changeSendLogEnterpriseFilter}
             onMailboxFilterChange={m.changeSendLogMailboxFilter}
             onPageChange={m.changeSendLogPage}
             onQuery={m.querySendLogs}
@@ -1062,6 +1242,8 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             templatePreview={m.templatePreview}
             templatePreviewLoading={m.templatePreviewLoading}
             templateSaving={m.templateSaving}
+            templateTypeFilter={m.templateTypeFilter}
+            onTemplateTypeFilterChange={m.setTemplateTypeFilter}
             templatesData={m.templatesData}
             templatesError={m.templatesError}
             templatesLoading={m.templatesLoading}

@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 @Schema(description = "邮箱配置详情")
 public record MailboxVO(
         @Schema(description = "邮箱ID") Long id,
+        @Schema(description = "所属企业ID") Long enterpriseId,
+        @Schema(description = "所属企业名称") String enterpriseName,
         @Schema(description = "邮箱名称") String mailboxName,
         @Schema(description = "邮箱地址") String emailAddress,
         @Schema(description = "是否启用") Boolean enabled,
@@ -25,6 +27,13 @@ public record MailboxVO(
         @Schema(description = "发件人显示名") String smtpFromName,
         @Schema(description = "是否启用自动回执") Boolean autoReplyEnabled,
         @Schema(description = "自动回执模板ID") Long autoReplyTemplateId,
+        @Schema(description = "分配通知模板ID") Long assignmentNotifyTemplateId,
+        @Schema(description = "处理人回复模板ID") Long agentReplyTemplateId,
+        @Schema(description = "SLA 预警模板ID") Long slaWarningTemplateId,
+        @Schema(description = "SLA 超时模板ID") Long slaBreachTemplateId,
+        @Schema(description = "绑定的 SLA 策略ID") Long slaPolicyId,
+        @Schema(description = "绑定的分配规则组ID") Long assignmentRuleGroupId,
+        @Schema(description = "规则未命中处理方式：NONE/DEFAULT_ASSIGNEE") String assignmentFallbackType,
         @Schema(description = "最近成功拉取时间") LocalDateTime lastFetchAt,
         @Schema(description = "连接状态：UNKNOWN/OK/ERROR") String connectionStatus,
         @Schema(description = "创建时间") LocalDateTime createdAt,

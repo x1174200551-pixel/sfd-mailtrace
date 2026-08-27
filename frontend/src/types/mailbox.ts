@@ -1,8 +1,18 @@
 export type MailboxConnectionStatus = 'UNKNOWN' | 'OK' | 'ERROR'
-export type MailboxStepKey = 'basic' | 'imap' | 'smtp' | 'reply' | 'test'
+export type MailboxStepKey = 'basic' | 'imap' | 'smtp' | 'strategy' | 'test'
+
+export type MailboxOption = {
+  id: number
+  enterpriseId: number
+  mailboxName: string
+  emailAddress: string
+  enabled: boolean
+}
 
 export type Mailbox = {
   id: number
+  enterpriseId: number
+  enterpriseName: string
   mailboxName: string
   emailAddress: string
   enabled: boolean
@@ -21,6 +31,13 @@ export type Mailbox = {
   smtpFromName: string | null
   autoReplyEnabled: boolean
   autoReplyTemplateId: number | null
+  assignmentNotifyTemplateId: number | null
+  agentReplyTemplateId: number | null
+  slaWarningTemplateId: number | null
+  slaBreachTemplateId: number | null
+  slaPolicyId: number | null
+  assignmentRuleGroupId: number | null
+  assignmentFallbackType: 'NONE' | 'DEFAULT_ASSIGNEE'
   lastFetchAt: string | null
   connectionStatus: MailboxConnectionStatus
   createdAt: string | null
@@ -34,6 +51,8 @@ export type MailboxSummary = {
   okMailboxes: number
   errorMailboxes: number
   unknownMailboxes: number
+  todayReceivedMailCount: number
+  todayCreatedTicketCount: number
 }
 
 export type MailboxPageResponse = {
@@ -47,6 +66,7 @@ export type MailboxPageResponse = {
 
 export type MailboxFormState = {
   id: number | null
+  enterpriseId: string
   mailboxName: string
   emailAddress: string
   enabled: boolean
@@ -66,6 +86,13 @@ export type MailboxFormState = {
   smtpFromName: string
   autoReplyEnabled: boolean
   autoReplyTemplateId: string
+  assignmentNotifyTemplateId: string
+  agentReplyTemplateId: string
+  slaWarningTemplateId: string
+  slaBreachTemplateId: string
+  slaPolicyId: string
+  assignmentRuleGroupId: string
+  assignmentFallbackType: 'NONE' | 'DEFAULT_ASSIGNEE'
 }
 
 export type MailboxConnectionTestResponse = {

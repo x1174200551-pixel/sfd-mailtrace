@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { mailFetchLogApi } from '../api/mail-logs'
+import { enterpriseApi } from '../api/enterprises'
+import { mailboxApi } from '../api/mailboxes'
 import { ApiError } from '../shared/api/error-handler'
 import type { MailFetchLog, MailFetchLogPageResponse, MailFetchLogStats } from '../types/mail-logs'
+import type { EnterpriseOption } from '../types/enterprise'
+import type { MailboxOption } from '../types/mailbox'
 
 type UseMailFetchLogsParams = {
   activeMenu: string
@@ -17,6 +21,9 @@ export function useMailFetchLogs({
   token,
 }: UseMailFetchLogsParams) {
   const [fetchLogMailboxFilter, setFetchLogMailboxFilter] = useState('')
+  const [fetchLogEnterpriseFilter, setFetchLogEnterpriseFilter] = useState('ALL')
+  const [fetchLogEnterpriseOptions, setFetchLogEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [fetchLogMailboxOptions, setFetchLogMailboxOptions] = useState<MailboxOption[]>([])
   const [fetchLogSuccessFilter, setFetchLogSuccessFilter] = useState('ALL')
   const [fetchLogStartFrom, setFetchLogStartFrom] = useState('')
   const [fetchLogStartTo, setFetchLogStartTo] = useState('')
@@ -40,6 +47,7 @@ export function useMailFetchLogs({
     setFetchLogsError('')
     try {
       const data = await mailFetchLogApi.list({
+        enterpriseId: fetchLogEnterpriseFilter === 'ALL' ? undefined : fetchLogEnterpriseFilter,
         mailboxId: fetchLogMailboxFilter,
         page: fetchLogPage,
         size: fetchLogPageSize,
@@ -59,6 +67,7 @@ export function useMailFetchLogs({
     activeMenu,
     canReadFetchLogs,
     fetchLogMailboxFilter,
+    fetchLogEnterpriseFilter,
     fetchLogPage,
     fetchLogPageSize,
     fetchLogStartFrom,
@@ -67,6 +76,20 @@ export function useMailFetchLogs({
     handleAuthExpired,
     token,
   ])
+
+  useEffect(() => {
+    if (!token || activeMenu !== '收件记录') return
+    void Promise.all([
+      enterpriseApi.options(),
+      mailboxApi.options(fetchLogEnterpriseFilter === 'ALL' ? undefined : Number(fetchLogEnterpriseFilter)),
+    ]).then(([enterprises, mailboxes]) => {
+      setFetchLogEnterpriseOptions(enterprises)
+      setFetchLogMailboxOptions(mailboxes)
+      setFetchLogMailboxFilter((current) => !current || mailboxes.some((mailbox) => String(mailbox.id) === current) ? current : '')
+    }).catch((error) => {
+      if (!handleAuthExpired(error)) setFetchLogsError(error instanceof Error ? error.message : '收件筛选项加载失败')
+    })
+  }, [activeMenu, fetchLogEnterpriseFilter, handleAuthExpired, token])
 
   const fetchFetchLogStats = useCallback(async () => {
     if (!token || !canReadFetchLogs) return
@@ -86,10 +109,17 @@ export function useMailFetchLogs({
   }, [activeMenu, fetchFetchLogs, fetchFetchLogStats])
 
   const clearFetchLogFilters = useCallback(() => {
+    setFetchLogEnterpriseFilter('ALL')
     setFetchLogMailboxFilter('')
     setFetchLogSuccessFilter('ALL')
     setFetchLogStartFrom('')
     setFetchLogStartTo('')
+    setFetchLogPage(1)
+  }, [])
+
+  const changeFetchLogEnterpriseFilter = useCallback((value: string) => {
+    setFetchLogEnterpriseFilter(value)
+    setFetchLogMailboxFilter('')
     setFetchLogPage(1)
   }, [])
 
@@ -124,6 +154,7 @@ export function useMailFetchLogs({
   }, [])
 
   return {
+    changeFetchLogEnterpriseFilter,
     changeFetchLogMailboxFilter,
     changeFetchLogPage,
     changeFetchLogSuccessFilter,
@@ -131,7 +162,10 @@ export function useMailFetchLogs({
     clearFetchLogFilters,
     fetchFetchLogs,
     fetchLogDetail,
+    fetchLogEnterpriseFilter,
+    fetchLogEnterpriseOptions,
     fetchLogMailboxFilter,
+    fetchLogMailboxOptions,
     fetchLogPage,
     fetchLogPageSize,
     fetchLogStartFrom,

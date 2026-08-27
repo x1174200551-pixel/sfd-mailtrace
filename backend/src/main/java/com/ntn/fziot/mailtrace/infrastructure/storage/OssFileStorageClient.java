@@ -10,7 +10,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
@@ -18,7 +18,7 @@ import java.io.InputStream;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(prefix = "mailtrace.storage", name = "type", havingValue = "oss")
+@ConditionalOnExpression("'${mailtrace.storage.enabled:true}' == 'true' && '${mailtrace.storage.type:oss}' == 'oss'")
 public class OssFileStorageClient implements FileStorageClient {
 
     private final StorageProperties storageProperties;

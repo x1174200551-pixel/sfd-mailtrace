@@ -16,6 +16,8 @@ public class SlaPolicyEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long enterpriseId;
+
     private String policyName;
 
     @TableField("is_enabled")

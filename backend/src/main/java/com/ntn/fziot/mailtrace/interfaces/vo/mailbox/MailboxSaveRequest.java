@@ -5,12 +5,19 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
 @Schema(description = "邮箱保存请求")
 public class MailboxSaveRequest {
+
+    @NotNull(message = "请选择所属企业")
+    @Min(value = 1, message = "企业ID需大于 0")
+    @Schema(description = "所属企业ID")
+    private Long enterpriseId;
 
     @NotBlank(message = "请输入邮箱名称")
     @Size(max = 64, message = "邮箱名称不能超过 64 个字符")
@@ -88,8 +95,30 @@ public class MailboxSaveRequest {
     private String smtpFromName;
 
     @Schema(description = "是否启用自动回执", example = "true")
-    private Boolean autoReplyEnabled = true;
+    private Boolean autoReplyEnabled = false;
 
     @Schema(description = "自动回执模板ID")
     private Long autoReplyTemplateId;
+
+    @Schema(description = "分配通知模板ID")
+    private Long assignmentNotifyTemplateId;
+
+    @Schema(description = "处理人回复模板ID")
+    private Long agentReplyTemplateId;
+
+    @Schema(description = "SLA 预警模板ID")
+    private Long slaWarningTemplateId;
+
+    @Schema(description = "SLA 超时模板ID")
+    private Long slaBreachTemplateId;
+
+    @Schema(description = "绑定的 SLA 策略ID")
+    private Long slaPolicyId;
+
+    @Schema(description = "绑定的分配规则组ID")
+    private Long assignmentRuleGroupId;
+
+    @Pattern(regexp = "NONE|DEFAULT_ASSIGNEE", message = "规则未命中处理方式仅支持 NONE 或 DEFAULT_ASSIGNEE")
+    @Schema(description = "规则未命中处理方式：NONE/DEFAULT_ASSIGNEE", example = "NONE")
+    private String assignmentFallbackType = "NONE";
 }

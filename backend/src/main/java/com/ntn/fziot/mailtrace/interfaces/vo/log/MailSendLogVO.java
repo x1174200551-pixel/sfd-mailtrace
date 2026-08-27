@@ -8,8 +8,11 @@ import java.time.LocalDateTime;
 public record MailSendLogVO(
         @Schema(description = "日志ID") Long id,
         @Schema(description = "关联工单ID") Long ticketId,
+        @Schema(description = "企业ID") Long enterpriseId,
         @Schema(description = "发件邮箱ID") Long mailboxId,
         @Schema(description = "发送类型") String sendType,
+        @Schema(description = "模板ID") Long templateId,
+        @Schema(description = "模板类型") String templateType,
         @Schema(description = "收件人") String toAddress,
         @Schema(description = "邮件主题") String subject,
         @Schema(description = "邮件正文") String contentBody,

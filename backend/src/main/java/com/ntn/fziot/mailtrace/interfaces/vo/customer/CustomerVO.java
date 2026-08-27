@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 @Schema(description = "客户只读详情")
 public record CustomerVO(
         @Schema(description = "客户ID，来自客户档案；仅工单聚合客户可能为空") Long id,
+        @Schema(description = "所属企业ID") Long enterpriseId,
+        @Schema(description = "所属企业名称") String enterpriseName,
         @Schema(description = "客户邮箱") String email,
         @Schema(description = "客户显示名") String displayName,
         @Schema(description = "最近来信时间") LocalDateTime lastMailAt,

@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.mailfetch;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.ticket.MessageThreadService;
 import com.ntn.fziot.mailtrace.application.bizservice.ticket.TicketBizService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchClient;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchConfig;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 /**
  * IMAP 拉信业务服务：按启用邮箱执行拉取，并写入 fetch_log。
@@ -43,6 +45,7 @@ public class MailFetchBizService {
     private final MessageIdDedupService messageIdDedupService;
     private final MessageThreadService messageThreadService;
     private final TicketBizService ticketBizService;
+    private final EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     /**
      * 查询当前到期、需要执行拉取的启用邮箱 ID。
@@ -50,8 +53,13 @@ public class MailFetchBizService {
     public List<Long> listDueMailboxIds() {
         // 1、查询启用中的邮箱
         LocalDateTime now = LocalDateTime.now();
+        Set<Long> operationalMailboxIds = enterpriseMailboxAccessService.resolveSystemOperationalMailboxIds();
+        if (operationalMailboxIds.isEmpty()) {
+            return List.of();
+        }
         List<MailboxEntity> enabledMailboxes = mailboxMapper.selectList(new LambdaQueryWrapper<MailboxEntity>()
                 .eq(MailboxEntity::getEnabled, true)
+                .in(MailboxEntity::getId, operationalMailboxIds)
                 .orderByAsc(MailboxEntity::getId));
         // 2、按拉取间隔过滤出到期邮箱
         return enabledMailboxes.stream()
@@ -70,6 +78,7 @@ public class MailFetchBizService {
     @Transactional
     public Long fetchMailbox(Long mailboxId, String triggerType) {
         // 1、加载邮箱配置，准备拉取日志起始时间
+        enterpriseMailboxAccessService.assertSystemMailboxOperational(mailboxId);
         MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
         if (mailbox == null) {
             throw new IllegalArgumentException("邮箱配置不存在：" + mailboxId);
@@ -82,6 +91,7 @@ public class MailFetchBizService {
         LocalDateTime startedAt = LocalDateTime.now();
         MailFetchLogEntity logEntity = new MailFetchLogEntity();
         logEntity.setMailboxId(mailbox.getId());
+        logEntity.setEnterpriseId(mailbox.getEnterpriseId());
         logEntity.setTriggerType(normalizedTrigger);
         logEntity.setStartedAt(startedAt);
         logEntity.setFetchedCount(0);
@@ -113,12 +123,12 @@ public class MailFetchBizService {
             for (ParsedMail mail : newMails) {
                 try {
                     // 4a、线程关联：尝试匹配已有工单
-                    Long existingTicketId = messageThreadService.resolveTicketId(mail);
+                    Long existingTicketId = messageThreadService.resolveTicketId(mail, mailbox.getEnterpriseId());
 
                     if (existingTicketId != null) {
                         // 关联到已有工单：客户追信回流
                         ticketBizService.handleCustomerFollowUp(
-                                existingTicketId, mail.subject(), mail.fromAddress(),
+                                mailboxId, existingTicketId, mail.subject(), mail.fromAddress(),
                                 mail.contentText(), mail.contentHtml(),
                                 mail.messageId(), mail.inReplyTo(), mail.references(), mail.sentAt(),
                                 mail.toAddresses(), mail.ccAddresses(), mail.bccAddresses(),

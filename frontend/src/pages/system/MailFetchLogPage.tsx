@@ -1,16 +1,20 @@
 import { Card, Table, Select, Button, Drawer, Tag, Row, Col, DatePicker, Empty, Typography } from 'antd'
 import { CloseOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import type { Mailbox } from '../../types/mailbox'
+import type { MailboxOption } from '../../types/mailbox'
 import type { MailFetchLog, MailFetchLogPageResponse, MailFetchLogStats } from '../../types/mail-logs'
+import type { EnterpriseOption } from '../../types/enterprise'
 
 type MailFetchLogPageProps = {
   detail: MailFetchLog | null
   error: string
+  enterpriseFilter: string
+  enterprises: EnterpriseOption[]
   loading: boolean
   mailboxFilter: string
-  mailboxes: Mailbox[]
+  mailboxes: MailboxOption[]
   onClearFilters: () => void
+  onEnterpriseFilterChange: (value: string) => void
   onDetailChange: (detail: MailFetchLog | null) => void
   onMailboxFilterChange: (value: string) => void
   onPageChange: (page: number, size: number) => void
@@ -30,10 +34,13 @@ type MailFetchLogPageProps = {
 export function MailFetchLogPage({
   detail,
   error,
+  enterpriseFilter,
+  enterprises,
   loading,
   mailboxFilter,
   mailboxes,
   onClearFilters,
+  onEnterpriseFilterChange,
   onDetailChange,
   onMailboxFilterChange,
   onPageChange,
@@ -87,7 +94,11 @@ export function MailFetchLogPage({
       )}
 
       <Card size="small" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 3fr auto', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1.5fr 1.2fr 2.5fr auto', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>企业</span>
+            <Select value={enterpriseFilter} onChange={onEnterpriseFilterChange} style={{ width: '100%' }} options={[{ value: 'ALL', label: '全部企业' }, ...enterprises.map((item) => ({ value: String(item.id), label: item.enterpriseName }))]} />
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>邮箱</span>
             <Select
@@ -163,6 +174,7 @@ export function MailFetchLogPage({
           })}
           columns={[
             { title: '#', width: 50, render: (_: unknown, __: unknown, index: number) => (page - 1) * pageSize + index + 1 },
+            { title: '企业', dataIndex: 'enterpriseId', width: 90, render: (value: number) => enterprises.find((item) => item.id === value)?.enterpriseName || `#${value}` },
             { title: '开始时间', dataIndex: 'startedAt', render: (value: string) => formatDateTime(value), width: 160 },
             { title: '邮箱地址', dataIndex: 'emailAddress', render: (value: string) => value || '-', width: 180 },
             { title: '邮箱名称', dataIndex: 'mailboxName', render: (value: string) => value || '-', width: 120 },

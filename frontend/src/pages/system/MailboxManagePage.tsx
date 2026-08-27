@@ -21,6 +21,10 @@ import type {
   MailboxStepKey,
 } from '../../types/mailbox'
 import type { ManagedUser } from '../../types/user'
+import type { EnterpriseOption } from '../../types/enterprise'
+import type { NotificationTemplate } from '../../types/notification-template'
+import type { SlaPolicy } from '../../types/sla-policy'
+import type { AssignmentRuleGroup } from '../../types/assignment-rule'
 
 type MailboxManagePageProps = {
   activeMailboxStep: MailboxStepKey
@@ -30,10 +34,12 @@ type MailboxManagePageProps = {
   canReadMailboxes: boolean
   canTestMailboxes: boolean
   canUpdateMailboxes: boolean
+  enterpriseOptions: EnterpriseOption[]
   mailboxActionLoading: boolean
   mailboxAssignees: ManagedUser[]
   mailboxConfirmAction: MailboxConfirmAction
   mailboxDirty: boolean
+  mailboxEnterpriseFilter: string
   mailboxForm: MailboxFormState
   mailboxKeyword: string
   mailboxPage: number
@@ -45,10 +51,14 @@ type MailboxManagePageProps = {
   mailboxStatusFilter: string
   mailboxTesting: boolean
   mailboxTestResult: MailboxConnectionTestResponse | null
+  mailboxTemplateOptions: NotificationTemplate[]
+  mailboxSlaOptions: SlaPolicy[]
+  mailboxRuleGroupOptions: AssignmentRuleGroup[]
   onCloseMailboxConfirm: () => void
   onFetchMailboxes: () => void
   onMailboxConfirm: (mailbox: Mailbox, type: 'enable' | 'disable' | 'delete') => void
   onMailboxKeywordChange: (value: string) => void
+  onMailboxEnterpriseFilterChange: (value: string) => void
   onMailboxPageChange: (page: number) => void
   onMailboxPageSizeChange: (size: number) => void
   onMailboxStatusFilterChange: (value: string) => void
@@ -70,15 +80,6 @@ function secondsLabel(value: number) {
   return `${value} 秒`
 }
 
-function formatSyncTime(value: string | null) {
-  if (!value) return '未同步'
-  return value.replace('T', ' ').slice(0, 16)
-}
-
-function mailboxDailyCount(mailbox: Mailbox, index: number) {
-  return mailbox.connectionStatus === 'ERROR' ? 0 : Math.max(0, 20 - index * 5)
-}
-
 export function MailboxManagePage({
   activeMailboxStep,
   canCreateMailboxes,
@@ -87,10 +88,12 @@ export function MailboxManagePage({
   canReadMailboxes,
   canTestMailboxes,
   canUpdateMailboxes,
+  enterpriseOptions,
   mailboxActionLoading,
   mailboxAssignees,
   mailboxConfirmAction,
   mailboxDirty,
+  mailboxEnterpriseFilter,
   mailboxForm,
   mailboxKeyword,
   mailboxPage,
@@ -102,10 +105,14 @@ export function MailboxManagePage({
   mailboxStatusFilter,
   mailboxTesting,
   mailboxTestResult,
+  mailboxTemplateOptions,
+  mailboxSlaOptions,
+  mailboxRuleGroupOptions,
   onCloseMailboxConfirm,
   onFetchMailboxes,
   onMailboxConfirm,
   onMailboxKeywordChange,
+  onMailboxEnterpriseFilterChange,
   onMailboxPageChange,
   onMailboxPageSizeChange,
   onMailboxStatusFilterChange,
@@ -121,6 +128,9 @@ export function MailboxManagePage({
 }: MailboxManagePageProps) {
   const activeMailboxStepIndex = mailboxSteps.findIndex((step) => step.key === activeMailboxStep)
   const mailboxRecords = mailboxesData?.records ?? []
+  const templatesByType = (templateType: string) => mailboxTemplateOptions.filter(
+    (template) => template.templateType === templateType,
+  )
   const activeMailboxCount = mailboxRecords.filter((mailbox) => mailbox.enabled).length
   const mailboxTaskRows = mailboxRecords.slice(0, 3).map((mailbox, index) => {
     const taskFailed = mailbox.connectionStatus === 'ERROR'
@@ -149,9 +159,6 @@ export function MailboxManagePage({
       relatedTickets: failed ? '连接失败' : count > 0 ? `TCK-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${String(index * 20 + 1).padStart(3, '0')} 起` : '无新增',
     }
   })
-  const todayReceivedCount = mailboxLogRows.reduce((total, log) => total + Number(log.count.replace(/\D/g, '') || 0), 0)
-  const todayTicketCount = Math.max(0, todayReceivedCount - (mailboxesData?.summary.errorMailboxes ?? 0))
-
   return (
     <>
       <section className="app-content mailbox-page" aria-label="邮箱配置">
@@ -203,15 +210,15 @@ export function MailboxManagePage({
                   <span>今日收件邮件</span>
                   <small>最近拉取统计</small>
                 </span>
-                <strong>{mailboxesData ? todayReceivedCount : '--'}</strong>
+                <strong>{mailboxesData?.summary.todayReceivedMailCount ?? '--'}</strong>
               </div>
               <div className="mailbox-summary-item mailbox-summary-item--success">
                 <span className="mailbox-summary-icon"><Check size={17} /></span>
                 <span className="mailbox-summary-copy">
                   <span>今日自动建单</span>
-                  <small>按拉取结果估算</small>
+                  <small>今日拉取实际建单</small>
                 </span>
-                <strong>{mailboxesData ? todayTicketCount : '--'}</strong>
+                <strong>{mailboxesData?.summary.todayCreatedTicketCount ?? '--'}</strong>
               </div>
               <div className="mailbox-summary-item mailbox-summary-item--danger">
                 <span className="mailbox-summary-icon"><TriangleAlert size={17} /></span>
@@ -253,6 +260,13 @@ export function MailboxManagePage({
                     />
                   </label>
                   <label>
+                    <span>企业</span>
+                    <select onChange={(event) => onMailboxEnterpriseFilterChange(event.target.value)} value={mailboxEnterpriseFilter}>
+                      <option value="ALL">全部企业</option>
+                      {enterpriseOptions.map((enterprise) => <option key={enterprise.id} value={enterprise.id}>{enterprise.enterpriseName}</option>)}
+                    </select>
+                  </label>
+                  <label>
                     <span>状态</span>
                     <select onChange={(event) => onMailboxStatusFilterChange(event.target.value)} value={mailboxStatusFilter}>
                       <option value="ALL">全部状态</option>
@@ -279,11 +293,10 @@ export function MailboxManagePage({
                     <table className="user-table mailbox-table">
                       <thead>
                         <tr>
-                          <th>邮箱名称 / 地址</th>
+                          <th>邮箱</th>
+                          <th>所属企业</th>
                           <th>收发服务器</th>
                           <th>状态 / 规则</th>
-                          <th>今日收件</th>
-                          <th>最近同步</th>
                           <th>操作</th>
                         </tr>
                       </thead>
@@ -313,12 +326,18 @@ export function MailboxManagePage({
                                 </div>
                               </div>
                             </td>
-                            <td>
-                              <div className="mailbox-protocols">
-                                <span className="state-pill status-unknown">IMAP</span>
-                                <span className="state-pill status-unknown">SMTP</span>
-                              </div>
-                              <small>{mailbox.imapHost}:{mailbox.imapPort} / {mailbox.smtpHost}:{mailbox.smtpPort}</small>
+                            <td className="mailbox-enterprise-cell">
+                              <strong title={mailbox.enterpriseName}>{mailbox.enterpriseName}</strong>
+                            </td>
+                            <td className="mailbox-service-cell">
+                              <small title={`${mailbox.imapHost}:${mailbox.imapPort}`}>
+                                <span>IMAP</span>
+                                {mailbox.imapHost}:{mailbox.imapPort}
+                              </small>
+                              <small title={`${mailbox.smtpHost}:${mailbox.smtpPort}`}>
+                                <span>SMTP</span>
+                                {mailbox.smtpHost}:{mailbox.smtpPort}
+                              </small>
                             </td>
                             <td>
                               <div className="mailbox-status-line">
@@ -327,14 +346,8 @@ export function MailboxManagePage({
                                   {mailbox.enabled ? mailboxStatusLabel(mailbox.connectionStatus) : '停用'}
                                 </strong>
                               </div>
-                              <small>{mailbox.enabled ? '客服中心 / 客服组' : '已停用 / 不拉取'}</small>
+                              <small>{mailbox.enabled ? (mailbox.assignmentRuleGroupId ? '已绑定规则组' : '未绑定规则组') : '已停用 / 不拉取'}</small>
                             </td>
-                            <td>
-                              <strong className={mailbox.connectionStatus === 'ERROR' ? 'mailbox-mini-error' : 'mailbox-strong-blue'}>
-                                {mailboxDailyCount(mailbox, index)}
-                              </strong>
-                            </td>
-                            <td>{formatSyncTime(mailbox.lastFetchAt)}</td>
                             <td>
                               <div className="user-ops mailbox-ops" onClick={(event) => event.stopPropagation()}>
                                 <button
@@ -418,6 +431,23 @@ export function MailboxManagePage({
                     {activeMailboxStep === 'basic' && (
                       <div className="mailbox-form-grid">
                         <label>
+                          <span><b className="required">*</b> 所属企业</span>
+                          <select
+                            disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
+                            onChange={(event) => onUpdateMailboxForm({
+                              enterpriseId: event.target.value,
+                              slaPolicyId: '',
+                              assignmentRuleGroupId: '',
+                              defaultAssigneeId: '',
+                            })}
+                            value={mailboxForm.enterpriseId}
+                          >
+                            <option value="">请选择企业</option>
+                            {enterpriseOptions.map((enterprise) => <option key={enterprise.id} value={enterprise.id}>{enterprise.enterpriseName}{enterprise.enabled ? '' : '（已停用）'}</option>)}
+                          </select>
+                          <small>企业决定 SLA、规则组和用户授权边界；通知模板为全局共享。</small>
+                        </label>
+                        <label>
                           <span><b className="required">*</b> 邮箱名称</span>
                           <input
                             disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
@@ -435,22 +465,6 @@ export function MailboxManagePage({
                             type="email"
                             value={mailboxForm.emailAddress}
                           />
-                        </label>
-                        <label>
-                          <span>默认处理人</span>
-                          <select
-                            disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
-                            onChange={(event) => onUpdateMailboxForm({ defaultAssigneeId: event.target.value })}
-                            value={mailboxForm.defaultAssigneeId}
-                          >
-                            <option value="">按分配规则处理</option>
-                            {mailboxAssignees.map((assignee) => (
-                              <option key={assignee.id} value={assignee.id}>
-                                {assignee.displayName} / {assignee.account}
-                              </option>
-                            ))}
-                          </select>
-                          <small>为空时后续按自动分配规则选择处理人。</small>
                         </label>
                         <label>
                           <span>启用状态</span>
@@ -595,7 +609,7 @@ export function MailboxManagePage({
                       </div>
                     )}
 
-                    {activeMailboxStep === 'reply' && (
+                    {activeMailboxStep === 'strategy' && (
                       <div className="mailbox-form-grid">
                         <label>
                           <span>拉取频率（秒）</span>
@@ -613,7 +627,7 @@ export function MailboxManagePage({
                           <span>自动回执</span>
                           <button
                             className={mailboxForm.autoReplyEnabled ? 'template-switch enabled' : 'template-switch'}
-                            disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
+                            disabled={(mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes) || (!mailboxForm.autoReplyEnabled && !mailboxForm.autoReplyTemplateId)}
                             onClick={() => onUpdateMailboxForm({ autoReplyEnabled: !mailboxForm.autoReplyEnabled })}
                             type="button"
                           >
@@ -628,10 +642,87 @@ export function MailboxManagePage({
                             onChange={(event) => onUpdateMailboxForm({ autoReplyTemplateId: event.target.value })}
                             value={mailboxForm.autoReplyTemplateId}
                           >
-                            <option value="">使用默认自动回执模板</option>
+                            <option value="">请选择自动回执模板</option>
+                            {templatesByType('AUTO_REPLY').map((template) => <option key={template.id} value={template.id}>{template.templateName}</option>)}
                           </select>
-                          <small>后续如需多模板选择，再接通知模板下拉。</small>
+                          <small>从全局模板库选择；选择后才能启用自动回执。</small>
                         </label>
+                        <label>
+                          <span><b className="required">*</b> 分配通知模板</span>
+                          <select
+                            disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
+                            onChange={(event) => onUpdateMailboxForm({ assignmentNotifyTemplateId: event.target.value })}
+                            value={mailboxForm.assignmentNotifyTemplateId}
+                          >
+                            <option value="">请选择分配通知模板</option>
+                            {templatesByType('ASSIGN_NOTIFY').map((template) => <option key={template.id} value={template.id}>{template.templateName}</option>)}
+                          </select>
+                          <small>工单自动或手动分配后，通知当前处理人。</small>
+                        </label>
+                        <label>
+                          <span><b className="required">*</b> 处理人回复模板</span>
+                          <select
+                            disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes}
+                            onChange={(event) => onUpdateMailboxForm({ agentReplyTemplateId: event.target.value })}
+                            value={mailboxForm.agentReplyTemplateId}
+                          >
+                            <option value="">请选择处理人回复模板</option>
+                            {templatesByType('AGENT_REPLY').map((template) => <option key={template.id} value={template.id}>{template.templateName}</option>)}
+                          </select>
+                          <small>处理人回复客户时，将实际回复内容插入模板。</small>
+                        </label>
+                        <label>
+                          <span>SLA 策略</span>
+                          <select disabled={!mailboxForm.enterpriseId || (mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes)} onChange={(event) => onUpdateMailboxForm({ slaPolicyId: event.target.value })} value={mailboxForm.slaPolicyId}>
+                            <option value="">不设置 SLA</option>
+                            {mailboxSlaOptions.map((policy) => <option key={policy.id} value={policy.id}>{policy.policyName}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>SLA 预警模板</span>
+                          <select
+                            disabled={!mailboxForm.slaPolicyId || (mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes)}
+                            onChange={(event) => onUpdateMailboxForm({ slaWarningTemplateId: event.target.value })}
+                            value={mailboxForm.slaWarningTemplateId}
+                          >
+                            <option value="">请选择 SLA 预警模板</option>
+                            {templatesByType('SLA_WARNING').map((template) => <option key={template.id} value={template.id}>{template.templateName}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>SLA 超时模板</span>
+                          <select
+                            disabled={!mailboxForm.slaPolicyId || (mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes)}
+                            onChange={(event) => onUpdateMailboxForm({ slaBreachTemplateId: event.target.value })}
+                            value={mailboxForm.slaBreachTemplateId}
+                          >
+                            <option value="">请选择 SLA 超时模板</option>
+                            {templatesByType('SLA_BREACH').map((template) => <option key={template.id} value={template.id}>{template.templateName}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>分配规则组</span>
+                          <select disabled={!mailboxForm.enterpriseId || (mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes)} onChange={(event) => onUpdateMailboxForm({ assignmentRuleGroupId: event.target.value })} value={mailboxForm.assignmentRuleGroupId}>
+                            <option value="">不使用规则组</option>
+                            {mailboxRuleGroupOptions.map((group) => <option key={group.id} value={group.id}>{group.groupName}</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          <span>规则未命中时</span>
+                          <select disabled={mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes} onChange={(event) => onUpdateMailboxForm({ assignmentFallbackType: event.target.value as MailboxFormState['assignmentFallbackType'] })} value={mailboxForm.assignmentFallbackType}>
+                            <option value="NONE">保持待分配</option>
+                            <option value="DEFAULT_ASSIGNEE">使用默认处理人</option>
+                          </select>
+                          <small>只有显式选择时才使用默认处理人。</small>
+                        </label>
+                        <label>
+                          <span>默认处理人</span>
+                          <select disabled={mailboxForm.assignmentFallbackType !== 'DEFAULT_ASSIGNEE' || (mailboxForm.id ? !canUpdateMailboxes : !canCreateMailboxes)} onChange={(event) => onUpdateMailboxForm({ defaultAssigneeId: event.target.value })} value={mailboxForm.defaultAssigneeId}>
+                            <option value="">请选择处理人</option>
+                            {mailboxAssignees.map((assignee) => <option key={assignee.id} value={assignee.id}>{assignee.displayName} / {assignee.account}</option>)}
+                          </select>
+                        </label>
+                        {(!mailboxForm.assignmentNotifyTemplateId || !mailboxForm.agentReplyTemplateId || (mailboxForm.slaPolicyId && (!mailboxForm.slaWarningTemplateId || !mailboxForm.slaBreachTemplateId))) && <div className="mailbox-strategy-warning"><TriangleAlert size={17} /><span>配置不完整：分配通知和处理人回复模板必选；启用 SLA 后预警、超时模板也必选。</span></div>}
                       </div>
                     )}
 

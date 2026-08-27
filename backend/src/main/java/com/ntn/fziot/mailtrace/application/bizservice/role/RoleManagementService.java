@@ -7,20 +7,16 @@ import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService
 import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.PermissionTreeNodeVO;
-import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleDataScopeRequest;
-import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleDataScopeVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RolePermissionSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.PermissionEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleDataScopeEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RolePermissionEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.PermissionMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleDataScopeMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RolePermissionMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
@@ -28,7 +24,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -47,13 +42,10 @@ public class RoleManagementService {
     private static final int CODE_NOT_FOUND = 40401;
     private static final int CODE_CONFLICT = 40901;
     private static final Set<String> SYSTEM_ROLE_CODES = Set.of("ADMIN", "AGENT", "SUPERVISOR");
-    private static final Set<String> SUPPORTED_RESOURCE_TYPES = Set.of("TICKET", "CUSTOMER", "DASHBOARD");
-    private static final Set<String> SUPPORTED_SCOPE_CODES = Set.of("ALL", "SELF", "DEPT", "DEPT_AND_CHILDREN");
 
     private final RoleMapper roleMapper;
     private final PermissionMapper permissionMapper;
     private final RolePermissionMapper rolePermissionMapper;
-    private final RoleDataScopeMapper roleDataScopeMapper;
     private final UserRoleMapper userRoleMapper;
     private final OperationLogService operationLogService;
     private final PermissionService permissionService;
@@ -141,6 +133,9 @@ public class RoleManagementService {
         role.setCreatedBy(principal.account());
         role.setUpdatedBy(principal.account());
         roleMapper.insert(role);
+        List<PermissionEntity> defaultPermissions = loadEnabledPermissions();
+        assertPermissionsGrantable(principal, defaultPermissions);
+        assignPermissions(role.getId(), defaultPermissions, principal.account(), false);
 
         // 4、记录操作日志并返回角色详情
         operationLogService.record(principal, "ROLE", "CREATE", role.getId(), "新建角色：" + roleName);
@@ -196,7 +191,7 @@ public class RoleManagementService {
     }
 
     /**
-     * 保存自定义角色的权限清单和默认数据范围。
+     * 保存自定义角色的功能权限清单。旧 dataScopes 请求字段兼容接收但不再校验或写表。
      */
     @Transactional
     public RoleVO saveRolePermissions(CurrentUserPrincipal principal, Long id, RolePermissionSaveRequest request) {
@@ -206,28 +201,12 @@ public class RoleManagementService {
         RoleEntity role = requireRole(id);
         assertCustomRole(role, "内置角色不可配置权限");
         // 3、校验权限编码均存在且启用
-        List<PermissionEntity> selectedPermissions = requirePermissions(request.getPermissionCodes());
-        // 4、校验默认数据范围只包含当前阶段支持的资源和范围
-        List<RoleDataScopeEntity> dataScopes = buildDataScopes(id, request.getDataScopes(), principal.account());
+        List<PermissionEntity> selectedPermissions = requirePermissionsWithAncestors(request.getPermissionCodes());
+        assertPermissionsGrantable(principal, selectedPermissions);
+        // 4、替换角色权限关系；P2-CUTOVER 后不再读写 mt_role_data_scope
+        assignPermissions(id, selectedPermissions, principal.account(), true);
 
-        // 5、替换角色权限关系
-        rolePermissionMapper.physicalDeleteByRoleId(id);
-        for (PermissionEntity permission : selectedPermissions) {
-            RolePermissionEntity row = new RolePermissionEntity();
-            row.setRoleId(id);
-            row.setPermissionId(permission.getId());
-            row.setCreatedBy(principal.account());
-            row.setUpdatedBy(principal.account());
-            rolePermissionMapper.insert(row);
-        }
-
-        // 6、替换角色默认数据范围
-        roleDataScopeMapper.physicalDeleteByRoleId(id);
-        for (RoleDataScopeEntity dataScope : dataScopes) {
-            roleDataScopeMapper.insert(dataScope);
-        }
-
-        // 7、记录操作日志并返回最新角色详情
+        // 5、记录操作日志并返回最新角色详情
         operationLogService.record(principal, "ROLE", "PERMISSION_UPDATE", id, "配置角色权限：" + role.getRoleName());
         return toVO(roleMapper.selectById(id));
     }
@@ -245,7 +224,7 @@ public class RoleManagementService {
                 role.getEnabled(),
                 role.getSortOrder(),
                 permissionCodes(role.getId()),
-                dataScopes(role.getId()),
+                List.of(),
                 userCount(role.getId()),
                 role.getCreatedAt(),
                 role.getUpdatedAt()
@@ -280,6 +259,7 @@ public class RoleManagementService {
             return List.of();
         }
         return permissionMapper.selectBatchIds(permissionIds).stream()
+                .filter(permission -> permission != null && Boolean.TRUE.equals(permission.getEnabled()))
                 .sorted(Comparator.comparing(PermissionEntity::getSortOrder, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(PermissionEntity::getId, Comparator.nullsLast(Long::compareTo)))
                 .map(PermissionEntity::getPermissionCode)
@@ -287,21 +267,11 @@ public class RoleManagementService {
                 .toList();
     }
 
-    private List<RoleDataScopeVO> dataScopes(Long roleId) {
-        return roleDataScopeMapper.selectList(new LambdaQueryWrapper<RoleDataScopeEntity>()
-                        .eq(RoleDataScopeEntity::getRoleId, roleId)
-                        .orderByAsc(RoleDataScopeEntity::getResourceType)
-                        .orderByAsc(RoleDataScopeEntity::getScopeCode))
-                .stream()
-                .map(row -> new RoleDataScopeVO(row.getResourceType(), row.getScopeCode(), row.getScopeDesc()))
-                .toList();
-    }
-
     private Long userCount(Long roleId) {
         return userRoleMapper.selectCount(new LambdaQueryWrapper<UserRoleEntity>().eq(UserRoleEntity::getRoleId, roleId));
     }
 
-    private List<PermissionEntity> requirePermissions(List<String> permissionCodes) {
+    private List<PermissionEntity> requirePermissionsWithAncestors(List<String> permissionCodes) {
         Set<String> codes = (permissionCodes == null ? List.<String>of() : permissionCodes).stream()
                 .map(this::normalize)
                 .filter(code -> !code.isEmpty())
@@ -309,46 +279,76 @@ public class RoleManagementService {
         if (codes.isEmpty()) {
             throw new BusinessException(CODE_BAD_REQUEST, "请选择权限");
         }
-        List<PermissionEntity> permissions = permissionMapper.selectList(new LambdaQueryWrapper<PermissionEntity>()
-                .in(PermissionEntity::getPermissionCode, codes)
-                .eq(PermissionEntity::getEnabled, true));
-        Set<String> existingCodes = permissions.stream()
-                .map(PermissionEntity::getPermissionCode)
-                .collect(Collectors.toSet());
-        List<String> missing = codes.stream().filter(code -> !existingCodes.contains(code)).toList();
+        List<PermissionEntity> enabledPermissions = loadEnabledPermissions();
+        Map<String, PermissionEntity> permissionByCode = enabledPermissions.stream()
+                .collect(Collectors.toMap(PermissionEntity::getPermissionCode, permission -> permission));
+        Map<Long, PermissionEntity> permissionById = enabledPermissions.stream()
+                .collect(Collectors.toMap(PermissionEntity::getId, permission -> permission));
+        List<String> missing = codes.stream().filter(code -> !permissionByCode.containsKey(code)).toList();
         if (!missing.isEmpty()) {
             throw new BusinessException(CODE_BAD_REQUEST, "权限不存在或已停用：" + String.join(",", missing));
         }
-        return permissions.stream()
+
+        Set<Long> selectedIds = new LinkedHashSet<>();
+        for (String code : codes) {
+            PermissionEntity current = permissionByCode.get(code);
+            while (current != null && selectedIds.add(current.getId())) {
+                Long parentId = current.getParentId();
+                if (parentId == null) {
+                    break;
+                }
+                current = permissionById.get(parentId);
+                if (current == null) {
+                    throw new BusinessException(CODE_BAD_REQUEST, "权限树缺少有效父节点：" + code);
+                }
+            }
+        }
+        return enabledPermissions.stream()
+                .filter(permission -> selectedIds.contains(permission.getId()))
                 .sorted(Comparator.comparing(PermissionEntity::getSortOrder, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(PermissionEntity::getId, Comparator.nullsLast(Long::compareTo)))
                 .toList();
     }
 
-    private List<RoleDataScopeEntity> buildDataScopes(Long roleId, List<RoleDataScopeRequest> requests, String operator) {
-        Map<String, RoleDataScopeEntity> scopes = new LinkedHashMap<>();
-        for (RoleDataScopeRequest request : requests == null ? List.<RoleDataScopeRequest>of() : requests) {
-            String resourceType = normalizeUpper(request.getResourceType());
-            String scopeCode = normalizeUpper(request.getScopeCode());
-            if (!SUPPORTED_RESOURCE_TYPES.contains(resourceType)) {
-                throw new BusinessException(CODE_BAD_REQUEST, "当前阶段不支持该数据资源范围：" + resourceType);
-            }
-            if (!SUPPORTED_SCOPE_CODES.contains(scopeCode)) {
-                throw new BusinessException(CODE_BAD_REQUEST, "当前阶段不支持该数据范围：" + scopeCode);
-            }
-            RoleDataScopeEntity row = new RoleDataScopeEntity();
+    private List<PermissionEntity> loadEnabledPermissions() {
+        return permissionMapper.selectList(new LambdaQueryWrapper<PermissionEntity>()
+                        .eq(PermissionEntity::getEnabled, true)
+                        .orderByAsc(PermissionEntity::getSortOrder)
+                        .orderByAsc(PermissionEntity::getId))
+                .stream()
+                .filter(permission -> permission != null && permission.getId() != null)
+                .toList();
+    }
+
+    private void assertPermissionsGrantable(CurrentUserPrincipal principal,
+                                            List<PermissionEntity> selectedPermissions) {
+        if (permissionService.hasRole(principal, "ADMIN")) {
+            return;
+        }
+        Set<String> operatorPermissions = permissionService.getCurrentPermissions(principal).permissions();
+        List<String> exceededPermissions = selectedPermissions.stream()
+                .map(PermissionEntity::getPermissionCode)
+                .filter(code -> !operatorPermissions.contains(code))
+                .toList();
+        if (!exceededPermissions.isEmpty()) {
+            throw new BusinessException(CODE_FORBIDDEN,
+                    "不能授予超出当前账号范围的权限：" + String.join(",", exceededPermissions));
+        }
+    }
+
+    private void assignPermissions(Long roleId, List<PermissionEntity> permissions,
+                                   String operator, boolean replaceExisting) {
+        if (replaceExisting) {
+            rolePermissionMapper.physicalDeleteByRoleId(roleId);
+        }
+        for (PermissionEntity permission : permissions) {
+            RolePermissionEntity row = new RolePermissionEntity();
             row.setRoleId(roleId);
-            row.setResourceType(resourceType);
-            row.setScopeCode(scopeCode);
-            row.setScopeDesc(normalize(request.getScopeDesc()));
+            row.setPermissionId(permission.getId());
             row.setCreatedBy(operator);
             row.setUpdatedBy(operator);
-            scopes.put(resourceType + ":" + scopeCode, row);
+            rolePermissionMapper.insert(row);
         }
-        if (scopes.keySet().stream().noneMatch(key -> key.startsWith("TICKET:"))) {
-            throw new BusinessException(CODE_BAD_REQUEST, "必须配置工单数据范围");
-        }
-        return new ArrayList<>(scopes.values());
     }
 
     private RoleEntity requireRole(Long id) {

@@ -13,8 +13,10 @@ import com.ntn.fziot.mailtrace.interfaces.vo.template.NotificationTemplateVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.TemplatePreviewRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.TemplatePreviewResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.template.TemplateVariableVO;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,29 +36,35 @@ public class NotificationTemplateService {
 
     private static final int CODE_BAD_REQUEST = 40001;
     private static final int CODE_NOT_FOUND = 40401;
+    private static final int CODE_CONFLICT = 40901;
     private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\{[a-zA-Z0-9_]+}");
+    private static final Set<String> TEMPLATE_TYPES = Set.of(
+            "AUTO_REPLY", "ASSIGN_NOTIFY", "AGENT_REPLY", "SLA_WARNING", "SLA_BREACH", "SYSTEM");
 
     private static final Map<String, TemplateVariableVO> VARIABLES = buildVariables();
 
     private final NotificationTemplateMapper notificationTemplateMapper;
+    private final MailboxMapper mailboxMapper;
     private final OperationLogMapper operationLogMapper;
     private final PermissionService permissionService;
 
     /**
      * 查询通知模板列表，并返回页面统计与可用变量。
      */
-    public NotificationTemplateListResponse listTemplates(CurrentUserPrincipal principal, String keyword, Boolean enabled) {
+    public NotificationTemplateListResponse listTemplates(CurrentUserPrincipal principal, String templateType,
+                                                            String keyword, Boolean enabled) {
         // 1、校验当前用户具备管理员权限
         permissionService.assertPermission(principal, "notification_template:read", "无权查看通知模板");
         // 2、按关键字和启用状态拼装查询条件
-        LambdaQueryWrapper<NotificationTemplateEntity> wrapper = buildQuery(keyword, enabled)
+        LambdaQueryWrapper<NotificationTemplateEntity> wrapper = buildQuery(templateType, keyword, enabled)
                 .orderByAsc(NotificationTemplateEntity::getTemplateCode);
         // 3、查询模板列表并按编码排序
         List<NotificationTemplateVO> records = notificationTemplateMapper.selectList(wrapper).stream()
                 .map(this::toVO)
                 .toList();
         // 4、汇总模板总数、启用数、停用数和变量清单
-        return new NotificationTemplateListResponse(records, buildSummary(), List.copyOf(VARIABLES.values()));
+        return new NotificationTemplateListResponse(
+                records, buildSummary(templateType), List.copyOf(VARIABLES.values()));
     }
 
     /**
@@ -67,7 +76,8 @@ public class NotificationTemplateService {
         permissionService.assertPermission(principal, "notification_template:create", "无权新建通知模板");
         // 2、规范化模板编码，并校验编码唯一性
         String templateCode = normalize(request.getTemplateCode()).toUpperCase();
-        ensureTemplateCodeUnique(templateCode);
+        String templateType = normalizeTemplateType(request.getTemplateType());
+        ensureTemplateCodeUnique(templateCode, null);
         // 3、校验主题和正文中的变量都在白名单内
         validateVariables(request.getSubjectTpl());
         validateVariables(request.getContentTpl());
@@ -75,6 +85,7 @@ public class NotificationTemplateService {
         // 4、写入新模板基础信息、启用状态和创建人
         NotificationTemplateEntity template = new NotificationTemplateEntity();
         template.setTemplateCode(templateCode);
+        template.setTemplateType(templateType);
         template.setTemplateName(normalize(request.getTemplateName()));
         template.setSubjectTpl(normalize(request.getSubjectTpl()));
         template.setContentTpl(normalize(request.getContentTpl()));
@@ -98,6 +109,15 @@ public class NotificationTemplateService {
         permissionService.assertPermission(principal, "notification_template:update", "无权编辑通知模板");
         // 2、查询模板是否存在，防止保存无效 ID
         NotificationTemplateEntity existing = requireTemplate(id);
+        String templateType = normalizeTemplateType(request.getTemplateType());
+        ensureTemplateCodeUnique(existing.getTemplateCode(), id);
+        if (isMailboxReferenced(id)
+                && !templateType.equals(normalizeTemplateType(existing.getTemplateType()))) {
+            throw new BusinessException(CODE_CONFLICT, "模板已被邮箱引用，不能变更模板类型");
+        }
+        if (isMailboxReferenced(id) && !Boolean.TRUE.equals(request.getEnabled())) {
+            throw new BusinessException(CODE_CONFLICT, "模板已被邮箱引用，不能停用");
+        }
         // 3、校验主题和正文中的变量都在白名单内
         validateVariables(request.getSubjectTpl());
         validateVariables(request.getContentTpl());
@@ -105,6 +125,7 @@ public class NotificationTemplateService {
         // 4、更新模板名称、主题、正文、启用状态和更新人
         notificationTemplateMapper.update(null, new LambdaUpdateWrapper<NotificationTemplateEntity>()
                 .eq(NotificationTemplateEntity::getId, id)
+                .set(NotificationTemplateEntity::getTemplateType, templateType)
                 .set(NotificationTemplateEntity::getTemplateName, normalize(request.getTemplateName()))
                 .set(NotificationTemplateEntity::getSubjectTpl, normalize(request.getSubjectTpl()))
                 .set(NotificationTemplateEntity::getContentTpl, normalize(request.getContentTpl()))
@@ -114,6 +135,17 @@ public class NotificationTemplateService {
         // 5、写入操作日志，便于后续审计
         recordLog(principal, "UPDATE", id, "保存通知模板：" + existing.getTemplateCode());
         return toVO(notificationTemplateMapper.selectById(id));
+    }
+
+    @Transactional
+    public void deleteTemplate(CurrentUserPrincipal principal, Long id) {
+        permissionService.assertPermission(principal, "notification_template:delete", "无权删除通知模板");
+        NotificationTemplateEntity existing = requireTemplate(id);
+        if (isMailboxReferenced(id)) {
+            throw new BusinessException(CODE_CONFLICT, "通知模板已被邮箱引用，不能删除");
+        }
+        notificationTemplateMapper.deleteById(id);
+        recordLog(principal, "DELETE", id, "删除通知模板：" + existing.getTemplateCode());
     }
 
     /**
@@ -134,9 +166,14 @@ public class NotificationTemplateService {
         );
     }
 
-    private LambdaQueryWrapper<NotificationTemplateEntity> buildQuery(String keyword, Boolean enabled) {
+    private LambdaQueryWrapper<NotificationTemplateEntity> buildQuery(String templateType,
+                                                                       String keyword, Boolean enabled) {
         String normalizedKeyword = normalize(keyword);
         LambdaQueryWrapper<NotificationTemplateEntity> wrapper = new LambdaQueryWrapper<>();
+        String normalizedType = normalize(templateType).toUpperCase();
+        if (!normalizedType.isEmpty()) {
+            wrapper.eq(NotificationTemplateEntity::getTemplateType, normalizeTemplateType(normalizedType));
+        }
         if (!normalizedKeyword.isEmpty()) {
             wrapper.and(query -> query
                     .like(NotificationTemplateEntity::getTemplateCode, normalizedKeyword)
@@ -149,10 +186,10 @@ public class NotificationTemplateService {
         return wrapper;
     }
 
-    private NotificationTemplateSummaryVO buildSummary() {
-        long total = notificationTemplateMapper.selectCount(new LambdaQueryWrapper<>());
+    private NotificationTemplateSummaryVO buildSummary(String templateType) {
+        long total = notificationTemplateMapper.selectCount(buildQuery(templateType, null, null));
         long enabled = notificationTemplateMapper.selectCount(
-                new LambdaQueryWrapper<NotificationTemplateEntity>().eq(NotificationTemplateEntity::getEnabled, true));
+                buildQuery(templateType, null, true));
         return new NotificationTemplateSummaryVO(total, enabled, total - enabled, VARIABLES.size());
     }
 
@@ -177,13 +214,36 @@ public class NotificationTemplateService {
         }
     }
 
-    private void ensureTemplateCodeUnique(String templateCode) {
-        Long count = notificationTemplateMapper.selectCount(
+    private void ensureTemplateCodeUnique(String templateCode, Long excludeId) {
+        LambdaQueryWrapper<NotificationTemplateEntity> wrapper =
                 new LambdaQueryWrapper<NotificationTemplateEntity>()
-                        .eq(NotificationTemplateEntity::getTemplateCode, templateCode));
+                        .eq(NotificationTemplateEntity::getTemplateCode, templateCode);
+        if (excludeId != null) {
+            wrapper.ne(NotificationTemplateEntity::getId, excludeId);
+        }
+        Long count = notificationTemplateMapper.selectCount(
+                wrapper);
         if (count != null && count > 0) {
             throw new BusinessException(CODE_BAD_REQUEST, "模板编码已存在，请更换编码");
         }
+    }
+
+    private boolean isMailboxReferenced(Long templateId) {
+        return mailboxMapper.selectCount(new LambdaQueryWrapper<MailboxEntity>()
+                .and(wrapper -> wrapper
+                        .eq(MailboxEntity::getAutoReplyTemplateId, templateId)
+                        .or().eq(MailboxEntity::getAssignmentNotifyTemplateId, templateId)
+                        .or().eq(MailboxEntity::getAgentReplyTemplateId, templateId)
+                        .or().eq(MailboxEntity::getSlaWarningTemplateId, templateId)
+                        .or().eq(MailboxEntity::getSlaBreachTemplateId, templateId))) > 0;
+    }
+
+    private String normalizeTemplateType(String templateType) {
+        String normalized = normalize(templateType).toUpperCase();
+        if (!TEMPLATE_TYPES.contains(normalized)) {
+            throw new BusinessException(CODE_BAD_REQUEST, "模板类型不支持");
+        }
+        return normalized;
     }
 
     private Map<String, String> buildSampleData(Map<String, String> requestSampleData) {
@@ -199,6 +259,7 @@ public class NotificationTemplateService {
         sampleData.put("customer_ticket_url", "https://mailtrace.local/customer/tickets/TCK-260821093012-482931");
         sampleData.put("customer_ticket_code", "482931");
         sampleData.put("customer_ticket_expires_at", "2026-08-24 09:30");
+        sampleData.put("reply_content", "您好，您的问题已经处理，请查看本次回复内容。");
         if (requestSampleData != null) {
             requestSampleData.forEach((key, value) -> {
                 if (key != null && value != null) {
@@ -233,6 +294,7 @@ public class NotificationTemplateService {
         return new NotificationTemplateVO(
                 template.getId(),
                 template.getTemplateCode(),
+                template.getTemplateType(),
                 template.getTemplateName(),
                 template.getSubjectTpl(),
                 template.getContentTpl(),
@@ -265,6 +327,7 @@ public class NotificationTemplateService {
         variables.put("{customer_ticket_url}", new TemplateVariableVO("{customer_ticket_url}", "客户查看链接", "https://mailtrace.local/customer/tickets/TCK-260821093012-482931"));
         variables.put("{customer_ticket_code}", new TemplateVariableVO("{customer_ticket_code}", "客户查看校验码", "482931"));
         variables.put("{customer_ticket_expires_at}", new TemplateVariableVO("{customer_ticket_expires_at}", "客户查看有效期", "2026-08-24 09:30"));
+        variables.put("{reply_content}", new TemplateVariableVO("{reply_content}", "处理人回复内容", "您好，您的问题已经处理，请查看本次回复内容。"));
         return variables;
     }
 }

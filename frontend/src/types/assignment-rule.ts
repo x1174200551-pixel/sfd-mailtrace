@@ -2,6 +2,7 @@ export type AssignmentRuleMatchType = 'DEFAULT' | 'SUBJECT_KEYWORD' | 'MAILBOX' 
 
 export type AssignmentRule = {
   id: number
+  groupId: number
   ruleName: string
   enabled: boolean
   priorityOrder: number
@@ -29,6 +30,7 @@ export type AssignmentRuleListResponse = {
 
 export type AssignmentRuleFormState = {
   id: number | null
+  groupId: string
   ruleName: string
   enabled: boolean
   priorityOrder: number
@@ -60,3 +62,28 @@ export type AssignmentRuleConfirmAction = {
   type: 'delete'
   rule: AssignmentRule
 } | null
+
+export type AssignmentRuleGroup = {
+  id: number
+  enterpriseId: number
+  groupName: string
+  enabled: boolean
+  remark: string | null
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export type AssignmentRuleGroupListResponse = {
+  records: AssignmentRuleGroup[]
+  totalCount: number
+  enabledCount: number
+  disabledCount: number
+}
+
+export type AssignmentRuleGroupFormState = {
+  id: number | null
+  enterpriseId: string
+  groupName: string
+  enabled: boolean
+  remark: string
+}

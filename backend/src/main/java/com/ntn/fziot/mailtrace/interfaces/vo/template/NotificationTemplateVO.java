@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public record NotificationTemplateVO(
         @Schema(description = "模板ID") Long id,
         @Schema(description = "模板编码") String templateCode,
+        @Schema(description = "模板类型") String templateType,
         @Schema(description = "模板名称") String templateName,
         @Schema(description = "主题模板") String subjectTpl,
         @Schema(description = "正文模板") String contentTpl,
