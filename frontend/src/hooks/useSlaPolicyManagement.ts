@@ -3,6 +3,8 @@ import { message } from 'antd'
 import { slaPolicyApi } from '../api/sla-policies'
 import { workCalendarApi } from '../api/work-calendars'
 import { emptySlaPolicyForm } from '../constants/sla-policies'
+import { enterpriseApi } from '../api/enterprises'
+import type { EnterpriseOption } from '../types/enterprise'
 import type {
   SlaPolicy,
   SlaPolicyConfirmAction,
@@ -45,6 +47,16 @@ export function useSlaPolicyManagement({
   const [slaPolicyConfirmAction, setSlaPolicyConfirmAction] = useState<SlaPolicyConfirmAction>(null)
   const [workCalendars, setWorkCalendars] = useState<WorkCalendar[]>([])
   const [workCalendarsLoading, setWorkCalendarsLoading] = useState(false)
+  const [slaEnterpriseOptions, setSlaEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [slaEnterpriseFilter, setSlaEnterpriseFilter] = useState('ALL')
+
+  useEffect(() => {
+    if (!token || activeMenu !== 'SLA策略') return
+    void enterpriseApi.options().then((options) => {
+      setSlaEnterpriseOptions(options)
+      setSlaEnterpriseFilter((value) => value === 'ALL' && options[0] ? String(options[0].id) : value)
+    }).catch(() => setSlaEnterpriseOptions([]))
+  }, [activeMenu, token])
 
   const fetchSlaPolicies = useCallback(async () => {
     if (!token || activeMenu !== 'SLA策略') return
@@ -58,6 +70,7 @@ export function useSlaPolicyManagement({
     setSlaPoliciesError('')
     try {
       const data = await slaPolicyApi.list({
+        enterpriseId: slaEnterpriseFilter === 'ALL' ? undefined : Number(slaEnterpriseFilter),
         keyword: slaPolicyKeyword.trim(),
         enabled: slaPolicyEnabledFilter !== 'ALL' ? slaPolicyEnabledFilter : undefined,
         defaultPolicy: slaPolicyDefaultFilter !== 'ALL' ? slaPolicyDefaultFilter : undefined,
@@ -70,6 +83,7 @@ export function useSlaPolicyManagement({
       if (!selected && !slaPolicyDirty) {
         setSlaPolicyForm({
           ...emptySlaPolicyForm,
+          enterpriseId: slaEnterpriseFilter === 'ALL' ? '' : slaEnterpriseFilter,
           calendarId: workCalendars[0] ? String(workCalendars[0].id) : '',
         })
       }
@@ -88,6 +102,7 @@ export function useSlaPolicyManagement({
     slaPolicyEnabledFilter,
     slaPolicyForm.id,
     slaPolicyKeyword,
+    slaEnterpriseFilter,
     token,
     workCalendars,
   ])
@@ -100,7 +115,7 @@ export function useSlaPolicyManagement({
     if (!token || activeMenu !== 'SLA策略' || !canReadWorkCalendars) return
     setWorkCalendarsLoading(true)
     try {
-      const data = await workCalendarApi.list()
+      const data = await workCalendarApi.list({ enterpriseId: slaEnterpriseFilter === 'ALL' ? undefined : Number(slaEnterpriseFilter) })
       setWorkCalendars(data.records)
       setSlaPolicyForm((form) => {
         if (form.calendarId || !data.records[0]) return form
@@ -112,7 +127,7 @@ export function useSlaPolicyManagement({
     } finally {
       setWorkCalendarsLoading(false)
     }
-  }, [activeMenu, canReadWorkCalendars, handleAuthExpired, token])
+  }, [activeMenu, canReadWorkCalendars, handleAuthExpired, slaEnterpriseFilter, token])
 
   useEffect(() => {
     void fetchWorkCalendarsForSla()
@@ -148,13 +163,15 @@ export function useSlaPolicyManagement({
   const openCreateSlaPolicy = useCallback(() => {
     setSlaPolicyForm({
       ...emptySlaPolicyForm,
+      enterpriseId: slaEnterpriseFilter === 'ALL' ? (slaEnterpriseOptions[0] ? String(slaEnterpriseOptions[0].id) : '') : slaEnterpriseFilter,
       calendarId: workCalendars[0] ? String(workCalendars[0].id) : '',
     })
     setSlaPolicyDirty(true)
     setSlaPoliciesError('')
-  }, [workCalendars])
+  }, [slaEnterpriseFilter, slaEnterpriseOptions, workCalendars])
 
   const buildSlaPolicyPayload = useCallback(() => ({
+    enterpriseId: Number(slaPolicyForm.enterpriseId),
     policyName: slaPolicyForm.policyName.trim(),
     enabled: slaPolicyForm.enabled,
     defaultPolicy: slaPolicyForm.defaultPolicy,
@@ -232,6 +249,7 @@ export function useSlaPolicyManagement({
       if (slaPolicyForm.id === slaPolicyConfirmAction.policy.id) {
         setSlaPolicyForm({
           ...emptySlaPolicyForm,
+          enterpriseId: slaEnterpriseFilter === 'ALL' ? '' : slaEnterpriseFilter,
           calendarId: workCalendars[0] ? String(workCalendars[0].id) : '',
         })
         setSlaPolicyDirty(false)
@@ -245,7 +263,7 @@ export function useSlaPolicyManagement({
     } finally {
       setSlaPolicyActionLoading(false)
     }
-  }, [fetchSlaPolicies, handleAuthExpired, slaPolicyConfirmAction, slaPolicyForm.id, token, workCalendars])
+  }, [fetchSlaPolicies, handleAuthExpired, slaEnterpriseFilter, slaPolicyConfirmAction, slaPolicyForm.id, token, workCalendars])
 
   const slaPolicyRecords = slaPoliciesData?.records ?? []
   const selectedSlaPolicy = slaPolicyForm.id
@@ -289,6 +307,8 @@ export function useSlaPolicyManagement({
     slaPolicyForm,
     slaPolicyKeyword,
     slaPolicySaving,
+    slaEnterpriseFilter,
+    slaEnterpriseOptions,
     slaPreview,
     slaPreviewBaseTime,
     slaResolveHoursInvalid,
@@ -296,6 +316,7 @@ export function useSlaPolicyManagement({
     submitSlaPolicyConfirm,
     toggleSlaPolicy,
     updateSlaPolicyForm,
+    setSlaEnterpriseFilter,
     openCreateSlaPolicy,
     workCalendars,
     workCalendarsLoading,

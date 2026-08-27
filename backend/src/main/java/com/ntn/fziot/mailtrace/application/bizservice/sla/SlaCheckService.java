@@ -3,12 +3,14 @@ package com.ntn.fziot.mailtrace.application.bizservice.sla;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.SlaPolicyEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEventEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketEventMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
@@ -38,6 +40,7 @@ public class SlaCheckService {
     private final TicketEventMapper ticketEventMapper;
     private final SlaPolicyMapper slaPolicyMapper;
     private final NotificationTemplateMapper notificationTemplateMapper;
+    private final MailboxMapper mailboxMapper;
     private final UserMapper userMapper;
     private final MailSendService mailSendService;
 
@@ -166,7 +169,8 @@ public class SlaCheckService {
         // 2、优先使用启用模板；模板不存在或停用时使用系统兜底文案，避免提醒链路中断。
         RenderedReminder reminder = renderReminder(ticket, pending, assignee, sendType);
         MailSendService.SendResult result = mailSendService.sendRawMail(
-                ticket.getMailboxId(), assignee.getEmail(), reminder.subject(), reminder.content(), sendType);
+                ticket.getMailboxId(), assignee.getEmail(), reminder.subject(), reminder.content(), sendType,
+                ticket.getId(), reminder.templateId(), reminder.templateType());
         if (result.success()) {
             log.info("SLA 提醒邮件已发送 ticketId={} assigneeId={} type={}",
                     ticket.getId(), ticket.getAssigneeId(), sendType);
@@ -178,11 +182,20 @@ public class SlaCheckService {
 
     private RenderedReminder renderReminder(TicketEntity ticket, PendingDeadline pending,
                                             UserEntity assignee, String sendType) {
-        NotificationTemplateEntity template = notificationTemplateMapper.selectOne(
-                new LambdaQueryWrapper<NotificationTemplateEntity>()
-                        .eq(NotificationTemplateEntity::getTemplateCode, sendType)
-                        .eq(NotificationTemplateEntity::getEnabled, true)
-                        .last("LIMIT 1"));
+        MailboxEntity mailbox = mailboxMapper.selectById(ticket.getMailboxId());
+        Long templateId = mailbox == null
+                ? null
+                : EVENT_SLA_WARNING.equals(sendType)
+                        ? mailbox.getSlaWarningTemplateId()
+                        : mailbox.getSlaBreachTemplateId();
+        NotificationTemplateEntity candidate = templateId == null
+                ? null
+                : notificationTemplateMapper.selectById(templateId);
+        NotificationTemplateEntity template = candidate != null
+                && Boolean.TRUE.equals(candidate.getEnabled())
+                && sendType.equals(candidate.getTemplateType())
+                ? candidate
+                : null;
         String subject;
         String content;
         if (template != null) {
@@ -198,7 +211,12 @@ public class SlaCheckService {
                     + "截止时间：" + pending.deadline() + "\n\n"
                     + "请登录系统及时处理。";
         }
-        return new RenderedReminder(subject, content);
+        return new RenderedReminder(
+                subject,
+                content,
+                template == null ? null : template.getId(),
+                template == null ? sendType : template.getTemplateType()
+        );
     }
 
     private String renderTemplate(String template, TicketEntity ticket, PendingDeadline pending, UserEntity assignee) {
@@ -231,6 +249,6 @@ public class SlaCheckService {
     private record PendingDeadline(String type, LocalDateTime deadline) {
     }
 
-    private record RenderedReminder(String subject, String content) {
+    private record RenderedReminder(String subject, String content, Long templateId, String templateType) {
     }
 }

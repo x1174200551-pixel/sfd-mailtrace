@@ -2,6 +2,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.mailfetch;
 
 import com.ntn.fziot.mailtrace.application.bizservice.ticket.MessageThreadService;
 import com.ntn.fziot.mailtrace.application.bizservice.ticket.TicketBizService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchClient;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapFetchConfig;
@@ -45,6 +46,8 @@ class MailFetchBizServiceTest {
     private MessageThreadService messageThreadService;
     @Mock
     private TicketBizService ticketBizService;
+    @Mock
+    private EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     @InjectMocks
     private MailFetchBizService mailFetchBizService;

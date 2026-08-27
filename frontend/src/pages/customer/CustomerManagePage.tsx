@@ -1,15 +1,21 @@
-import { Pagination, message } from 'antd'
+import { Pagination, Select, message } from 'antd'
 import { Clock3, Copy, Inbox, Mail, RefreshCw, Search, ShieldCheck, TicketCheck, UserRound, UsersRound } from 'lucide-react'
 import { statusLabel } from '../../constants/status'
 import type { CustomerPageResponse, CustomerReadonly } from '../../types/customer'
 import type { TicketPageResponse, TicketSummary } from '../../types/ticket'
+import type { EnterpriseOption } from '../../types/enterprise'
+import type { MailboxOption } from '../../types/mailbox'
 
 type CustomerManagePageProps = {
   canReadCustomers: boolean
   customerDetail: CustomerReadonly | null
   customerDetailError: string
   customerDetailLoading: boolean
+  customerEnterpriseFilter: string
+  customerEnterpriseOptions: EnterpriseOption[]
   customerKeyword: string
+  customerMailboxFilter: string
+  customerMailboxOptions: MailboxOption[]
   customerPage: number
   customerPageSize: number
   customerTicketsData: TicketPageResponse | null
@@ -21,7 +27,9 @@ type CustomerManagePageProps = {
   onFetchCustomerDetail: () => void
   onFetchCustomerTickets: () => void
   onFetchCustomers: () => void
+  onEnterpriseFilterChange: (value: string) => void
   onKeywordChange: (value: string) => void
+  onMailboxFilterChange: (value: string) => void
   onOpenTicket: (ticket: TicketSummary, customerEmail: string) => void
   onPageChange: (page: number, size: number) => void
   onSearchCustomers: () => void
@@ -54,7 +62,11 @@ export function CustomerManagePage({
   customerDetail,
   customerDetailError,
   customerDetailLoading,
+  customerEnterpriseFilter,
+  customerEnterpriseOptions,
   customerKeyword,
+  customerMailboxFilter,
+  customerMailboxOptions,
   customerPage,
   customerPageSize,
   customerTicketsData,
@@ -66,7 +78,9 @@ export function CustomerManagePage({
   onFetchCustomerDetail,
   onFetchCustomerTickets,
   onFetchCustomers,
+  onEnterpriseFilterChange,
   onKeywordChange,
+  onMailboxFilterChange,
   onOpenTicket,
   onPageChange,
   onSearchCustomers,
@@ -74,7 +88,7 @@ export function CustomerManagePage({
   selectedCustomerEmail,
 }: CustomerManagePageProps) {
   const records = customersData?.records ?? []
-  const selectedCustomer = customerDetail || records.find((customer) => customer.email === selectedCustomerEmail) || null
+  const selectedCustomer = customerDetail || records.find((customer) => `${customer.enterpriseId}::${customer.email}` === selectedCustomerEmail) || null
   const customerRemarkCount = records.filter((customer) => customer.remark?.trim()).length
   const customerWithTicketCount = records.filter((customer) => customer.ticketCount > 0).length
   const recentCustomerCount = records.filter((customer) => (
@@ -156,6 +170,16 @@ export function CustomerManagePage({
               </header>
 
               <div className="user-toolbar customer-toolbar">
+                <Select
+                  value={customerEnterpriseFilter}
+                  onChange={onEnterpriseFilterChange}
+                  options={[{ value: 'ALL', label: '全部企业' }, ...customerEnterpriseOptions.map((item) => ({ value: String(item.id), label: item.enterpriseName }))]}
+                />
+                <Select
+                  value={customerMailboxFilter}
+                  onChange={onMailboxFilterChange}
+                  options={[{ value: 'ALL', label: '全部邮箱' }, ...customerMailboxOptions.map((item) => ({ value: String(item.id), label: item.mailboxName }))]}
+                />
                 <label className="user-search">
                   <Search size={16} />
                   <input
@@ -187,12 +211,13 @@ export function CustomerManagePage({
                   </div>
                 ) : (
                   records.map((customer) => {
-                    const active = customer.email === selectedCustomerEmail
+                    const customerKey = `${customer.enterpriseId}::${customer.email}`
+                    const active = customerKey === selectedCustomerEmail
                     return (
                       <button
-                        key={customer.email}
+                        key={customerKey}
                         className={active ? 'customer-row active' : 'customer-row'}
-                        onClick={() => onSelectCustomer(customer.email)}
+                        onClick={() => onSelectCustomer(customerKey)}
                         type="button"
                       >
                         <span className="customer-avatar">{customerInitial(customer)}</span>
@@ -203,6 +228,7 @@ export function CustomerManagePage({
                             {customer.remark?.trim() && <em className="note">有备注</em>}
                           </span>
                           <span className="customer-row__email">{customer.email}</span>
+                          <span className="customer-row__meta">{customer.enterpriseName || `企业 #${customer.enterpriseId}`}</span>
                           <span className="customer-row__meta">最近 {formatCustomerDate(customer.lastMailAt)}</span>
                         </span>
                         <span className="customer-row__count">
@@ -281,6 +307,10 @@ export function CustomerManagePage({
                   </div>
 
                   <div className="customer-info-grid">
+                    <div>
+                      <span>所属企业</span>
+                      <strong>{selectedCustomer.enterpriseName || `企业 #${selectedCustomer.enterpriseId}`}</strong>
+                    </div>
                     <div>
                       <span>客户来源</span>
                       <strong>{selectedCustomer.id ? '客户档案' : '工单聚合'}</strong>

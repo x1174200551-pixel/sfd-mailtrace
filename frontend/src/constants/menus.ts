@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   Bell,
+  Building2,
   CalendarDays,
   FolderTree,
   Home,
@@ -34,48 +35,42 @@ export type MenuGroup = {
 
 export const menuGroups: MenuGroup[] = [
   {
-    title: '工作空间',
+    title: '我的工作',
     permission: 'menu:workspace',
-    items: [{ title: '工作台', icon: Home, permission: 'menu:dashboard', accessPermissions: ['dashboard:read'] }],
-  },
-  {
-    title: '工单中心',
-    permission: 'menu:ticket_center',
     items: [
+      { title: '工作台', icon: Home, permission: 'menu:dashboard', accessPermissions: ['dashboard:read'] },
       { title: '全部工单', icon: Layers, permission: 'menu:tickets', accessPermissions: ['ticket:read'] },
       { title: '客户管理', icon: Users, permission: 'menu:customers', accessPermissions: ['customer:read'] },
     ],
   },
   {
-    title: '邮件管理',
-    adminOnly: true,
-    permission: 'menu:mail_management',
+    title: '企业配置',
+    permission: 'menu:enterprise_config',
     items: [
-      { title: '邮箱配置', icon: Settings, permission: 'menu:mailboxes', accessPermissions: ['menu:mailboxes', 'mailbox:read'] },
-      { title: '收件记录', icon: Inbox, permission: 'menu:mail_fetch_logs', accessPermissions: ['mail_fetch_log:read'] },
-      { title: '发件记录', icon: Send, tone: 'primary', permission: 'menu:mail_send_logs', accessPermissions: ['mail_send_log:read'] },
-    ],
-  },
-  {
-    title: 'SLA管理',
-    adminOnly: true,
-    permission: 'menu:sla_management',
-    items: [
-      { title: '分配规则', icon: ShieldCheck, permission: 'menu:assignment_rules', accessPermissions: ['assignment_rule:read'] },
+      { title: '企业管理', icon: Building2, permission: 'menu:enterprises', accessPermissions: ['enterprise:read'] },
+      { title: '邮箱配置', icon: Settings, permission: 'menu:mailboxes', accessPermissions: ['mailbox:read'] },
+      { title: '通知模板', icon: Bell, permission: 'menu:notification_templates', accessPermissions: ['notification_template:read'] },
       { title: 'SLA策略', icon: Timer, permission: 'menu:sla_policies', accessPermissions: ['sla_policy:read'] },
+      { title: '分配规则', icon: ShieldCheck, permission: 'menu:assignment_rules', accessPermissions: ['assignment_rule:read'] },
       { title: '工作日历', icon: CalendarDays, permission: 'menu:work_calendars', accessPermissions: ['work_calendar:read'] },
     ],
   },
   {
-    title: '系统管理',
-    adminOnly: true,
-    permission: 'menu:system_management',
+    title: '组织权限',
+    permission: 'menu:organization_permissions',
     items: [
-      { title: '用户管理', icon: UserCog, adminOnly: true, permission: 'menu:users', accessPermissions: ['user:read'] },
-      { title: '角色管理', icon: ShieldCheck, adminOnly: true, permission: 'menu:roles', accessPermissions: ['role:read'] },
-      { title: '组织管理', icon: FolderTree, adminOnly: true, permission: 'menu:departments', accessPermissions: ['department:read'] },
+      { title: '组织管理', icon: FolderTree, permission: 'menu:departments', accessPermissions: ['department:read'] },
+      { title: '用户管理', icon: UserCog, permission: 'menu:users', accessPermissions: ['user:read'] },
+      { title: '角色管理', icon: ShieldCheck, permission: 'menu:roles', accessPermissions: ['role:read'] },
+    ],
+  },
+  {
+    title: '系统运维',
+    permission: 'menu:system_operations',
+    items: [
+      { title: '收件记录', icon: Inbox, permission: 'menu:mail_fetch_logs', accessPermissions: ['mail_fetch_log:read'] },
+      { title: '发件记录', icon: Send, tone: 'primary', permission: 'menu:mail_send_logs', accessPermissions: ['mail_send_log:read'] },
       { title: '编号规则', icon: SlidersHorizontal, permission: 'menu:ticket_number_rule', accessPermissions: ['ticket_number_rule:read'] },
-      { title: '通知模板', icon: Bell, permission: 'menu:notification_templates', accessPermissions: ['notification_template:read'] },
     ],
   },
 ]

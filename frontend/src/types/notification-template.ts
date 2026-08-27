@@ -7,6 +7,7 @@ export type TemplateVariable = {
 export type NotificationTemplate = {
   id: number
   templateCode: string
+  templateType: 'AUTO_REPLY' | 'AGENT_REPLY' | 'SLA_WARNING' | 'SLA_BREACH' | string
   templateName: string
   subjectTpl: string
   contentTpl: string
@@ -30,6 +31,7 @@ export type NotificationTemplateListResponse = {
 export type TemplateFormState = {
   id: number | null
   templateCode: string
+  templateType: string
   templateName: string
   subjectTpl: string
   contentTpl: string

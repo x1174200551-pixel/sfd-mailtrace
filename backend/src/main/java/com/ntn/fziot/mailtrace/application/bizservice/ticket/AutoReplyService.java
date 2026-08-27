@@ -1,5 +1,6 @@
 package com.ntn.fziot.mailtrace.application.bizservice.ticket;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
@@ -25,7 +26,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AutoReplyService {
 
-    private static final String AUTO_REPLY_CODE = "AUTO_REPLY";
+    private static final String AUTO_REPLY_TYPE = "AUTO_REPLY";
 
     private final NotificationTemplateMapper templateMapper;
     private final MailboxMapper mailboxMapper;
@@ -56,17 +57,27 @@ public class AutoReplyService {
                 return AutoReplyResult.fail("邮箱未启用自动回执：" + mailboxId);
             }
 
-            // 3、查 AUTO_REPLY 模板
-            NotificationTemplateEntity template = templateMapper.selectOne(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NotificationTemplateEntity>()
-                            .eq(NotificationTemplateEntity::getTemplateCode, AUTO_REPLY_CODE)
-                            .last("LIMIT 1"));
-            if (template == null || !Boolean.TRUE.equals(template.getEnabled())) {
-                log.warn("自动回执跳过：AUTO_REPLY 模板未找到或未启用 ticketId={}", ticketId);
-                return AutoReplyResult.fail("AUTO_REPLY 模板未找到或未启用");
+            // 3、只读取邮箱显式绑定且启用的全局自动回复模板。
+            if (mailbox.getAutoReplyTemplateId() == null) {
+                log.info("自动回执跳过：邮箱未绑定自动回复模板 ticketId={} mailboxId={}", ticketId, mailboxId);
+                return AutoReplyResult.fail("邮箱未绑定自动回复模板");
+            }
+            NotificationTemplateEntity template = templateMapper.selectById(mailbox.getAutoReplyTemplateId());
+            if (template == null || !Boolean.TRUE.equals(template.getEnabled())
+                    || !AUTO_REPLY_TYPE.equals(template.getTemplateType())) {
+                log.warn("自动回执跳过：邮箱绑定模板不可用 ticketId={} mailboxId={} templateId={}",
+                        ticketId, mailboxId, mailbox.getAutoReplyTemplateId());
+                return AutoReplyResult.fail("邮箱绑定的自动回复模板不存在、已停用或类型不匹配");
             }
 
-            // 4、渲染模板
+            // 4、在发送前固化实际使用的模板快照；SMTP 失败也保留本次策略选择证据。
+            ticket.setAutoReplyTemplateId(template.getId());
+            ticketMapper.update(null, new LambdaUpdateWrapper<TicketEntity>()
+                    .eq(TicketEntity::getId, ticketId)
+                    .set(TicketEntity::getAutoReplyTemplateId, template.getId())
+                    .set(TicketEntity::getUpdatedBy, "system"));
+
+            // 5、渲染模板
             String customerName = ticket.getCustomerEmail() != null ? ticket.getCustomerEmail() : "客户";
             String mailboxEmail = mailbox.getSmtpUsername() != null ? mailbox.getSmtpUsername() : "noreply@ntn.fziot";
             String assigneeName = resolveAssigneeName(ticket);
@@ -86,9 +97,10 @@ public class AutoReplyService {
             String subject = render(template.getSubjectTpl(), variables);
             String content = render(template.getContentTpl(), variables);
 
-            // 5、发送
+            // 6、发送并把企业、工单和模板元数据写入发件日志。
             MailSendService.SendResult result = mailSendService.sendRawMail(
-                    mailboxId, ticket.getCustomerEmail(), subject, content);
+                    mailboxId, ticket.getCustomerEmail(), subject, content, AUTO_REPLY_TYPE,
+                    ticketId, template.getId(), template.getTemplateType());
 
             if (result.success()) {
                 log.info("自动回执发送成功 ticketId={} ticketNo={} customer={}",

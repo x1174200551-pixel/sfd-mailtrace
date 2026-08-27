@@ -36,7 +36,7 @@ export function DepartmentManagePage({
       <header className="dept-topbar">
         <div className="dept-title-block">
           <h2>组织架构管理</h2>
-          <span>维护部门层级、部门成员、负责人和数据权限范围</span>
+          <span>维护部门层级、部门成员和负责人</span>
         </div>
         <div className="dept-top-actions">
           <button disabled={state.orgTreeLoading || state.orgStatsLoading} onClick={actions.refresh} type="button">
@@ -121,8 +121,6 @@ export function DepartmentManagePage({
             <DepartmentSidePanel
               orgDeptOptions={state.orgDeptOptions}
               selectedDeptNode={state.selectedDeptNode}
-              selectedDeptTotalMemberCount={state.selectedDeptTotalMemberCount}
-              stats={state.orgStats}
             />
           </div>
         </>

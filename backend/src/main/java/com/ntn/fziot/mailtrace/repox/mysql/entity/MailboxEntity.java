@@ -16,6 +16,8 @@ public class MailboxEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long enterpriseId;
+
     private String mailboxName;
 
     private String emailAddress;
@@ -54,6 +56,20 @@ public class MailboxEntity {
     private Boolean autoReplyEnabled;
 
     private Long autoReplyTemplateId;
+
+    private Long assignmentNotifyTemplateId;
+
+    private Long agentReplyTemplateId;
+
+    private Long slaWarningTemplateId;
+
+    private Long slaBreachTemplateId;
+
+    private Long slaPolicyId;
+
+    private Long assignmentRuleGroupId;
+
+    private String assignmentFallbackType;
 
     private LocalDateTime lastFetchAt;
 

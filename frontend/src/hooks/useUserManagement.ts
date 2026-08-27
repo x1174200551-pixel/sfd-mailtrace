@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { userApi } from '../api/users'
+import { enterpriseApi } from '../api/enterprises'
+import { mailboxApi } from '../api/mailboxes'
 import { emptyUserForm } from '../constants/roles'
-import type { ManagedUser, RoleCode, UserConfirmAction, UserFormMode, UserFormState, UserPageResponse } from '../types/user'
+import type { ManagedUser, RoleCode, UserConfirmAction, UserDataGrantForm, UserFormMode, UserFormState, UserPageResponse } from '../types/user'
+import type { EnterpriseOption } from '../types/enterprise'
+import type { MailboxOption } from '../types/mailbox'
 
 type UseUserManagementParams = {
   activeMenu: string
@@ -14,11 +18,6 @@ type UseUserManagementParams = {
 
 function toRoleCode(value: string): RoleCode {
   return value.trim().toUpperCase()
-}
-
-function normalizeRoleCodes(primaryRoleCode: string, roleCodes: string[]) {
-  const primary = toRoleCode(primaryRoleCode)
-  return primary ? [primary] : roleCodes.map(toRoleCode).filter(Boolean).slice(0, 1)
 }
 
 export function useUserManagement({
@@ -44,6 +43,11 @@ export function useUserManagement({
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null)
   const [confirmAction, setConfirmAction] = useState<UserConfirmAction>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [userGrantForm, setUserGrantForm] = useState<UserDataGrantForm>({ allDataVisible: false, enterpriseIds: [], mailboxIds: [] })
+  const [userGrantLoading, setUserGrantLoading] = useState(false)
+  const [userGrantEnterpriseOptions, setUserGrantEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [userGrantMailboxOptions, setUserGrantMailboxOptions] = useState<MailboxOption[]>([])
+  const userGrantRequestSequence = useRef(0)
 
   const fetchUsers = useCallback(async () => {
     if (!token || activeMenu !== '用户管理') return
@@ -76,6 +80,20 @@ export function useUserManagement({
     void fetchUsers()
   }, [fetchUsers])
 
+  useEffect(() => {
+    if (!token || activeMenu !== '用户管理' || !canReadUsers) return
+    void Promise.all([enterpriseApi.options(), mailboxApi.options()])
+      .then(([enterprises, mailboxes]) => {
+        setUserGrantEnterpriseOptions(enterprises)
+        setUserGrantMailboxOptions(mailboxes)
+      })
+      .catch((error) => {
+        if (handleAuthExpired(error)) return
+        setUserGrantEnterpriseOptions([])
+        setUserGrantMailboxOptions([])
+      })
+  }, [activeMenu, canReadUsers, handleAuthExpired, token])
+
   const resetUserFilters = useCallback(() => {
     setUserKeyword('')
     setUserRoleFilter('ALL')
@@ -84,30 +102,55 @@ export function useUserManagement({
   }, [])
 
   const openCreateUser = useCallback(() => {
+    userGrantRequestSequence.current += 1
     setUserFormMode('create')
     setEditingUser(null)
     setUserForm({ ...emptyUserForm, departmentId: defaultDepartmentId })
+    setUserGrantForm({ allDataVisible: false, enterpriseIds: [], mailboxIds: [] })
+    setUserGrantLoading(false)
     setUserFormError('')
     setUserFormOpen(true)
   }, [defaultDepartmentId])
 
-  const openEditUser = useCallback((nextUser: ManagedUser) => {
+  const openEditUser = useCallback(async (nextUser: ManagedUser) => {
+    const requestSequence = userGrantRequestSequence.current + 1
+    userGrantRequestSequence.current = requestSequence
     setUserFormMode('edit')
     setEditingUser(nextUser)
-    const assignedRoleCodes = normalizeRoleCodes(nextUser.roleCode, nextUser.roleCodes || [])
     setUserForm({
       account: nextUser.account,
       displayName: nextUser.displayName,
       email: nextUser.email,
       roleCode: nextUser.roleCode,
-      roleCodes: assignedRoleCodes.slice(0, 1),
       departmentId: nextUser.departmentId ?? defaultDepartmentId,
       password: '',
       enabled: nextUser.enabled,
     })
+    setUserGrantForm({ allDataVisible: false, enterpriseIds: [], mailboxIds: [] })
     setUserFormError('')
+    setUserGrantLoading(true)
     setUserFormOpen(true)
-  }, [defaultDepartmentId])
+    try {
+      const detail = await userApi.getDataGrants(nextUser.id)
+      if (requestSequence !== userGrantRequestSequence.current) return
+      setUserGrantForm({
+        allDataVisible: detail.allDataVisible,
+        enterpriseIds: detail.grants.flatMap((grant) => grant.grantType === 'ENTERPRISE' && grant.enterpriseId ? [grant.enterpriseId] : []),
+        mailboxIds: detail.grants.flatMap((grant) => grant.grantType === 'MAILBOX' && grant.mailboxId ? [grant.mailboxId] : []),
+      })
+    } catch (error) {
+      if (requestSequence !== userGrantRequestSequence.current) return
+      if (!handleAuthExpired(error)) setUserFormError(error instanceof Error ? error.message : '用户数据授权加载失败')
+    } finally {
+      if (requestSequence === userGrantRequestSequence.current) setUserGrantLoading(false)
+    }
+  }, [defaultDepartmentId, handleAuthExpired])
+
+  const closeUserForm = useCallback(() => {
+    userGrantRequestSequence.current += 1
+    setUserGrantLoading(false)
+    setUserFormOpen(false)
+  }, [])
 
   const updateUserForm = useCallback((patch: Partial<UserFormState>) => {
     setUserForm((value) => ({ ...value, ...patch }))
@@ -118,20 +161,29 @@ export function useUserManagement({
     setUserForm((value) => ({
       ...value,
       roleCode: nextRole,
-      roleCodes: normalizeRoleCodes(nextRole, []),
     }))
+    setUserGrantForm((value) => ({ ...value, allDataVisible: nextRole === 'ADMIN' }))
   }, [])
 
   const submitUserForm = useCallback(async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!token) return
+    if (userGrantLoading) {
+      setUserFormError('用户数据授权仍在加载，请稍后保存')
+      return
+    }
     setUserFormSubmitting(true)
     setUserFormError('')
     try {
+      if (userForm.roleCode !== 'ADMIN' && userGrantForm.enterpriseIds.length === 0 && userGrantForm.mailboxIds.length === 0) {
+        setUserFormError('普通用户至少选择一个可见企业或单邮箱')
+        return
+      }
       if (userFormMode === 'create') {
         await userApi.create({
           ...userForm,
-          roleCodes: normalizeRoleCodes(userForm.roleCode, userForm.roleCodes),
+          enterpriseIds: userGrantForm.enterpriseIds,
+          mailboxIds: userGrantForm.mailboxIds,
         })
         setUserPage(1)
       } else if (editingUser) {
@@ -139,9 +191,10 @@ export function useUserManagement({
           displayName: userForm.displayName,
           email: userForm.email,
           roleCode: userForm.roleCode,
-          roleCodes: normalizeRoleCodes(userForm.roleCode, userForm.roleCodes),
           departmentId: userForm.departmentId,
           enabled: userForm.enabled,
+          enterpriseIds: userGrantForm.enterpriseIds,
+          mailboxIds: userGrantForm.mailboxIds,
         })
       }
       setUserFormOpen(false)
@@ -152,7 +205,27 @@ export function useUserManagement({
     } finally {
       setUserFormSubmitting(false)
     }
-  }, [editingUser, fetchUsers, handleAuthExpired, token, userForm, userFormMode])
+  }, [editingUser, fetchUsers, handleAuthExpired, token, userForm, userFormMode, userGrantForm, userGrantLoading])
+
+  const toggleUserGrantEnterprise = useCallback((enterpriseId: number) => {
+    setUserGrantForm((value) => {
+      const selected = value.enterpriseIds.includes(enterpriseId)
+      const nextEnterpriseIds = selected ? value.enterpriseIds.filter((id) => id !== enterpriseId) : [...value.enterpriseIds, enterpriseId]
+      const mailboxIds = selected
+        ? value.mailboxIds
+        : value.mailboxIds.filter((mailboxId) => userGrantMailboxOptions.find((mailbox) => mailbox.id === mailboxId)?.enterpriseId !== enterpriseId)
+      return { ...value, enterpriseIds: nextEnterpriseIds, mailboxIds }
+    })
+  }, [userGrantMailboxOptions])
+
+  const toggleUserGrantMailbox = useCallback((mailboxId: number) => {
+    setUserGrantForm((value) => ({
+      ...value,
+      mailboxIds: value.mailboxIds.includes(mailboxId)
+        ? value.mailboxIds.filter((id) => id !== mailboxId)
+        : [...value.mailboxIds, mailboxId],
+    }))
+  }, [])
 
   const openEnabledConfirm = useCallback((nextUser: ManagedUser) => {
     setConfirmAction({
@@ -224,7 +297,7 @@ export function useUserManagement({
     changeUserRole,
     changeUserRoleFilter,
     closeConfirm: () => setConfirmAction(null),
-    closeUserForm: () => setUserFormOpen(false),
+    closeUserForm,
     confirmAction,
     fetchUsers,
     openCreateUser,
@@ -236,6 +309,8 @@ export function useUserManagement({
     submitConfirmAction,
     submitUserForm,
     updateUserForm,
+    toggleUserGrantEnterprise,
+    toggleUserGrantMailbox,
     userEnabledFilter,
     userForm,
     userFormError,
@@ -249,5 +324,9 @@ export function useUserManagement({
     usersData,
     usersError,
     usersLoading,
+    userGrantEnterpriseOptions,
+    userGrantForm,
+    userGrantLoading,
+    userGrantMailboxOptions,
   }
 }

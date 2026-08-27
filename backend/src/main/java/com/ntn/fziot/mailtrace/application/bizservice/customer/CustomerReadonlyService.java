@@ -1,13 +1,15 @@
 package com.ntn.fziot.mailtrace.application.bizservice.customer;
 
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
-import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerVO;
 import com.ntn.fziot.mailtrace.repox.mysql.dto.CustomerReadonlyRow;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.CustomerMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -22,13 +24,15 @@ public class CustomerReadonlyService {
     private static final int CODE_NOT_FOUND = 40401;
 
     private final CustomerMapper customerMapper;
-    private final DataScopeService dataScopeService;
+    private final EnterpriseMapper enterpriseMapper;
+    private final EnterpriseMailboxAccessService enterpriseMailboxAccessService;
     private final PermissionService permissionService;
 
     /**
      * 客户只读分页查询。
      */
     public CustomerPageResponse pageCustomers(CurrentUserPrincipal principal, String keyword,
+                                              Long enterpriseId, Long mailboxId,
                                               Integer page, Integer size) {
         // 1、客户只读页面仅允许管理员和处理人访问。
         permissionService.assertPermission(principal, "customer:read", "无权查看客户");
@@ -37,17 +41,18 @@ public class CustomerReadonlyService {
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
         String normalizedKeyword = normalize(keyword);
-        boolean allAccess = dataScopeService.isAdmin(principal);
-        Set<Long> scopeAssigneeIds = allAccess ? null : dataScopeService.resolveTicketScopeUserIds(principal);
-        if (!allAccess && scopeAssigneeIds.isEmpty()) {
+        Set<Long> readableMailboxIds = enterpriseMailboxAccessService.resolveReadableMailboxIds(principal);
+        if (readableMailboxIds.isEmpty()) {
             return new CustomerPageResponse(List.of(), 0L, currentPage, pageSize, 0L);
         }
-        long total = customerMapper.countReadonlyCustomers(normalizedKeyword, allAccess, scopeAssigneeIds, principal.id());
+        long total = customerMapper.countReadonlyCustomers(
+                normalizedKeyword, enterpriseId, mailboxId, readableMailboxIds);
         long pages = total == 0 ? 0 : (long) Math.ceil((double) total / pageSize);
         long offset = (currentPage - 1) * pageSize;
 
         // 3、查询最近来信、工单数等只读字段。
-        List<CustomerVO> records = customerMapper.selectReadonlyCustomers(normalizedKeyword, offset, pageSize, allAccess, scopeAssigneeIds, principal.id())
+        List<CustomerVO> records = customerMapper.selectReadonlyCustomers(
+                        normalizedKeyword, enterpriseId, mailboxId, offset, pageSize, readableMailboxIds)
                 .stream()
                 .map(this::toVO)
                 .toList();
@@ -59,21 +64,21 @@ public class CustomerReadonlyService {
     /**
      * 按邮箱查询客户只读详情。
      */
-    public CustomerVO getCustomer(CurrentUserPrincipal principal, String email) {
+    public CustomerVO getCustomer(CurrentUserPrincipal principal, Long enterpriseId, String email) {
         // 1、校验权限和邮箱参数。
         permissionService.assertPermission(principal, "customer:read", "无权查看客户");
         String normalizedEmail = normalize(email);
-        if (normalizedEmail.isEmpty()) {
-            throw new BusinessException(CODE_BAD_REQUEST, "客户邮箱不能为空");
+        if (enterpriseId == null || normalizedEmail.isEmpty()) {
+            throw new BusinessException(CODE_BAD_REQUEST, "企业和客户邮箱不能为空");
         }
 
         // 2、按邮箱合并客户档案和历史工单聚合详情。
-        boolean allAccess = dataScopeService.isAdmin(principal);
-        Set<Long> scopeAssigneeIds = allAccess ? null : dataScopeService.resolveTicketScopeUserIds(principal);
-        if (!allAccess && scopeAssigneeIds.isEmpty()) {
+        Set<Long> readableMailboxIds = enterpriseMailboxAccessService.resolveReadableMailboxIds(principal);
+        if (readableMailboxIds.isEmpty()) {
             throw new BusinessException(CODE_NOT_FOUND, "客户不存在");
         }
-        CustomerReadonlyRow row = customerMapper.selectReadonlyCustomerByEmail(normalizedEmail, allAccess, scopeAssigneeIds, principal.id());
+        CustomerReadonlyRow row = customerMapper.selectReadonlyCustomerByEmail(
+                enterpriseId, normalizedEmail, readableMailboxIds);
         if (row == null) {
             throw new BusinessException(CODE_NOT_FOUND, "客户不存在");
         }
@@ -85,6 +90,8 @@ public class CustomerReadonlyService {
     private CustomerVO toVO(CustomerReadonlyRow row) {
         return new CustomerVO(
                 row.getId(),
+                row.getEnterpriseId(),
+                resolveEnterpriseName(row.getEnterpriseId()),
                 row.getEmail(),
                 row.getDisplayName(),
                 row.getLastMailAt(),
@@ -92,6 +99,12 @@ public class CustomerReadonlyService {
                 row.getRemark(),
                 row.getCreatedAt()
         );
+    }
+
+    private String resolveEnterpriseName(Long enterpriseId) {
+        if (enterpriseId == null) return null;
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        return enterprise == null ? null : enterprise.getEnterpriseName();
     }
 
     private long normalizePage(Integer page) {

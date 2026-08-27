@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Schema(description = "分配规则详情")
 public record AssignmentRuleVO(
         @Schema(description = "规则ID") Long id,
+        @Schema(description = "所属规则组ID") Long groupId,
         @Schema(description = "规则名称") String ruleName,
         @Schema(description = "是否启用") Boolean enabled,
         @Schema(description = "匹配优先级") Integer priorityOrder,

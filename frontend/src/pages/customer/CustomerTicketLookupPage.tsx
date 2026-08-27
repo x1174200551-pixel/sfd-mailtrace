@@ -308,9 +308,14 @@ export function CustomerTicketLookupPage({ ticketNo }: CustomerTicketLookupPageP
             <div className="customer-ticket-no">{t('field.ticketNo')}：{detail?.ticketNo || ticketNo}</div>
             <h1>{detail?.subject || t('title.fallback')}</h1>
           </div>
-          <Tag color={statusTone(detail?.status)} className="customer-status-tag">
-            {displayStatusLabel(detail?.status, t)}
-          </Tag>
+          <div className="customer-ticket-hero-actions">
+            <Tag color={statusTone(detail?.status)} className="customer-status-tag">
+              {displayStatusLabel(detail?.status, t)}
+            </Tag>
+            <Button type="primary" icon={<RefreshCw size={16} />} onClick={refresh} disabled={!detail} loading={submitting}>
+              {t('action.refreshProgress')}
+            </Button>
+          </div>
         </section>
 
         <section className="customer-meta-grid">
@@ -419,10 +424,6 @@ export function CustomerTicketLookupPage({ ticketNo }: CustomerTicketLookupPageP
               <h2><Clock3 size={18} /> {t('section.latestProgress')}</h2>
               <p className="customer-latest-progress">{currentProgress || t('latest.empty')}</p>
             </section>
-
-            <Button type="primary" size="large" icon={<RefreshCw size={16} />} block onClick={refresh} disabled={!detail} loading={submitting}>
-              {t('action.refreshProgress')}
-            </Button>
           </aside>
         </div>
       </div>
@@ -457,7 +458,7 @@ export function CustomerTicketLookupPage({ ticketNo }: CustomerTicketLookupPageP
                 value={accessCode}
               />
             </label>
-            {error ? <Alert showIcon type="error" message={error} /> : null}
+            {error ? <Alert showIcon type="error" title={error} /> : null}
             <div className="customer-verify-actions">
               <Button size="large" onClick={closePage}>{t('action.closePage')}</Button>
               <Button type="primary" size="large" loading={submitting} onClick={verify}>

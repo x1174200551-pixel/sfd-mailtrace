@@ -12,6 +12,11 @@ import lombok.Data;
 @Schema(description = "SLA 策略保存请求")
 public class SlaPolicySaveRequest {
 
+    @NotNull(message = "请选择所属企业")
+    @Min(value = 1, message = "企业ID需大于 0")
+    @Schema(description = "所属企业ID")
+    private Long enterpriseId;
+
     @NotBlank(message = "请输入策略名称")
     @Size(max = 64, message = "策略名称不能超过 64 个字符")
     @Schema(description = "策略名称", example = "标准客服 SLA")

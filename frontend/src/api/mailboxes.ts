@@ -1,7 +1,8 @@
 import { requestApi } from '../shared/api/request'
-import type { Mailbox, MailboxConnectionTestResponse, MailboxPageResponse } from '../types/mailbox'
+import type { Mailbox, MailboxConnectionTestResponse, MailboxOption, MailboxPageResponse } from '../types/mailbox'
 
 export type MailboxQuery = {
+  enterpriseId?: number
   keyword?: string
   page: number
   size: number
@@ -9,9 +10,17 @@ export type MailboxQuery = {
 }
 
 export type MailboxPayload = {
+  enterpriseId: number
   autoReplyEnabled: boolean
   autoReplyTemplateId: number | null
+  assignmentNotifyTemplateId: number | null
+  agentReplyTemplateId: number | null
+  slaWarningTemplateId: number | null
+  slaBreachTemplateId: number | null
   defaultAssigneeId: number | null
+  slaPolicyId: number | null
+  assignmentRuleGroupId: number | null
+  assignmentFallbackType: 'NONE' | 'DEFAULT_ASSIGNEE'
   emailAddress: string
   enabled: boolean
   fetchIntervalSec: number
@@ -44,6 +53,10 @@ function toQuery(params: Record<string, string | number | boolean | null | undef
 export const mailboxApi = {
   list(params: MailboxQuery) {
     return requestApi<MailboxPageResponse>(`/api/v1/mailboxes${toQuery(params)}`)
+  },
+
+  options(enterpriseId?: number, operationalOnly = false) {
+    return requestApi<MailboxOption[]>(`/api/v1/mailboxes/options${toQuery({ enterpriseId, operationalOnly })}`)
   },
 
   save(mailboxId: number | null, payload: MailboxPayload) {

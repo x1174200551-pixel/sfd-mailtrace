@@ -9,7 +9,6 @@ import {
   ShieldCheck,
   UserCog,
 } from 'lucide-react'
-import { dataResourceLabel, dataScopeDesc, dataScopeLabel } from '../../constants/data-scopes'
 import type { ManagedRole, PermissionTreeNode, RoleFormState, RoleListResponse } from '../../types/role'
 
 type RoleManagePageProps = {
@@ -29,7 +28,6 @@ type RoleManagePageProps = {
   onSubmitRolePermissions: () => void
   onToggleRoleEnabled: (role: ManagedRole) => void
   onToggleRolePermission: (permissionCode: string, checked: boolean) => void
-  onUpdateRoleScope: (resourceType: string, scopeCode: string) => void
   permissionTree: PermissionTreeNode[]
   permissionTreeLoading: boolean
   roleDraftMode: 'create' | 'edit'
@@ -50,9 +48,6 @@ function collectPermissionNodes(nodes: PermissionTreeNode[]): PermissionTreeNode
   return nodes.flatMap((node) => [node, ...collectPermissionNodes(node.children || [])])
 }
 
-const dataScopeResources = ['TICKET', 'CUSTOMER', 'DASHBOARD']
-const dataScopeOptions = ['SELF', 'DEPT', 'DEPT_AND_CHILDREN', 'ALL']
-
 export function RoleManagePage({
   canCreateRoles,
   canEnableRoles,
@@ -70,7 +65,6 @@ export function RoleManagePage({
   onSubmitRolePermissions,
   onToggleRoleEnabled,
   onToggleRolePermission,
-  onUpdateRoleScope,
   permissionTree,
   permissionTreeLoading,
   roleDraftMode,
@@ -90,6 +84,17 @@ export function RoleManagePage({
   const checkedPermissionSet = new Set(roleForm.permissionCodes)
   const permissionDisabled = selectedRoleReadonly || roleSaving || rolePermissionSaving || !canUpdateRolePermissions
 
+  function isPartiallySelected(node: PermissionTreeNode) {
+    const descendantCodes = collectPermissionNodes(node.children).map((child) => child.permissionCode)
+    if (descendantCodes.length === 0) return false
+    const selectedCount = descendantCodes.filter((code) => checkedPermissionSet.has(code)).length
+    return selectedCount > 0 && selectedCount < descendantCodes.length
+  }
+
+  function bindIndeterminate(input: HTMLInputElement | null, node: PermissionTreeNode) {
+    if (input) input.indeterminate = isPartiallySelected(node)
+  }
+
   function renderPermissionTree(nodes: PermissionTreeNode[]) {
     if (permissionTreeLoading) {
       return <div className="role-permission-loading">权限清单加载中...</div>
@@ -105,6 +110,7 @@ export function RoleManagePage({
               checked={checkedPermissionSet.has(group.permissionCode)}
               disabled={permissionDisabled}
               onChange={(event) => onToggleRolePermission(group.permissionCode, event.target.checked)}
+              ref={(input) => bindIndeterminate(input, group)}
               type="checkbox"
             />
             <strong>{group.permissionName}</strong>
@@ -119,6 +125,7 @@ export function RoleManagePage({
                   checked={checkedPermissionSet.has(child.permissionCode)}
                   disabled={permissionDisabled}
                   onChange={(event) => onToggleRolePermission(child.permissionCode, event.target.checked)}
+                  ref={(input) => bindIndeterminate(input, child)}
                   type="checkbox"
                 />
                 <span>{child.permissionName}</span>
@@ -344,39 +351,10 @@ export function RoleManagePage({
                 {renderPermissionTree(permissionTree)}
               </div>
 
-              <div className="role-section-title">
-                <strong>默认数据范围</strong>
-                <span>配置角色默认可见范围</span>
-              </div>
-              <div className="role-scope-grid">
-                {dataScopeResources.map((resourceType) => {
-                  const selectedScope = roleForm.dataScopes.find((scope) => scope.resourceType === resourceType)?.scopeCode || 'SELF'
-                  return (
-                    <div className="role-scope-card" key={resourceType}>
-                      <strong>{dataResourceLabel(resourceType)}</strong>
-                      <div>
-                        {dataScopeOptions.map((scopeCode) => (
-                          <button
-                            className={selectedScope === scopeCode ? 'active' : ''}
-                            disabled={permissionDisabled}
-                            key={scopeCode}
-                            onClick={() => onUpdateRoleScope(resourceType, scopeCode)}
-                            type="button"
-                          >
-                            {dataScopeLabel(scopeCode)}
-                          </button>
-                        ))}
-                      </div>
-                      <p>{dataScopeDesc(resourceType, selectedScope)}</p>
-                    </div>
-                  )
-                })}
-              </div>
-
               <div className="role-effective-preview">
                 <div><span>可见菜单</span><strong>{roleForm.permissionCodes.filter((code) => code.startsWith('menu:')).length} 项</strong></div>
                 <div><span>操作权限</span><strong>{roleForm.permissionCodes.filter((code) => !code.startsWith('menu:')).length} 项</strong></div>
-                <div><span>数据范围</span><strong>{roleForm.dataScopes.map((scope) => `${dataResourceLabel(scope.resourceType)} ${dataScopeLabel(scope.scopeCode)}`).join('、')}</strong></div>
+                <div><span>数据权限</span><strong>在用户管理按企业 / 邮箱授权</strong></div>
                 <div><span>保存影响</span><strong>{selectedRole?.userCount ?? 0} 个用户</strong></div>
               </div>
 

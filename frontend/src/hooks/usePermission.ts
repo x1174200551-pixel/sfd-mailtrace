@@ -41,8 +41,8 @@ export function usePermission(currentUser: CurrentUser | null) {
 
   const canAccessMenuNode = useCallback(
     (node: PermissionNode) => {
-      if (node.permission) return hasPermission(node.permission)
-      return !node.adminOnly || isAdmin
+      if (node.adminOnly && !isAdmin) return false
+      return !node.permission || hasPermission(node.permission)
     },
     [hasPermission, isAdmin],
   )
@@ -51,15 +51,18 @@ export function usePermission(currentUser: CurrentUser | null) {
     (title: string) => {
       const route = getRouteByTitle(title)
       if (!route) return true
+      if (route.adminOnly && !isAdmin) return false
+      if (route.groupPermission && !hasPermission(route.groupPermission)) return false
       if (route.menuPermission && !hasPermission(route.menuPermission)) return false
       if (route.accessPermissions.length === 0) return true
       return route.accessPermissions.some((permission) => hasPermission(permission))
     },
-    [hasPermission],
+    [hasPermission, isAdmin],
   )
 
   const visibleMenuGroups = useMemo(
     () => menuGroups
+      .filter((group) => canAccessMenuNode(group))
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => canAccessMenuNode(item) && canAccessPage(item.title)),

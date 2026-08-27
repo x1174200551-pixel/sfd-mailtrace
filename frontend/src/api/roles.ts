@@ -1,5 +1,5 @@
 import { requestApi } from '../shared/api/request'
-import type { ManagedRole, PermissionTreeNode, RoleDataScope, RoleListResponse } from '../types/role'
+import type { ManagedRole, PermissionTreeNode, RoleListResponse } from '../types/role'
 
 export type RoleQuery = {
   enabled?: string
@@ -13,7 +13,6 @@ export type RoleBasePayload = {
 }
 
 export type RolePermissionPayload = {
-  dataScopes: RoleDataScope[]
   permissionCodes: string[]
 }
 

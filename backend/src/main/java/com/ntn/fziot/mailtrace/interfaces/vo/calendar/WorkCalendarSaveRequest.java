@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.interfaces.vo.calendar;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -12,6 +13,10 @@ import java.util.List;
 @Data
 @Schema(description = "工作日历保存请求")
 public class WorkCalendarSaveRequest {
+
+    @NotNull(message = "请选择所属企业")
+    @Schema(description = "所属企业ID")
+    private Long enterpriseId;
 
     @NotBlank(message = "请输入日历名称")
     @Size(max = 64, message = "日历名称不能超过 64 个字符")

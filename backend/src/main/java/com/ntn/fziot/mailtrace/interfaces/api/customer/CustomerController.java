@@ -30,9 +30,12 @@ public class CustomerController {
     public BasicResult<CustomerPageResponse> pageCustomers(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long enterpriseId,
+            @RequestParam(required = false) Long mailboxId,
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
-        return BasicResult.ok(customerReadonlyService.pageCustomers(principal, keyword, page, size));
+        return BasicResult.ok(customerReadonlyService.pageCustomers(
+                principal, keyword, enterpriseId, mailboxId, page, size));
     }
 
     @Operation(summary = "客户详情")
@@ -40,7 +43,8 @@ public class CustomerController {
     @RequirePermission(value = "customer:read", message = "无权查看客户")
     public BasicResult<CustomerVO> getCustomer(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
-            @PathVariable String email) {
-        return BasicResult.ok(customerReadonlyService.getCustomer(principal, email));
+            @PathVariable String email,
+            @RequestParam Long enterpriseId) {
+        return BasicResult.ok(customerReadonlyService.getCustomer(principal, enterpriseId, email));
     }
 }

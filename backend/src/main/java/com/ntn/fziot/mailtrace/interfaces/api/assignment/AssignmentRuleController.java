@@ -42,10 +42,12 @@ public class AssignmentRuleController {
     @RequirePermission(value = "assignment_rule:read", message = "无权查看分配规则")
     public BasicResult<AssignmentRuleListResponse> listRules(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long groupId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean enabled,
             @RequestParam(required = false) String matchType) {
-        return BasicResult.ok(assignmentRuleService.listRules(principal, keyword, enabled, matchType));
+        return BasicResult.ok(assignmentRuleService.listRules(
+                principal, groupId, keyword, enabled, matchType));
     }
 
     @Operation(summary = "新建分配规则")

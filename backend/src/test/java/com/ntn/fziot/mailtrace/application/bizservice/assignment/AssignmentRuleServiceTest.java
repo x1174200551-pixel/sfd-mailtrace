@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.assignment;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleEnabledRequest;
@@ -13,8 +14,14 @@ import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleSortReques
 import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleTestRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.assignment.AssignmentRuleVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.AssignmentRuleEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.AssignmentRuleGroupEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.AssignmentRuleMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.AssignmentRuleGroupMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -47,11 +54,19 @@ class AssignmentRuleServiceTest {
     @Mock
     private AssignmentRuleMapper assignmentRuleMapper;
     @Mock
+    private AssignmentRuleGroupMapper assignmentRuleGroupMapper;
+    @Mock
+    private EnterpriseMapper enterpriseMapper;
+    @Mock
+    private MailboxMapper mailboxMapper;
+    @Mock
     private UserMapper userMapper;
     @Mock
     private OperationLogMapper operationLogMapper;
     @Mock
     private PermissionService permissionService;
+    @Mock
+    private EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     @InjectMocks
     private AssignmentRuleService assignmentRuleService;
@@ -74,6 +89,27 @@ class AssignmentRuleServiceTest {
         lenient().when(userMapper.selectById(2L)).thenReturn(agentUser(2L, "验收客服", "AGENT", true));
         lenient().when(userMapper.selectById(3L)).thenReturn(agentUser(3L, "停用客服", "AGENT", false));
         lenient().when(userMapper.selectById(4L)).thenReturn(agentUser(4L, "管理员", "ADMIN", true));
+        lenient().when(assignmentRuleGroupMapper.selectById(10L)).thenReturn(group(10L, 1L, true));
+        lenient().when(enterpriseMapper.selectById(1L)).thenReturn(enterprise(1L, true));
+        lenient().when(mailboxMapper.selectById(11L)).thenReturn(mailbox(11L, 1L, 10L));
+        lenient().when(mailboxMapper.selectList(any())).thenReturn(List.of());
+        lenient().doAnswer(invocation -> {
+            Long userId = invocation.getArgument(0);
+            if (Long.valueOf(3L).equals(userId)) {
+                throw new BusinessException(40001, "处理人不存在或已停用");
+            }
+            if (Long.valueOf(4L).equals(userId)) {
+                throw new BusinessException(40302, "处理人缺少工单回复权限");
+            }
+            return null;
+        }).when(enterpriseMailboxAccessService).assertTicketProcessor(any());
+        lenient().doAnswer(invocation -> {
+            Long userId = invocation.getArgument(0);
+            if (Long.valueOf(3L).equals(userId)) {
+                throw new BusinessException(40001, "处理人不存在或已停用");
+            }
+            return null;
+        }).when(enterpriseMailboxAccessService).assertAssigneeCanAccessMailbox(any(), any());
     }
 
     private void allowAdminAndAgentOperationalPermissions() {
@@ -125,13 +161,11 @@ class AssignmentRuleServiceTest {
 
     @Test
     void createRule_whenDefaultAlreadyExists_shouldReject() {
-        when(assignmentRuleMapper.selectCount(any())).thenReturn(1L);
-
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> assignmentRuleService.createRule(admin, saveRequest(
                         "默认规则", "DEFAULT", null, 2L, 100, true, true)));
 
-        assertTrue(ex.getMessage().contains("默认分配规则已存在"));
+        assertTrue(ex.getMessage().contains("不再支持 DEFAULT"));
     }
 
     @Test
@@ -139,12 +173,12 @@ class AssignmentRuleServiceTest {
         BusinessException disabled = assertThrows(BusinessException.class,
                 () -> assignmentRuleService.createRule(admin, saveRequest(
                         "停用客服", "SUBJECT_KEYWORD", "vip", 3L, 10, true, false)));
-        assertTrue(disabled.getMessage().contains("启用的处理人"));
+        assertTrue(disabled.getMessage().contains("不存在或已停用"));
 
         BusinessException adminTarget = assertThrows(BusinessException.class,
                 () -> assignmentRuleService.createRule(admin, saveRequest(
                         "管理员", "SUBJECT_KEYWORD", "vip", 4L, 10, true, false)));
-        assertTrue(adminTarget.getMessage().contains("启用的处理人"));
+        assertTrue(adminTarget.getMessage().contains("缺少工单回复权限"));
     }
 
     @Test
@@ -207,7 +241,7 @@ class AssignmentRuleServiceTest {
     @Test
     void listRules_whenNotAdmin_shouldReject() {
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> assignmentRuleService.listRules(agent, null, null, null));
+                () -> assignmentRuleService.listRules(agent, null, null, null, null));
 
         assertTrue(ex.getMessage().contains("无权查看分配规则"));
     }
@@ -223,6 +257,7 @@ class AssignmentRuleServiceTest {
                 11L, "support@example.com", "关于 VIP 订单的咨询", "customer@example.com");
 
         assertNotNull(result);
+        assertEquals(10L, result.groupId());
         assertEquals(200L, result.ruleId());
         assertEquals("SUBJECT_KEYWORD", result.matchType());
         assertEquals(2L, result.assigneeId());
@@ -256,7 +291,7 @@ class AssignmentRuleServiceTest {
     }
 
     @Test
-    void matchForTicket_shouldSkipInvalidAssigneeAndFallbackDefault() {
+    void matchForTicket_shouldSkipInvalidAssigneeAndIgnoreLegacyDefault() {
         when(assignmentRuleMapper.selectList(any())).thenReturn(List.of(
                 rule(204L, "停用处理人规则", true, 10, false, "SUBJECT_KEYWORD", "VIP", 3L, true),
                 rule(205L, "默认规则", true, 100, true, "DEFAULT", null, 2L, true)
@@ -265,8 +300,7 @@ class AssignmentRuleServiceTest {
         AssignmentRuleMatchResult result = assignmentRuleService.matchForTicket(
                 11L, "support@example.com", "VIP 咨询", "customer@example.com");
 
-        assertNotNull(result);
-        assertEquals(205L, result.ruleId());
+        assertNull(result);
     }
 
     @Test
@@ -302,6 +336,7 @@ class AssignmentRuleServiceTest {
                                                   Long assigneeId, Integer priorityOrder,
                                                   Boolean notifyEnabled, Boolean defaultRule) {
         AssignmentRuleSaveRequest request = new AssignmentRuleSaveRequest();
+        request.setGroupId(10L);
         request.setRuleName(ruleName);
         request.setMatchType(matchType);
         request.setMatchValue(matchValue);
@@ -317,6 +352,7 @@ class AssignmentRuleServiceTest {
                                       Long assigneeId, Boolean notifyEnabled) {
         AssignmentRuleEntity rule = new AssignmentRuleEntity();
         rule.setId(id);
+        rule.setGroupId(10L);
         rule.setRuleName(ruleName);
         rule.setEnabled(enabled);
         rule.setPriorityOrder(priorityOrder);
@@ -339,6 +375,31 @@ class AssignmentRuleServiceTest {
         user.setRoleCode(roleCode);
         user.setEnabled(enabled);
         return user;
+    }
+
+    private AssignmentRuleGroupEntity group(Long id, Long enterpriseId, boolean enabled) {
+        AssignmentRuleGroupEntity group = new AssignmentRuleGroupEntity();
+        group.setId(id);
+        group.setEnterpriseId(enterpriseId);
+        group.setEnabled(enabled);
+        return group;
+    }
+
+    private EnterpriseEntity enterprise(Long id, boolean enabled) {
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(id);
+        enterprise.setEnabled(enabled);
+        return enterprise;
+    }
+
+    private MailboxEntity mailbox(Long id, Long enterpriseId, Long groupId) {
+        MailboxEntity mailbox = new MailboxEntity();
+        mailbox.setId(id);
+        mailbox.setEnterpriseId(enterpriseId);
+        mailbox.setAssignmentRuleGroupId(groupId);
+        mailbox.setEmailAddress("support@example.com");
+        mailbox.setEnabled(true);
+        return mailbox;
     }
 
     private static void initTableInfo(MybatisConfiguration configuration, String namespace, Class<?> entityClass) {

@@ -16,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -37,9 +38,11 @@ public class NotificationTemplateController {
     @RequirePermission(value = "notification_template:read", message = "无权查看通知模板")
     public BasicResult<NotificationTemplateListResponse> listTemplates(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) String templateType,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Boolean enabled) {
-        return BasicResult.ok(notificationTemplateService.listTemplates(principal, keyword, enabled));
+        return BasicResult.ok(notificationTemplateService.listTemplates(
+                principal, templateType, keyword, enabled));
     }
 
     @Operation(summary = "新建通知模板")
@@ -59,6 +62,16 @@ public class NotificationTemplateController {
             @PathVariable Long id,
             @Valid @RequestBody NotificationTemplateUpdateRequest request) {
         return BasicResult.ok(notificationTemplateService.updateTemplate(principal, id, request));
+    }
+
+    @Operation(summary = "删除通知模板")
+    @DeleteMapping("/{id}")
+    @RequirePermission(value = "notification_template:delete", message = "无权删除通知模板")
+    public BasicResult<Void> deleteTemplate(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id) {
+        notificationTemplateService.deleteTemplate(principal, id);
+        return BasicResult.ok();
     }
 
     @Operation(summary = "通知模板预览")

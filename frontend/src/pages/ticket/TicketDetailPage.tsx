@@ -552,6 +552,23 @@ export function TicketDetailPage({
             </div>
           </section>
 
+          <section className="detail-side-card p5-ticket-snapshot">
+            <header>
+              <div>
+                <strong>建单策略快照</strong>
+                <span>历史工单按建单时配置解释</span>
+              </div>
+            </header>
+            <div className="detail-side-list">
+              <div><span>所属企业</span><strong>{detail.enterpriseName || `企业 #${detail.enterpriseId}`}</strong></div>
+              <div><span>来源邮箱</span><strong>{detail.mailboxName || `邮箱 #${detail.mailboxId}`}</strong></div>
+              <div><span>自动回复模板</span><strong>{detail.autoReplyTemplateId ? `模板 #${detail.autoReplyTemplateId}` : '未配置'}</strong></div>
+              <div><span>SLA 策略</span><strong>{detail.slaPolicyId ? `SLA #${detail.slaPolicyId}` : '未配置'}</strong></div>
+              <div><span>分配规则组</span><strong>{detail.assignmentRuleGroupId ? `规则组 #${detail.assignmentRuleGroupId}` : '未配置'}</strong></div>
+              <div><span>命中规则</span><strong>{detail.assignmentRuleId ? `规则 #${detail.assignmentRuleId}` : '未命中 / 待分配'}</strong></div>
+            </div>
+          </section>
+
           <section className="detail-side-card">
             <header>
               <div>

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardReportVO;
@@ -15,6 +16,7 @@ import com.ntn.fziot.mailtrace.repox.mysql.entity.MailSendLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailFetchLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailSendLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
@@ -28,11 +30,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -51,13 +53,17 @@ class DashboardServiceTest {
     @Mock
     private MailboxMapper mailboxMapper;
     @Mock
+    private EnterpriseMapper enterpriseMapper;
+    @Mock
     private MailFetchLogMapper mailFetchLogMapper;
     @Mock
     private MailSendLogMapper mailSendLogMapper;
     @Mock
     private PermissionService permissionService;
-    @Spy
-    private DataScopeService dataScopeService = new DataScopeService();
+    @Mock
+    private DataScopeService dataScopeService;
+    @Mock
+    private EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     @InjectMocks
     private DashboardService dashboardService;
@@ -72,6 +78,8 @@ class DashboardServiceTest {
     @BeforeEach
     void setUp() {
         allowAdminAndAgentOperationalPermissions();
+        org.mockito.Mockito.lenient().when(enterpriseMailboxAccessService.resolveReadableMailboxIds(any()))
+                .thenReturn(Set.of(11L));
     }
 
     @BeforeAll
@@ -108,16 +116,13 @@ class DashboardServiceTest {
     }
 
     @Test
-    void summary_whenAgent_shouldApplyOwnOrUnassignedScope() {
+    void summary_whenAgent_shouldApplyMailboxScopeToEveryMetric() {
         when(ticketMapper.selectCount(any())).thenReturn(0L);
 
         dashboardService.summary(agent);
 
-        ArgumentCaptor<LambdaQueryWrapper<TicketEntity>> queryCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
-        verify(ticketMapper, org.mockito.Mockito.times(6)).selectCount(queryCaptor.capture());
-        String sqlSegment = queryCaptor.getAllValues().get(0).getSqlSegment();
-        assertTrue(sqlSegment.contains("assignee_id"));
-        assertTrue(sqlSegment.contains("IS NULL"));
+        verify(dataScopeService, org.mockito.Mockito.times(6))
+                .applyTicketScope(any(), org.mockito.ArgumentMatchers.eq(agent));
     }
 
     @Test

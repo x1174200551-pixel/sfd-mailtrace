@@ -8,7 +8,9 @@ import type {
 } from '../types/ticket'
 
 export type TicketListQuery = {
+  enterpriseId?: number
   keyword?: string
+  mailboxId?: number
   page: number
   size: number
   slaBreached?: boolean

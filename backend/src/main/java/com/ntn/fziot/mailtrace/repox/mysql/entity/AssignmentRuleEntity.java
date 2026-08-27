@@ -16,6 +16,8 @@ public class AssignmentRuleEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long groupId;
+
     private String ruleName;
 
     @TableField("is_enabled")

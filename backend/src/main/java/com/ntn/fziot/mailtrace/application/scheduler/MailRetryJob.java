@@ -26,7 +26,10 @@ public class MailRetryJob {
     /**
      * 每 5 分钟扫描一次失败记录，重试未超限的邮件。
      */
-    @Scheduled(fixedDelayString = "${mailtrace.mail.retry-fixed-delay-ms:300000}")
+    @Scheduled(
+            fixedDelayString = "${mailtrace.mail.retry-fixed-delay-ms:300000}",
+            initialDelayString = "${mailtrace.mail.retry-initial-delay-ms:0}"
+    )
     public void retryFailedMails() {
         List<MailSendLogEntity> failedList = mailSendLogMapper.selectFailedForRetry(BATCH_SIZE);
         if (failedList.isEmpty()) {

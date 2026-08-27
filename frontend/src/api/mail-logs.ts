@@ -7,6 +7,7 @@ import type {
 } from '../types/mail-logs'
 
 export type MailFetchLogQuery = {
+  enterpriseId?: string
   mailboxId?: string
   page: number
   size: number
@@ -16,6 +17,7 @@ export type MailFetchLogQuery = {
 }
 
 export type MailSendLogQuery = {
+  enterpriseId?: string
   mailboxId?: string
   page: number
   sendStatus?: string

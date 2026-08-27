@@ -3,9 +3,11 @@ package com.ntn.fziot.mailtrace.application.bizservice.sla;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.HolidayEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.SlaPolicyEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.WorkCalendarEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.HolidayMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.WorkCalendarMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -34,6 +36,8 @@ class SlaDeadlineServiceTest {
     @Mock
     private SlaPolicyMapper slaPolicyMapper;
     @Mock
+    private MailboxMapper mailboxMapper;
+    @Mock
     private WorkCalendarMapper workCalendarMapper;
     @Mock
     private HolidayMapper holidayMapper;
@@ -51,7 +55,8 @@ class SlaDeadlineServiceTest {
 
     @BeforeEach
     void setUp() {
-        lenient().when(slaPolicyMapper.selectOne(any())).thenReturn(policy(20L, 10L, 4, 10));
+        lenient().when(mailboxMapper.selectById(11L)).thenReturn(mailbox(11L, 1L, 20L));
+        lenient().when(slaPolicyMapper.selectById(20L)).thenReturn(policy(20L, 1L, 10L, 4, 10));
         lenient().when(workCalendarMapper.selectById(10L)).thenReturn(calendar(10L));
         lenient().when(holidayMapper.selectList(any())).thenReturn(List.of());
     }
@@ -59,6 +64,7 @@ class SlaDeadlineServiceTest {
     @Test
     void calculateForNewTicket_whenWithinWorkingHours_shouldAddWorkingHoursSameDayAndNextDay() {
         SlaDeadlineResult result = slaDeadlineService.calculateForNewTicket(
+                11L,
                 LocalDateTime.parse("2026-07-27T10:00:00"));
 
         assertEquals(20L, result.policyId());
@@ -68,9 +74,10 @@ class SlaDeadlineServiceTest {
 
     @Test
     void calculateForNewTicket_whenBeforeWorkTime_shouldStartAtWorkStart() {
-        when(slaPolicyMapper.selectOne(any())).thenReturn(policy(20L, 10L, 1, null));
+        when(slaPolicyMapper.selectById(20L)).thenReturn(policy(20L, 1L, 10L, 1, null));
 
         SlaDeadlineResult result = slaDeadlineService.calculateForNewTicket(
+                11L,
                 LocalDateTime.parse("2026-07-27T08:00:00"));
 
         assertEquals(LocalDateTime.parse("2026-07-27T10:00:00"), result.responseDeadline());
@@ -79,10 +86,11 @@ class SlaDeadlineServiceTest {
 
     @Test
     void calculateForNewTicket_whenAfterWorkTimeAndHoliday_shouldSkipToNextWorkingDay() {
-        when(slaPolicyMapper.selectOne(any())).thenReturn(policy(20L, 10L, 2, null));
+        when(slaPolicyMapper.selectById(20L)).thenReturn(policy(20L, 1L, 10L, 2, null));
         when(holidayMapper.selectList(any())).thenReturn(List.of(holiday(10L, "2026-08-03")));
 
         SlaDeadlineResult result = slaDeadlineService.calculateForNewTicket(
+                11L,
                 LocalDateTime.parse("2026-07-31T17:00:00"));
 
         assertEquals(LocalDateTime.parse("2026-08-04T10:00:00"), result.responseDeadline());
@@ -90,9 +98,10 @@ class SlaDeadlineServiceTest {
 
     @Test
     void calculateForNewTicket_whenNoEnabledPolicy_shouldReturnNone() {
-        when(slaPolicyMapper.selectOne(any())).thenReturn(null);
+        when(slaPolicyMapper.selectById(20L)).thenReturn(null);
 
         SlaDeadlineResult result = slaDeadlineService.calculateForNewTicket(
+                11L,
                 LocalDateTime.parse("2026-07-27T10:00:00"));
 
         assertNull(result.policyId());
@@ -105,6 +114,7 @@ class SlaDeadlineServiceTest {
         when(workCalendarMapper.selectById(10L)).thenReturn(null);
 
         SlaDeadlineResult result = slaDeadlineService.calculateForNewTicket(
+                11L,
                 LocalDateTime.parse("2026-07-27T10:00:00"));
 
         assertNull(result.policyId());
@@ -112,9 +122,11 @@ class SlaDeadlineServiceTest {
         assertNull(result.resolveDeadline());
     }
 
-    private SlaPolicyEntity policy(Long id, Long calendarId, Integer responseHours, Integer resolveHours) {
+    private SlaPolicyEntity policy(Long id, Long enterpriseId, Long calendarId,
+                                   Integer responseHours, Integer resolveHours) {
         SlaPolicyEntity policy = new SlaPolicyEntity();
         policy.setId(id);
+        policy.setEnterpriseId(enterpriseId);
         policy.setPolicyName("标准 SLA");
         policy.setEnabled(true);
         policy.setDefaultPolicy(true);
@@ -128,12 +140,22 @@ class SlaDeadlineServiceTest {
     private WorkCalendarEntity calendar(Long id) {
         WorkCalendarEntity calendar = new WorkCalendarEntity();
         calendar.setId(id);
+        calendar.setEnterpriseId(1L);
         calendar.setCalendarName("标准日历");
         calendar.setTimezone("Asia/Shanghai");
         calendar.setWorkdays("1,2,3,4,5");
         calendar.setWorkStartTime(LocalTime.parse("09:00"));
         calendar.setWorkEndTime(LocalTime.parse("18:00"));
         return calendar;
+    }
+
+    private MailboxEntity mailbox(Long id, Long enterpriseId, Long policyId) {
+        MailboxEntity mailbox = new MailboxEntity();
+        mailbox.setId(id);
+        mailbox.setEnterpriseId(enterpriseId);
+        mailbox.setSlaPolicyId(policyId);
+        mailbox.setEnabled(true);
+        return mailbox;
     }
 
     private HolidayEntity holiday(Long calendarId, String holidayDate) {

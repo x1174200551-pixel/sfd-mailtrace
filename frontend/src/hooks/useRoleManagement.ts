@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { roleApi } from '../api/roles'
-import { dataScopeDesc } from '../constants/data-scopes'
 import { emptyRoleForm } from '../constants/roles'
 import type { ManagedRole, PermissionTreeNode, RoleFormState, RoleListResponse } from '../types/role'
 
@@ -10,6 +9,24 @@ type UseRoleManagementParams = {
   canReadRoles: boolean
   handleAuthExpired: (error: unknown) => boolean
   token: string
+}
+
+function collectPermissionCodes(node: PermissionTreeNode): string[] {
+  return [node.permissionCode, ...node.children.flatMap(collectPermissionCodes)]
+}
+
+function findPermissionPath(
+  nodes: PermissionTreeNode[],
+  permissionCode: string,
+  ancestors: PermissionTreeNode[] = [],
+): PermissionTreeNode[] | null {
+  for (const node of nodes) {
+    const path = [...ancestors, node]
+    if (node.permissionCode === permissionCode) return path
+    const childPath = findPermissionPath(node.children, permissionCode, path)
+    if (childPath) return childPath
+  }
+  return null
 }
 
 export function useRoleManagement({
@@ -47,7 +64,7 @@ export function useRoleManagement({
       roleDesc: role.roleDesc || '',
       enabled: role.enabled,
       permissionCodes: role.permissionCodes || [],
-      dataScopes: role.dataScopes?.length ? role.dataScopes : emptyRoleForm.dataScopes,
+      dataScopes: [],
     })
     roleDraftModeRef.current = 'edit'
     selectedRoleIdRef.current = role.id
@@ -124,9 +141,13 @@ export function useRoleManagement({
     selectedRoleIdRef.current = null
     setRoleDraftMode('create')
     setSelectedRoleId(null)
-    setRoleForm(emptyRoleForm)
+    setRoleForm({
+      ...emptyRoleForm,
+      permissionCodes: permissionTree.flatMap(collectPermissionCodes),
+      dataScopes: [],
+    })
     setRolesError('')
-  }, [])
+  }, [permissionTree])
 
   const selectRole = useCallback((role: ManagedRole) => {
     hydrateRoleForm(role)
@@ -140,28 +161,28 @@ export function useRoleManagement({
   const toggleRolePermission = useCallback((permissionCode: string, checked: boolean) => {
     setRoleForm((value) => {
       const next = new Set(value.permissionCodes)
+      const path = findPermissionPath(permissionTree, permissionCode)
+      if (!path) {
+        if (checked) next.add(permissionCode)
+        else next.delete(permissionCode)
+        return { ...value, permissionCodes: Array.from(next) }
+      }
+      const target = path[path.length - 1]
       if (checked) {
-        next.add(permissionCode)
+        path.forEach((node) => next.add(node.permissionCode))
+        collectPermissionCodes(target).forEach((code) => next.add(code))
       } else {
-        next.delete(permissionCode)
+        collectPermissionCodes(target).forEach((code) => next.delete(code))
+        path.slice(0, -1).reverse().forEach((ancestor) => {
+          const descendantSelected = ancestor.children
+            .flatMap(collectPermissionCodes)
+            .some((code) => next.has(code))
+          if (!descendantSelected) next.delete(ancestor.permissionCode)
+        })
       }
       return { ...value, permissionCodes: Array.from(next) }
     })
-  }, [])
-
-  const updateRoleScope = useCallback((resourceType: string, scopeCode: string) => {
-    setRoleForm((value) => ({
-      ...value,
-      dataScopes: ['TICKET', 'CUSTOMER', 'DASHBOARD'].map((resource) => {
-        const nextScope = resource === resourceType ? scopeCode : (value.dataScopes.find((scope) => scope.resourceType === resource)?.scopeCode || 'SELF')
-        return {
-          resourceType: resource,
-          scopeCode: nextScope,
-          scopeDesc: dataScopeDesc(resource, nextScope),
-        }
-      }),
-    }))
-  }, [])
+  }, [permissionTree])
 
   const submitRoleBase = useCallback(async () => {
     if (!token) return
@@ -178,7 +199,6 @@ export function useRoleManagement({
         if (roleForm.permissionCodes.length > 0) {
           saved = await roleApi.updatePermissions(saved.id, {
             permissionCodes: roleForm.permissionCodes,
-            dataScopes: roleForm.dataScopes,
           })
         }
       } else if (selectedRole) {
@@ -211,7 +231,6 @@ export function useRoleManagement({
     try {
       const saved = await roleApi.updatePermissions(selectedRole.id, {
         permissionCodes: roleForm.permissionCodes,
-        dataScopes: roleForm.dataScopes,
       })
       hydrateRoleForm(saved)
       await fetchRoles()
@@ -221,7 +240,7 @@ export function useRoleManagement({
     } finally {
       setRolePermissionSaving(false)
     }
-  }, [fetchRoles, handleAuthExpired, hydrateRoleForm, roleForm.dataScopes, roleForm.permissionCodes, selectedRole, token])
+  }, [fetchRoles, handleAuthExpired, hydrateRoleForm, roleForm.permissionCodes, selectedRole, token])
 
   const toggleRoleEnabled = useCallback(async (role: ManagedRole) => {
     if (!token || role.systemRole || !canEnableRoles) return
@@ -264,6 +283,5 @@ export function useRoleManagement({
     toggleRoleEnabled,
     toggleRolePermission,
     updateRoleForm,
-    updateRoleScope,
   }
 }

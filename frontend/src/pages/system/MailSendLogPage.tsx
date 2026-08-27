@@ -1,16 +1,20 @@
 import { Card, Table, Select, Button, Drawer, Tag, Row, Col, DatePicker, Empty, Typography } from 'antd'
 import { CloseOutlined, ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import type { Mailbox } from '../../types/mailbox'
+import type { MailboxOption } from '../../types/mailbox'
 import type { MailSendLog, MailSendLogPageResponse, MailSendLogStats } from '../../types/mail-logs'
+import type { EnterpriseOption } from '../../types/enterprise'
 
 type MailSendLogPageProps = {
   detail: MailSendLog | null
   error: string
+  enterpriseFilter: string
+  enterprises: EnterpriseOption[]
   loading: boolean
   mailboxFilter: string
-  mailboxes: Mailbox[]
+  mailboxes: MailboxOption[]
   onClearFilters: () => void
+  onEnterpriseFilterChange: (value: string) => void
   onDetailChange: (detail: MailSendLog | null) => void
   onMailboxFilterChange: (value: string) => void
   onPageChange: (page: number, size: number) => void
@@ -39,10 +43,13 @@ const sendTypeLabels: Record<string, string> = {
 export function MailSendLogPage({
   detail,
   error,
+  enterpriseFilter,
+  enterprises,
   loading,
   mailboxFilter,
   mailboxes,
   onClearFilters,
+  onEnterpriseFilterChange,
   onDetailChange,
   onMailboxFilterChange,
   onPageChange,
@@ -105,7 +112,11 @@ export function MailSendLogPage({
           {records && <span style={{ display: 'inline-flex', alignItems: 'center', borderRadius: 999, padding: '4px 10px', background: '#eff6ff', color: '#2563eb', fontSize: 12, fontWeight: 800 }}>共 {records.total} 条</span>}
         </div>
 
-        <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '2fr 1.5fr 1.5fr 3fr auto', gap: 12, alignItems: 'center' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '1.4fr 1.4fr 1.2fr 1.2fr 2.3fr auto', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>企业</span>
+            <Select value={enterpriseFilter} onChange={onEnterpriseFilterChange} style={{ width: '100%' }} options={[{ value: 'ALL', label: '全部企业' }, ...enterprises.map((item) => ({ value: String(item.id), label: item.enterpriseName }))]} />
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>邮箱</span>
             <Select value={mailboxFilter || undefined} onChange={(value) => onMailboxFilterChange(value || '')} placeholder="全部邮箱" allowClear style={{ width: '100%' }} options={mailboxes.map((mailbox) => ({ value: String(mailbox.id), label: mailbox.mailboxName }))} />
@@ -151,10 +162,12 @@ export function MailSendLogPage({
           onRow={(record) => ({ onClick: () => onDetailChange(record), style: { cursor: 'pointer' } })}
           columns={[
             { title: '#', width: 50, render: (_: unknown, __: unknown, index: number) => (page - 1) * pageSize + index + 1 },
+            { title: '企业', dataIndex: 'enterpriseId', width: 100, render: (value: number) => enterprises.find((item) => item.id === value)?.enterpriseName || `#${value}` },
             { title: '发送时间', dataIndex: 'createdAt', render: (value: string) => value?.replace('T', ' ').slice(0, 16) || '-', width: 150 },
             { title: '收件人', dataIndex: 'toAddress', width: 180 },
             { title: '主题', dataIndex: 'subject', ellipsis: true, width: 250 },
             { title: '类型', dataIndex: 'sendType', width: 90, render: (value: string) => sendTypeLabels[value] || value },
+            { title: '模板', dataIndex: 'templateId', width: 110, render: (value: number | null, record) => value ? `${record.templateType || '模板'} #${value}` : '-' },
             { title: '状态', dataIndex: 'sendStatus', width: 80, render: renderSendStatus },
             { title: '重试', dataIndex: 'retryCount', width: 60, render: (value: number, record) => `${value}/${record.maxRetry}` },
             { title: '错误信息', dataIndex: 'errorMessage', ellipsis: true, width: 200, render: (value: string) => value ? <Typography.Text type="danger" style={{ fontSize: 12 }}>{value}</Typography.Text> : '' },

@@ -1,4 +1,4 @@
-import { Alert, Button, Tag, message } from 'antd'
+import { Alert, Button, Select, Tag, message } from 'antd'
 import {
   Activity,
   BarChart3,
@@ -33,18 +33,26 @@ import type {
   DashboardSummary,
   DashboardTodoListResponse,
 } from '../../types/dashboard'
+import type { EnterpriseOption } from '../../types/enterprise'
+import type { MailboxOption } from '../../types/mailbox'
 
 type DashboardPageProps = {
   canOpenTicketList: boolean
   dashboardError: string
+  dashboardEnterpriseFilter: string
+  dashboardEnterpriseOptions: EnterpriseOption[]
   dashboardLoading: boolean
+  dashboardMailboxFilter: string
+  dashboardMailboxOptions: MailboxOption[]
   dashboardReport: DashboardReport | null
   dashboardSummary: DashboardSummary | null
   dashboardTodos: DashboardTodoListResponse | null
   dashboardUpdatedAt: string | null
   hasPermission: (permission: string) => boolean
   onFetchDashboard: () => void
-  onNavigateToTickets: (status?: string, slaBreachedOnly?: boolean) => void
+  onEnterpriseFilterChange: (value: string) => void
+  onMailboxFilterChange: (value: string) => void
+  onNavigateToTickets: (status?: string, slaBreachedOnly?: boolean, enterpriseId?: string, mailboxId?: string) => void
   onOpenTicketDetail: (ticketId: number) => void
   onSetActiveMenu: (menu: string) => void
 }
@@ -82,13 +90,19 @@ const dashboardIconMap = {
 export function DashboardPage({
   canOpenTicketList,
   dashboardError,
+  dashboardEnterpriseFilter,
+  dashboardEnterpriseOptions,
   dashboardLoading,
+  dashboardMailboxFilter,
+  dashboardMailboxOptions,
   dashboardReport,
   dashboardSummary,
   dashboardTodos,
   dashboardUpdatedAt,
   hasPermission,
   onFetchDashboard,
+  onEnterpriseFilterChange,
+  onMailboxFilterChange,
   onNavigateToTickets,
   onOpenTicketDetail,
   onSetActiveMenu,
@@ -101,7 +115,7 @@ export function DashboardPage({
       help: '当前权限范围',
       icon: Layers,
       tone: 'primary',
-      onClick: () => onNavigateToTickets('ALL'),
+      onClick: () => onNavigateToTickets('ALL', false, dashboardEnterpriseFilter, dashboardMailboxFilter),
     },
     {
       key: 'pending',
@@ -110,7 +124,7 @@ export function DashboardPage({
       help: '等待处理人',
       icon: Clock,
       tone: 'warning',
-      onClick: () => onNavigateToTickets('PENDING_ASSIGN'),
+      onClick: () => onNavigateToTickets('PENDING_ASSIGN', false, dashboardEnterpriseFilter, dashboardMailboxFilter),
     },
     {
       key: 'processing',
@@ -119,7 +133,7 @@ export function DashboardPage({
       help: '已进入处理',
       icon: Folder,
       tone: 'info',
-      onClick: () => onNavigateToTickets('PROCESSING'),
+      onClick: () => onNavigateToTickets('PROCESSING', false, dashboardEnterpriseFilter, dashboardMailboxFilter),
     },
     {
       key: 'overdue',
@@ -128,7 +142,7 @@ export function DashboardPage({
       help: '优先处理',
       icon: TriangleAlert,
       tone: 'danger',
-      onClick: () => onNavigateToTickets('ALL', true),
+      onClick: () => onNavigateToTickets('ALL', true, dashboardEnterpriseFilter, dashboardMailboxFilter),
     },
     {
       key: 'waitingCustomer',
@@ -137,7 +151,7 @@ export function DashboardPage({
       help: '等待客户补充',
       icon: MessageCircle,
       tone: 'success',
-      onClick: () => onNavigateToTickets('WAITING_CUSTOMER'),
+      onClick: () => onNavigateToTickets('WAITING_CUSTOMER', false, dashboardEnterpriseFilter, dashboardMailboxFilter),
     },
   ]
   const dashboardTodoRecords = dashboardTodos?.records ?? []
@@ -296,7 +310,7 @@ export function DashboardPage({
       onSetActiveMenu(item.targetMenu)
       return
     }
-    onNavigateToTickets(item.ticketStatus ?? undefined, item.slaBreachedOnly)
+    onNavigateToTickets(item.ticketStatus ?? undefined, item.slaBreachedOnly, dashboardEnterpriseFilter, dashboardMailboxFilter)
   }
 
   return (
@@ -307,6 +321,8 @@ export function DashboardPage({
           <span>聚焦待处理工单、SLA 风险与今日处理状态</span>
         </div>
         <div className="dashboard-top-actions">
+          <Select size="small" value={dashboardEnterpriseFilter} onChange={onEnterpriseFilterChange} options={[{ value: 'ALL', label: '全部企业' }, ...dashboardEnterpriseOptions.map((item) => ({ value: String(item.id), label: item.enterpriseName }))]} style={{ width: 150 }} />
+          <Select size="small" value={dashboardMailboxFilter} onChange={onMailboxFilterChange} options={[{ value: 'ALL', label: '全部邮箱' }, ...dashboardMailboxOptions.map((item) => ({ value: String(item.id), label: item.mailboxName }))]} style={{ width: 150 }} />
           <button type="button" disabled>
             <Clock size={15} />
             {dashboardUpdatedAt ? `统计截至 ${dashboardUpdatedAt}` : '统计截至 -'}
@@ -392,8 +408,8 @@ export function DashboardPage({
                     <span>按风险、效率和邮件链路组织当前处理重点</span>
                   </div>
                   <div>
-                    <button type="button" onClick={() => onNavigateToTickets('PROCESSING')}>处理中</button>
-                    <button className="primary" type="button" onClick={() => onNavigateToTickets('ALL')}>全部工单</button>
+                    <button type="button" onClick={() => onNavigateToTickets('PROCESSING', false, dashboardEnterpriseFilter, dashboardMailboxFilter)}>处理中</button>
+                    <button className="primary" type="button" onClick={() => onNavigateToTickets('ALL', false, dashboardEnterpriseFilter, dashboardMailboxFilter)}>全部工单</button>
                   </div>
                 </header>
 

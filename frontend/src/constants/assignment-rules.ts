@@ -2,6 +2,7 @@ import type { AssignmentRule, AssignmentRuleFormState, AssignmentRuleTestForm } 
 
 export const emptyAssignmentRuleForm: AssignmentRuleFormState = {
   id: null,
+  groupId: '',
   ruleName: '',
   enabled: true,
   priorityOrder: 100,

@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const appBase = env.VITE_APP_BASE || (mode === 'production' ? '/mailtrace/' : '/')
-  const proxyTarget = env.VITE_PROXY_TARGET || 'http://127.0.0.1:8001'
+  const proxyTarget = env.VITE_PROXY_TARGET || 'http://127.0.0.1:8080'
   const apiProxy = {
     '/api': {
       target: proxyTarget,

@@ -52,7 +52,6 @@ export const emptyUserForm: UserFormState = {
   displayName: '',
   email: '',
   roleCode: 'AGENT',
-  roleCodes: ['AGENT'],
   departmentId: null,
   password: '',
   enabled: true,
@@ -63,9 +62,5 @@ export const emptyRoleForm: RoleFormState = {
   roleDesc: '',
   enabled: true,
   permissionCodes: [],
-  dataScopes: [
-    { resourceType: 'TICKET', scopeCode: 'SELF', scopeDesc: '自己负责工单 + 未分配池' },
-    { resourceType: 'CUSTOMER', scopeCode: 'SELF', scopeDesc: '自己可见工单关联客户' },
-    { resourceType: 'DASHBOARD', scopeCode: 'SELF', scopeDesc: '自己负责工单 + 未分配池统计' },
-  ],
+  dataScopes: [],
 }

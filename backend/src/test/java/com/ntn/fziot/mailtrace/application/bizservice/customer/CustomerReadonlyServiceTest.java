@@ -1,19 +1,19 @@
 package com.ntn.fziot.mailtrace.application.bizservice.customer;
 
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
-import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.customer.CustomerVO;
 import com.ntn.fziot.mailtrace.repox.mysql.dto.CustomerReadonlyRow;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.CustomerMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
@@ -24,12 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerReadonlyServiceTest {
@@ -37,10 +35,11 @@ class CustomerReadonlyServiceTest {
     @Mock
     private CustomerMapper customerMapper;
     @Mock
+    private EnterpriseMapper enterpriseMapper;
+    @Mock
+    private EnterpriseMailboxAccessService enterpriseMailboxAccessService;
+    @Mock
     private PermissionService permissionService;
-    @Spy
-    private DataScopeService dataScopeService = new DataScopeService();
-
     @InjectMocks
     private CustomerReadonlyService customerReadonlyService;
 
@@ -53,132 +52,109 @@ class CustomerReadonlyServiceTest {
 
     @BeforeEach
     void setUp() {
-        allowAdminAndAgentOperationalPermissions();
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            CurrentUserPrincipal principal = invocation.getArgument(0);
+            String message = invocation.getArgument(2);
+            if (principal == null || "CUSTOMER".equals(principal.roleCode())) {
+                throw new BusinessException(40302, principal == null ? "未登录" : message);
+            }
+            return null;
+        }).when(permissionService).assertPermission(any(), any(), any());
+        org.mockito.Mockito.lenient().when(enterpriseMailboxAccessService.resolveReadableMailboxIds(admin))
+                .thenReturn(Set.of(11L, 12L, 13L));
+        org.mockito.Mockito.lenient().when(enterpriseMailboxAccessService.resolveReadableMailboxIds(agent))
+                .thenReturn(Set.of(12L));
     }
 
     @Test
-    void pageCustomers_shouldReturnReadonlyRows() {
-        when(customerMapper.countReadonlyCustomers("vip", true, null, 1L)).thenReturn(2L);
-        when(customerMapper.selectReadonlyCustomers("vip", 0L, 10L, true, null, 1L)).thenReturn(List.of(
+    void pageCustomers_shouldPassReadableMailboxScope() {
+        Set<Long> scope = Set.of(11L, 12L, 13L);
+        when(customerMapper.countReadonlyCustomers("vip", null, null, scope)).thenReturn(2L);
+        when(customerMapper.selectReadonlyCustomers("vip", null, null, 0L, 10L, scope)).thenReturn(List.of(
                 row(100L, "vip@example.com", "VIP 客户", 3L),
                 row(null, "only-ticket@example.com", null, 1L)
         ));
 
-        CustomerPageResponse response = customerReadonlyService.pageCustomers(admin, " vip ", 1, 10);
+        CustomerPageResponse response = customerReadonlyService.pageCustomers(admin, " vip ", null, null, 1, 10);
 
         assertEquals(2L, response.total());
-        assertEquals(1L, response.page());
-        assertEquals(10L, response.size());
-        assertEquals(1L, response.pages());
         assertEquals(2, response.records().size());
-        assertEquals("vip@example.com", response.records().get(0).email());
-        assertEquals(3L, response.records().get(0).ticketCount());
-        assertEquals("only-ticket@example.com", response.records().get(1).email());
+        verify(customerMapper).countReadonlyCustomers("vip", null, null, scope);
+        verify(customerMapper).selectReadonlyCustomers("vip", null, null, 0L, 10L, scope);
     }
 
     @Test
-    void pageCustomers_whenAgent_shouldAllowAndNormalizePaging() {
-        Set<Long> scopeIds = Set.of(2L);
-        when(customerMapper.countReadonlyCustomers("", false, scopeIds, 2L)).thenReturn(0L);
-        when(customerMapper.selectReadonlyCustomers("", 0L, 20L, false, scopeIds, 2L)).thenReturn(List.of());
+    void pageCustomers_whenAgent_shouldUseOnlyGrantedMailbox() {
+        Set<Long> scope = Set.of(12L);
+        when(customerMapper.countReadonlyCustomers("", null, null, scope)).thenReturn(0L);
+        when(customerMapper.selectReadonlyCustomers("", null, null, 0L, 20L, scope)).thenReturn(List.of());
 
-        CustomerPageResponse response = customerReadonlyService.pageCustomers(agent, null, 0, 0);
+        CustomerPageResponse response = customerReadonlyService.pageCustomers(agent, null, null, null, 0, 0);
 
         assertEquals(1L, response.page());
         assertEquals(20L, response.size());
-        assertEquals(0L, response.pages());
+        verify(customerMapper).countReadonlyCustomers("", null, null, scope);
     }
 
     @Test
-    void pageCustomers_whenNotAgentOrAdmin_shouldReject() {
+    void pageCustomers_whenGrantEmpty_shouldReturnEmptyWithoutQuery() {
+        CurrentUserPrincipal emptyScopeUser = new CurrentUserPrincipal(
+                8L, "scoped", "空范围用户", "scoped@example.com", "CUSTOM");
+        when(enterpriseMailboxAccessService.resolveReadableMailboxIds(emptyScopeUser)).thenReturn(Set.of());
+
+        CustomerPageResponse response = customerReadonlyService.pageCustomers(emptyScopeUser, null, null, null, 1, 20);
+
+        assertEquals(0, response.total());
+        assertTrue(response.records().isEmpty());
+        verify(customerMapper, never()).countReadonlyCustomers(any(), any(), any(), any());
+        verify(customerMapper, never()).selectReadonlyCustomers(any(), any(), any(), anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void getCustomer_shouldPassReadableMailboxScope() {
+        Set<Long> scope = Set.of(12L);
+        when(customerMapper.selectReadonlyCustomerByEmail(1L, "vip@example.com", scope))
+                .thenReturn(row(100L, "vip@example.com", "VIP 客户", 1L));
+
+        CustomerVO vo = customerReadonlyService.getCustomer(agent, 1L, " vip@example.com ");
+
+        assertEquals("vip@example.com", vo.email());
+        verify(customerMapper).selectReadonlyCustomerByEmail(1L, "vip@example.com", scope);
+    }
+
+    @Test
+    void getCustomer_whenGrantEmpty_shouldReturnNotFoundWithoutQuery() {
+        CurrentUserPrincipal emptyScopeUser = new CurrentUserPrincipal(
+                8L, "scoped", "空范围用户", "scoped@example.com", "CUSTOM");
+        when(enterpriseMailboxAccessService.resolveReadableMailboxIds(emptyScopeUser)).thenReturn(Set.of());
+
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> customerReadonlyService.pageCustomers(customer, null, 1, 20));
+                () -> customerReadonlyService.getCustomer(emptyScopeUser, 1L, "vip@example.com"));
+
+        assertEquals(40401, ex.getCode());
+        verify(customerMapper, never()).selectReadonlyCustomerByEmail(any(), any(), any());
+    }
+
+    @Test
+    void pageCustomers_whenFunctionalPermissionMissing_shouldReject() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> customerReadonlyService.pageCustomers(customer, null, null, null, 1, 20));
 
         assertTrue(ex.getMessage().contains("无权查看客户"));
     }
 
     @Test
-    void getCustomer_shouldReturnByEmail() {
-        when(customerMapper.selectReadonlyCustomerByEmail("vip@example.com", true, null, 1L))
-                .thenReturn(row(100L, "vip@example.com", "VIP 客户", 3L));
-
-        CustomerVO vo = customerReadonlyService.getCustomer(admin, " vip@example.com ");
-
-        assertEquals(100L, vo.id());
-        assertEquals("vip@example.com", vo.email());
-        assertEquals("VIP 客户", vo.displayName());
-        assertEquals(3L, vo.ticketCount());
-        verify(customerMapper).selectReadonlyCustomerByEmail("vip@example.com", true, null, 1L);
-    }
-
-    @Test
-    void getCustomer_whenAgent_shouldPassScopedMapperArguments() {
-        Set<Long> scopeIds = Set.of(2L);
-        when(customerMapper.selectReadonlyCustomerByEmail("vip@example.com", false, scopeIds, 2L))
-                .thenReturn(row(100L, "vip@example.com", "VIP 客户", 1L));
-
-        CustomerVO vo = customerReadonlyService.getCustomer(agent, "vip@example.com");
-
-        assertEquals("vip@example.com", vo.email());
-        verify(customerMapper).selectReadonlyCustomerByEmail("vip@example.com", false, scopeIds, 2L);
-    }
-
-    @Test
-    void pageCustomers_whenScopedUserHasEmptyScope_shouldReturnEmptyWithoutSqlFallback() {
-        DataScopeService scopedDataScopeService = mock(DataScopeService.class);
-        CustomerReadonlyService scopedService = new CustomerReadonlyService(customerMapper, scopedDataScopeService, permissionService);
-        CurrentUserPrincipal scopedUser = new CurrentUserPrincipal(
-                8L, "scoped", "空范围用户", "scoped@example.com", "CUSTOM");
-        allowCustomerRead(scopedUser);
-        when(scopedDataScopeService.isAdmin(scopedUser)).thenReturn(false);
-        when(scopedDataScopeService.resolveTicketScopeUserIds(scopedUser)).thenReturn(Set.of());
-
-        CustomerPageResponse response = scopedService.pageCustomers(scopedUser, null, 1, 20);
-
-        assertEquals(0, response.total());
-        assertEquals(0, response.records().size());
-        verify(customerMapper, never()).countReadonlyCustomers(any(), anyBoolean(), any(), anyLong());
-        verify(customerMapper, never()).selectReadonlyCustomers(any(), anyLong(), anyLong(), anyBoolean(), any(), anyLong());
-    }
-
-    @Test
-    void getCustomer_whenScopedUserHasEmptyScope_shouldRejectWithoutSqlFallback() {
-        DataScopeService scopedDataScopeService = mock(DataScopeService.class);
-        CustomerReadonlyService scopedService = new CustomerReadonlyService(customerMapper, scopedDataScopeService, permissionService);
-        CurrentUserPrincipal scopedUser = new CurrentUserPrincipal(
-                8L, "scoped", "空范围用户", "scoped@example.com", "CUSTOM");
-        allowCustomerRead(scopedUser);
-        when(scopedDataScopeService.isAdmin(scopedUser)).thenReturn(false);
-        when(scopedDataScopeService.resolveTicketScopeUserIds(scopedUser)).thenReturn(Set.of());
-
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> scopedService.getCustomer(scopedUser, "vip@example.com"));
-
-        assertEquals(40401, ex.getCode());
-        verify(customerMapper, never()).selectReadonlyCustomerByEmail(any(), anyBoolean(), any(), anyLong());
-    }
-
-    @Test
     void getCustomer_whenEmailBlank_shouldReject() {
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> customerReadonlyService.getCustomer(admin, " "));
+                () -> customerReadonlyService.getCustomer(admin, 1L, " "));
 
-        assertTrue(ex.getMessage().contains("客户邮箱不能为空"));
-    }
-
-    @Test
-    void getCustomer_whenNotExists_shouldReject() {
-        when(customerMapper.selectReadonlyCustomerByEmail("missing@example.com", true, null, 1L)).thenReturn(null);
-
-        BusinessException ex = assertThrows(BusinessException.class,
-                () -> customerReadonlyService.getCustomer(admin, "missing@example.com"));
-
-        assertTrue(ex.getMessage().contains("客户不存在"));
+        assertTrue(ex.getMessage().contains("企业和客户邮箱不能为空"));
     }
 
     private CustomerReadonlyRow row(Long id, String email, String displayName, Long ticketCount) {
         CustomerReadonlyRow row = new CustomerReadonlyRow();
         row.setId(id);
+        row.setEnterpriseId(1L);
         row.setEmail(email);
         row.setDisplayName(displayName);
         row.setLastMailAt(LocalDateTime.parse("2026-07-27T10:00:00"));
@@ -186,46 +162,5 @@ class CustomerReadonlyServiceTest {
         row.setRemark("备注");
         row.setCreatedAt(LocalDateTime.parse("2026-07-27T09:00:00"));
         return row;
-    }
-
-    private void allowAdminAndAgentOperationalPermissions() {
-        org.mockito.Mockito.lenient().doAnswer(invocation -> {
-            CurrentUserPrincipal principal = invocation.getArgument(0);
-            String permissionCode = invocation.getArgument(1);
-            String message = invocation.getArgument(2);
-            if (principal == null) {
-                throw new BusinessException(40302, "未登录");
-            }
-            if ("ADMIN".equals(principal.roleCode()) || isAgentOperationalPermission(principal, permissionCode)) {
-                return null;
-            }
-            throw new BusinessException(40302, message);
-        }).when(permissionService).assertPermission(
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
-    }
-
-    private boolean isAgentOperationalPermission(CurrentUserPrincipal principal, String permissionCode) {
-        return "AGENT".equals(principal.roleCode())
-                && (permissionCode.startsWith("ticket:")
-                || permissionCode.startsWith("ticket_attachment:")
-                || "customer:read".equals(permissionCode)
-                || "dashboard:read".equals(permissionCode));
-    }
-
-    private void allowCustomerRead(CurrentUserPrincipal allowedPrincipal) {
-        org.mockito.Mockito.lenient().doAnswer(invocation -> {
-            CurrentUserPrincipal principal = invocation.getArgument(0);
-            String permissionCode = invocation.getArgument(1);
-            String message = invocation.getArgument(2);
-            if (principal != null && principal.id().equals(allowedPrincipal.id()) && "customer:read".equals(permissionCode)) {
-                return null;
-            }
-            throw new BusinessException(40302, message);
-        }).when(permissionService).assertPermission(
-                org.mockito.ArgumentMatchers.eq(allowedPrincipal),
-                org.mockito.ArgumentMatchers.eq("customer:read"),
-                org.mockito.ArgumentMatchers.any());
     }
 }

@@ -20,7 +20,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
@@ -33,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -47,8 +47,8 @@ class TicketAttachmentServiceTest {
     private FileStorageService fileStorageService;
     @Mock
     private PermissionService permissionService;
-    @Spy
-    private DataScopeService dataScopeService = new DataScopeService();
+    @Mock
+    private DataScopeService dataScopeService;
 
     @InjectMocks
     private TicketAttachmentService attachmentService;
@@ -103,7 +103,10 @@ class TicketAttachmentServiceTest {
 
     @Test
     void delete_whenAgentDoesNotOwnTicket_shouldRejectBeforeDeletingStorage() {
-        when(ticketMapper.selectById(101L)).thenReturn(ticket(101L, 3L));
+        TicketEntity ticket = ticket(101L, 3L);
+        when(ticketMapper.selectById(101L)).thenReturn(ticket);
+        doThrow(new BusinessException(40302, "无权操作该工单"))
+                .when(dataScopeService).assertTicketOperable(agent, ticket);
 
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> attachmentService.delete(101L, 201L, agent));

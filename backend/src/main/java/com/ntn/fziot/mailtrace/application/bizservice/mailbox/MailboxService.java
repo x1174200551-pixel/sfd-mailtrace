@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapStoreSupport;
@@ -11,15 +12,26 @@ import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxEnabledRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxOptionVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxSummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxVO;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.AssignmentRuleGroupEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailFetchLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.SlaPolicyEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.AssignmentRuleGroupMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailFetchLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import jakarta.mail.Folder;
 import jakarta.mail.Session;
@@ -30,8 +42,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -47,26 +62,41 @@ public class MailboxService {
     private static final String TEST_ALL = "ALL";
     private static final String TEST_IMAP = "IMAP";
     private static final String TEST_SMTP = "SMTP";
+    private static final String FALLBACK_NONE = "NONE";
+    private static final String FALLBACK_DEFAULT_ASSIGNEE = "DEFAULT_ASSIGNEE";
+    private static final String TEMPLATE_AUTO_REPLY = "AUTO_REPLY";
+    private static final String TEMPLATE_ASSIGN_NOTIFY = "ASSIGN_NOTIFY";
+    private static final String TEMPLATE_AGENT_REPLY = "AGENT_REPLY";
+    private static final String TEMPLATE_SLA_WARNING = "SLA_WARNING";
+    private static final String TEMPLATE_SLA_BREACH = "SLA_BREACH";
 
     private final MailboxMapper mailboxMapper;
+    private final MailFetchLogMapper mailFetchLogMapper;
+    private final EnterpriseMapper enterpriseMapper;
+    private final NotificationTemplateMapper notificationTemplateMapper;
+    private final SlaPolicyMapper slaPolicyMapper;
+    private final AssignmentRuleGroupMapper assignmentRuleGroupMapper;
     private final UserMapper userMapper;
     private final OperationLogMapper operationLogMapper;
     private final MailPasswordCipher mailPasswordCipher;
     private final PermissionService permissionService;
+    private final EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     /**
      * 分页查询邮箱配置列表。
      */
-    public MailboxPageResponse pageMailboxes(CurrentUserPrincipal principal, String keyword, String status,
-                                             Boolean enabled, Integer page, Integer size) {
+    public MailboxPageResponse pageMailboxes(CurrentUserPrincipal principal, Long enterpriseId, String keyword,
+                                             String status, Boolean enabled, Integer page, Integer size) {
         // 1、校验当前用户具备邮箱配置页面入口或查看权限
         assertMailboxReadable(principal);
         // 2、规范化分页参数并按关键字、启用状态、连接状态构建查询条件
         long currentPage = normalizePage(page);
         long pageSize = normalizeSize(size);
-        LambdaQueryWrapper<MailboxEntity> wrapper = buildQuery(keyword, status, enabled)
+        Set<Long> readableMailboxIds = enterpriseMailboxAccessService.resolveReadableMailboxIds(principal);
+        LambdaQueryWrapper<MailboxEntity> wrapper = buildQuery(enterpriseId, keyword, status, enabled)
                 .orderByDesc(MailboxEntity::getUpdatedAt)
                 .orderByDesc(MailboxEntity::getId);
+        applyMailboxScope(wrapper, readableMailboxIds);
         // 3、执行分页查询并转换成页面可用 VO
         Page<MailboxEntity> result = mailboxMapper.selectPage(Page.of(currentPage, pageSize), wrapper);
         // 4、汇总邮箱统计摘要并返回列表响应
@@ -76,8 +106,29 @@ public class MailboxService {
                 result.getCurrent(),
                 result.getSize(),
                 result.getPages(),
-                buildSummary()
+                buildSummary(readableMailboxIds)
         );
+    }
+
+    public List<MailboxOptionVO> listVisibleOptions(CurrentUserPrincipal principal, Long enterpriseId,
+                                                     Boolean operationalOnly) {
+        Set<Long> mailboxIds = Boolean.TRUE.equals(operationalOnly)
+                ? enterpriseMailboxAccessService.resolveOperationalMailboxIds(principal)
+                : enterpriseMailboxAccessService.resolveReadableMailboxIds(principal);
+        if (mailboxIds.isEmpty()) {
+            return List.of();
+        }
+        LambdaQueryWrapper<MailboxEntity> wrapper = new LambdaQueryWrapper<MailboxEntity>()
+                .in(MailboxEntity::getId, mailboxIds)
+                .orderByAsc(MailboxEntity::getMailboxName)
+                .orderByAsc(MailboxEntity::getId);
+        if (enterpriseId != null) {
+            wrapper.eq(MailboxEntity::getEnterpriseId, enterpriseId);
+        }
+        return mailboxMapper.selectList(wrapper).stream()
+                .map(mailbox -> new MailboxOptionVO(mailbox.getId(), mailbox.getEnterpriseId(),
+                        mailbox.getMailboxName(), mailbox.getEmailAddress(), mailbox.getEnabled()))
+                .toList();
     }
 
     /**
@@ -90,7 +141,7 @@ public class MailboxService {
         // 2、校验邮箱地址唯一性和默认处理人合法性
         String emailAddress = normalizeLower(request.getEmailAddress());
         ensureEmailUnique(emailAddress, null);
-        assertAssigneeExists(request.getDefaultAssigneeId());
+        validateMailboxRelations(principal, request);
         // 3、校验新建时必须填写 IMAP/SMTP 密码或授权码
         assertCreatePasswordPresent(request);
         // 4、填充邮箱基础信息、IMAP/SMTP 配置，并加密保存密码或授权码
@@ -101,6 +152,7 @@ public class MailboxService {
         mailbox.setCreatedBy(principal.account());
         mailbox.setUpdatedBy(principal.account());
         mailboxMapper.insert(mailbox);
+        assertDefaultAssigneeCanAccessMailbox(request.getDefaultAssigneeId(), mailbox.getId());
         // 5、写入操作日志并返回新建后的邮箱详情
         recordLog(principal, "CREATE", mailbox.getId(), "新建邮箱配置：" + mailbox.getEmailAddress());
         return toVO(mailboxMapper.selectById(mailbox.getId()));
@@ -115,9 +167,10 @@ public class MailboxService {
         permissionService.assertPermission(principal, "mailbox:update", "无权编辑邮箱配置");
         // 2、查询目标邮箱并校验邮箱地址唯一性
         MailboxEntity existing = requireMailbox(id);
+        enterpriseMailboxAccessService.assertMailboxConfigurable(principal, id);
         String emailAddress = normalizeLower(request.getEmailAddress());
         ensureEmailUnique(emailAddress, id);
-        assertAssigneeExists(request.getDefaultAssigneeId());
+        validateMailboxRelations(principal, request);
         // 3、更新基础信息、IMAP/SMTP 配置；未填写密码时保留原密文
         MailboxEntity next = new MailboxEntity();
         next.setId(id);
@@ -126,6 +179,7 @@ public class MailboxService {
         fillMailbox(next, request, principal.account(), false);
         next.setEmailAddress(emailAddress);
         mailboxMapper.updateById(next);
+        assertDefaultAssigneeCanAccessMailbox(request.getDefaultAssigneeId(), id);
         // 4、写入操作日志并返回最新邮箱详情
         recordLog(principal, "UPDATE", id, "编辑邮箱配置：" + emailAddress);
         return toVO(mailboxMapper.selectById(id));
@@ -140,6 +194,7 @@ public class MailboxService {
         permissionService.assertPermission(principal, "mailbox:enable", "无权启停邮箱配置");
         // 2、查询目标邮箱是否存在
         MailboxEntity existing = requireMailbox(id);
+        enterpriseMailboxAccessService.assertMailboxConfigurable(principal, id);
         // 3、更新启用状态和更新人
         mailboxMapper.update(null, new LambdaUpdateWrapper<MailboxEntity>()
                 .eq(MailboxEntity::getId, id)
@@ -160,6 +215,7 @@ public class MailboxService {
         permissionService.assertPermission(principal, "mailbox:delete", "无权删除邮箱配置");
         // 2、查询目标邮箱是否存在
         MailboxEntity existing = requireMailbox(id);
+        enterpriseMailboxAccessService.assertMailboxConfigurable(principal, id);
         // 3、执行逻辑删除，保留历史引用数据
         mailboxMapper.deleteById(id);
         // 4、写入删除操作日志
@@ -176,6 +232,7 @@ public class MailboxService {
         permissionService.assertPermission(principal, "mailbox:test_connection", "无权测试邮箱连接");
         // 2、读取已保存邮箱并解密 IMAP/SMTP 密码
         MailboxEntity mailbox = requireMailbox(id);
+        enterpriseMailboxAccessService.assertMailboxConfigurable(principal, id);
         log.info("开始已保存邮箱连接测试 mailboxId={} email={} testType={} operator={}",
                 id, mailbox.getEmailAddress(), testType, principal.account());
         // 3、按测试类型分别执行 IMAP 和 SMTP 连接测试
@@ -222,10 +279,14 @@ public class MailboxService {
         return response;
     }
 
-    private LambdaQueryWrapper<MailboxEntity> buildQuery(String keyword, String status, Boolean enabled) {
+    private LambdaQueryWrapper<MailboxEntity> buildQuery(Long enterpriseId, String keyword, String status,
+                                                          Boolean enabled) {
         String normalizedKeyword = normalize(keyword);
         String normalizedStatus = normalize(status).toUpperCase();
         LambdaQueryWrapper<MailboxEntity> wrapper = new LambdaQueryWrapper<>();
+        if (enterpriseId != null) {
+            wrapper.eq(MailboxEntity::getEnterpriseId, enterpriseId);
+        }
         if (!normalizedKeyword.isEmpty()) {
             wrapper.and(query -> query
                     .like(MailboxEntity::getMailboxName, normalizedKeyword)
@@ -249,26 +310,56 @@ public class MailboxService {
     }
 
     private void assertMailboxReadable(CurrentUserPrincipal principal) {
-        if (principal == null) {
-            throw new BusinessException(40302, "未登录");
-        }
-        if (permissionService.hasPermission(principal, "mailbox:read")
-                || permissionService.hasPermission(principal, "menu:mailboxes")) {
-            return;
-        }
-        throw new BusinessException(40302, "无权查看邮箱配置");
+        permissionService.assertPermission(principal, "mailbox:read", "无权查看邮箱配置");
     }
 
-    private MailboxSummaryVO buildSummary() {
-        long total = mailboxMapper.selectCount(new LambdaQueryWrapper<>());
-        long enabled = mailboxMapper.selectCount(new LambdaQueryWrapper<MailboxEntity>().eq(MailboxEntity::getEnabled, true));
-        long ok = mailboxMapper.selectCount(new LambdaQueryWrapper<MailboxEntity>().eq(MailboxEntity::getConnectionStatus, STATUS_OK));
-        long error = mailboxMapper.selectCount(new LambdaQueryWrapper<MailboxEntity>().eq(MailboxEntity::getConnectionStatus, STATUS_ERROR));
-        long unknown = mailboxMapper.selectCount(new LambdaQueryWrapper<MailboxEntity>().eq(MailboxEntity::getConnectionStatus, STATUS_UNKNOWN));
-        return new MailboxSummaryVO(total, enabled, total - enabled, ok, error, unknown);
+    private MailboxSummaryVO buildSummary(Set<Long> readableMailboxIds) {
+        if (readableMailboxIds.isEmpty()) {
+            return new MailboxSummaryVO(0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        long total = mailboxMapper.selectCount(scopedMailboxQuery(readableMailboxIds));
+        long enabled = mailboxMapper.selectCount(scopedMailboxQuery(readableMailboxIds)
+                .eq(MailboxEntity::getEnabled, true));
+        long ok = mailboxMapper.selectCount(scopedMailboxQuery(readableMailboxIds)
+                .eq(MailboxEntity::getConnectionStatus, STATUS_OK));
+        long error = mailboxMapper.selectCount(scopedMailboxQuery(readableMailboxIds)
+                .eq(MailboxEntity::getConnectionStatus, STATUS_ERROR));
+        long unknown = mailboxMapper.selectCount(scopedMailboxQuery(readableMailboxIds)
+                .eq(MailboxEntity::getConnectionStatus, STATUS_UNKNOWN));
+        LocalDate today = LocalDate.now();
+        List<MailFetchLogEntity> todayFetchLogs = mailFetchLogMapper.selectList(
+                new LambdaQueryWrapper<MailFetchLogEntity>()
+                        .in(MailFetchLogEntity::getMailboxId, readableMailboxIds)
+                        .ge(MailFetchLogEntity::getStartedAt, today.atStartOfDay())
+                        .lt(MailFetchLogEntity::getStartedAt, today.plusDays(1).atStartOfDay()));
+        long todayReceivedMailCount = todayFetchLogs.stream()
+                .mapToLong(log -> safeCount(log.getFetchedCount()))
+                .sum();
+        long todayCreatedTicketCount = todayFetchLogs.stream()
+                .mapToLong(log -> safeCount(log.getCreatedTicketCount()))
+                .sum();
+        return new MailboxSummaryVO(total, enabled, total - enabled, ok, error, unknown,
+                todayReceivedMailCount, todayCreatedTicketCount);
+    }
+
+    private long safeCount(Integer value) {
+        return value == null ? 0L : Math.max(0, value);
+    }
+
+    private LambdaQueryWrapper<MailboxEntity> scopedMailboxQuery(Set<Long> mailboxIds) {
+        return new LambdaQueryWrapper<MailboxEntity>().in(MailboxEntity::getId, mailboxIds);
+    }
+
+    private void applyMailboxScope(LambdaQueryWrapper<MailboxEntity> wrapper, Set<Long> mailboxIds) {
+        if (mailboxIds.isEmpty()) {
+            wrapper.apply("1 = 0");
+            return;
+        }
+        wrapper.in(MailboxEntity::getId, mailboxIds);
     }
 
     private void fillMailbox(MailboxEntity mailbox, MailboxSaveRequest request, String operator, boolean create) {
+        mailbox.setEnterpriseId(request.getEnterpriseId());
         mailbox.setMailboxName(normalize(request.getMailboxName()));
         mailbox.setEnabled(request.getEnabled() == null || request.getEnabled());
         mailbox.setDefaultAssigneeId(request.getDefaultAssigneeId());
@@ -285,6 +376,13 @@ public class MailboxService {
         mailbox.setSmtpFromName(normalizeNullable(request.getSmtpFromName()));
         mailbox.setAutoReplyEnabled(request.getAutoReplyEnabled() == null || request.getAutoReplyEnabled());
         mailbox.setAutoReplyTemplateId(request.getAutoReplyTemplateId());
+        mailbox.setAssignmentNotifyTemplateId(request.getAssignmentNotifyTemplateId());
+        mailbox.setAgentReplyTemplateId(request.getAgentReplyTemplateId());
+        mailbox.setSlaWarningTemplateId(request.getSlaWarningTemplateId());
+        mailbox.setSlaBreachTemplateId(request.getSlaBreachTemplateId());
+        mailbox.setSlaPolicyId(request.getSlaPolicyId());
+        mailbox.setAssignmentRuleGroupId(request.getAssignmentRuleGroupId());
+        mailbox.setAssignmentFallbackType(normalizeFallbackType(request.getAssignmentFallbackType()));
         mailbox.setUpdatedBy(operator);
         if (create || !normalize(request.getImapPassword()).isEmpty()) {
             mailbox.setImapPasswordEnc(mailPasswordCipher.encrypt(request.getImapPassword()));
@@ -465,13 +563,87 @@ public class MailboxService {
         }
     }
 
-    private void assertAssigneeExists(Long assigneeId) {
-        if (assigneeId == null) {
+    private void validateMailboxRelations(CurrentUserPrincipal principal, MailboxSaveRequest request) {
+        Long enterpriseId = request.getEnterpriseId();
+        EnterpriseEntity enterprise = enterpriseId == null ? null : enterpriseMapper.selectById(enterpriseId);
+        if (enterprise == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "所属企业不存在");
+        }
+        if (!Boolean.TRUE.equals(enterprise.getEnabled())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "所属企业已停用，不能用于邮箱配置");
+        }
+        enterpriseMailboxAccessService.assertEnterpriseVisible(principal, enterpriseId);
+        if (Boolean.TRUE.equals(request.getAutoReplyEnabled()) && request.getAutoReplyTemplateId() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "启用自动回复前必须选择自动回复模板");
+        }
+        if (request.getAssignmentNotifyTemplateId() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "请选择分配通知模板");
+        }
+        if (request.getAgentReplyTemplateId() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "请选择处理人回复模板");
+        }
+        if (request.getSlaPolicyId() != null
+                && (request.getSlaWarningTemplateId() == null || request.getSlaBreachTemplateId() == null)) {
+            throw new BusinessException(CODE_BAD_REQUEST, "绑定 SLA 策略时必须同时选择预警和超时模板");
+        }
+        assertTemplate(request.getAutoReplyTemplateId(), TEMPLATE_AUTO_REPLY, "自动回复模板");
+        assertTemplate(request.getAssignmentNotifyTemplateId(), TEMPLATE_ASSIGN_NOTIFY, "分配通知模板");
+        assertTemplate(request.getAgentReplyTemplateId(), TEMPLATE_AGENT_REPLY, "处理人回复模板");
+        assertTemplate(request.getSlaWarningTemplateId(), TEMPLATE_SLA_WARNING, "SLA 预警模板");
+        assertTemplate(request.getSlaBreachTemplateId(), TEMPLATE_SLA_BREACH, "SLA 超时模板");
+        assertSameEnterpriseSlaPolicy(request.getSlaPolicyId(), enterpriseId);
+        assertSameEnterpriseRuleGroup(request.getAssignmentRuleGroupId(), enterpriseId);
+        String fallbackType = normalizeFallbackType(request.getAssignmentFallbackType());
+        if (FALLBACK_DEFAULT_ASSIGNEE.equals(fallbackType) && request.getDefaultAssigneeId() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "规则未命中使用默认处理人时必须选择默认处理人");
+        }
+    }
+
+    private void assertTemplate(Long templateId, String expectedType, String label) {
+        if (templateId == null) {
             return;
         }
-        UserEntity user = userMapper.selectById(assigneeId);
-        if (user == null) {
-            throw new BusinessException(CODE_BAD_REQUEST, "默认处理人不存在");
+        NotificationTemplateEntity template = notificationTemplateMapper.selectById(templateId);
+        if (template == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, label + "不存在");
+        }
+        if (!expectedType.equals(normalize(template.getTemplateType()).toUpperCase())) {
+            throw new BusinessException(CODE_BAD_REQUEST, label + "类型不匹配");
+        }
+        if (!Boolean.TRUE.equals(template.getEnabled())) {
+            throw new BusinessException(CODE_BAD_REQUEST, label + "已停用");
+        }
+    }
+
+    private void assertSameEnterpriseSlaPolicy(Long policyId, Long enterpriseId) {
+        if (policyId == null) {
+            return;
+        }
+        SlaPolicyEntity policy = slaPolicyMapper.selectById(policyId);
+        if (policy == null || !enterpriseId.equals(policy.getEnterpriseId())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "SLA 策略与邮箱不属于同一企业");
+        }
+        if (!Boolean.TRUE.equals(policy.getEnabled())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "SLA 策略已停用");
+        }
+    }
+
+    private void assertSameEnterpriseRuleGroup(Long groupId, Long enterpriseId) {
+        if (groupId == null) {
+            return;
+        }
+        AssignmentRuleGroupEntity group = assignmentRuleGroupMapper.selectById(groupId);
+        if (group == null || !enterpriseId.equals(group.getEnterpriseId())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "分配规则组与邮箱不属于同一企业");
+        }
+        if (!Boolean.TRUE.equals(group.getEnabled())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "分配规则组已停用");
+        }
+    }
+
+    private void assertDefaultAssigneeCanAccessMailbox(Long assigneeId, Long mailboxId) {
+        if (assigneeId != null) {
+            enterpriseMailboxAccessService.assertAssigneeCanAccessMailbox(assigneeId, mailboxId);
         }
     }
 
@@ -489,8 +661,11 @@ public class MailboxService {
 
     private MailboxVO toVO(MailboxEntity mailbox) {
         UserEntity assignee = mailbox.getDefaultAssigneeId() == null ? null : userMapper.selectById(mailbox.getDefaultAssigneeId());
+        EnterpriseEntity enterprise = mailbox.getEnterpriseId() == null ? null : enterpriseMapper.selectById(mailbox.getEnterpriseId());
         return new MailboxVO(
                 mailbox.getId(),
+                mailbox.getEnterpriseId(),
+                enterprise == null ? null : enterprise.getEnterpriseName(),
                 mailbox.getMailboxName(),
                 mailbox.getEmailAddress(),
                 mailbox.getEnabled(),
@@ -509,6 +684,13 @@ public class MailboxService {
                 mailbox.getSmtpFromName(),
                 mailbox.getAutoReplyEnabled(),
                 mailbox.getAutoReplyTemplateId(),
+                mailbox.getAssignmentNotifyTemplateId(),
+                mailbox.getAgentReplyTemplateId(),
+                mailbox.getSlaWarningTemplateId(),
+                mailbox.getSlaBreachTemplateId(),
+                mailbox.getSlaPolicyId(),
+                mailbox.getAssignmentRuleGroupId(),
+                mailbox.getAssignmentFallbackType(),
                 mailbox.getLastFetchAt(),
                 mailbox.getConnectionStatus(),
                 mailbox.getCreatedAt(),
@@ -533,6 +715,18 @@ public class MailboxService {
             throw new BusinessException(CODE_BAD_REQUEST, "连接测试类型仅支持 ALL、IMAP 或 SMTP");
         }
         return testType;
+    }
+
+    private String normalizeFallbackType(String value) {
+        String normalized = normalize(value).toUpperCase();
+        if (normalized.isEmpty()) {
+            return FALLBACK_NONE;
+        }
+        if (!FALLBACK_NONE.equals(normalized) && !FALLBACK_DEFAULT_ASSIGNEE.equals(normalized)) {
+            throw new BusinessException(CODE_BAD_REQUEST,
+                    "规则未命中处理方式仅支持 NONE 或 DEFAULT_ASSIGNEE");
+        }
+        return normalized;
     }
 
     private long normalizePage(Integer page) {

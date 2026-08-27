@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 @Schema(description = "SLA 策略详情")
 public record SlaPolicyVO(
         @Schema(description = "策略ID") Long id,
+        @Schema(description = "所属企业ID") Long enterpriseId,
         @Schema(description = "策略名称") String policyName,
         @Schema(description = "是否启用") Boolean enabled,
         @Schema(description = "是否默认策略") Boolean defaultPolicy,

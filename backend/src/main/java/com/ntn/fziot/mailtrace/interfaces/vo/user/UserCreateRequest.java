@@ -8,7 +8,9 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Data
 @Schema(description = "新建用户请求")
@@ -47,4 +49,10 @@ public class UserCreateRequest {
 
     @Schema(description = "是否启用", example = "true")
     private Boolean enabled = true;
+
+    @Schema(description = "企业授权ID；与用户基础信息在同一事务内保存")
+    private Set<Long> enterpriseIds = new LinkedHashSet<>();
+
+    @Schema(description = "单邮箱授权ID；与用户基础信息在同一事务内保存")
+    private Set<Long> mailboxIds = new LinkedHashSet<>();
 }

@@ -8,7 +8,9 @@ import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarDefaultRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.calendar.WorkCalendarVO;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.WorkCalendarEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.HolidayMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
@@ -42,6 +44,8 @@ class WorkCalendarServiceTest {
     @Mock
     private WorkCalendarMapper workCalendarMapper;
     @Mock
+    private EnterpriseMapper enterpriseMapper;
+    @Mock
     private SlaPolicyMapper slaPolicyMapper;
     @Mock
     private HolidayMapper holidayMapper;
@@ -70,6 +74,7 @@ class WorkCalendarServiceTest {
         lenient().when(workCalendarMapper.selectCount(any())).thenReturn(0L);
         lenient().when(slaPolicyMapper.selectCount(any())).thenReturn(0L);
         lenient().when(holidayMapper.selectCount(any())).thenReturn(0L);
+        lenient().when(enterpriseMapper.selectById(1L)).thenReturn(enterprise(1L, true));
     }
 
     private void allowAdminAndAgentOperationalPermissions() {
@@ -210,7 +215,7 @@ class WorkCalendarServiceTest {
     @Test
     void listCalendars_whenNotAdmin_shouldReject() {
         BusinessException ex = assertThrows(BusinessException.class,
-                () -> workCalendarService.listCalendars(agent, null, null));
+                () -> workCalendarService.listCalendars(agent, null, null, null));
 
         assertTrue(ex.getMessage().contains("无权查看工作日历"));
     }
@@ -218,6 +223,7 @@ class WorkCalendarServiceTest {
     private WorkCalendarSaveRequest saveRequest(String calendarName, String timezone, List<Integer> workdays,
                                                 String startTime, String endTime, Boolean defaultCalendar) {
         WorkCalendarSaveRequest request = new WorkCalendarSaveRequest();
+        request.setEnterpriseId(1L);
         request.setCalendarName(calendarName);
         request.setTimezone(timezone);
         request.setWorkdays(workdays);
@@ -231,6 +237,7 @@ class WorkCalendarServiceTest {
                                         String startTime, String endTime, Boolean defaultCalendar) {
         WorkCalendarEntity calendar = new WorkCalendarEntity();
         calendar.setId(id);
+        calendar.setEnterpriseId(1L);
         calendar.setCalendarName(calendarName);
         calendar.setTimezone(timezone);
         calendar.setWorkdays(workdays);
@@ -240,6 +247,13 @@ class WorkCalendarServiceTest {
         calendar.setCreatedAt(LocalDateTime.now());
         calendar.setUpdatedAt(LocalDateTime.now());
         return calendar;
+    }
+
+    private EnterpriseEntity enterprise(Long id, boolean enabled) {
+        EnterpriseEntity enterprise = new EnterpriseEntity();
+        enterprise.setId(id);
+        enterprise.setEnabled(enabled);
+        return enterprise;
     }
 
     private static void initTableInfo(MybatisConfiguration configuration, String namespace, Class<?> entityClass) {

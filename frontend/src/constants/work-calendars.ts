@@ -3,6 +3,7 @@ import type { HolidayFormState, WorkCalendarFormState } from '../types/work-cale
 
 export const emptyWorkCalendarForm: WorkCalendarFormState = {
   id: null,
+  enterpriseId: '',
   calendarName: '',
   timezone: 'Asia/Shanghai',
   workdays: [1, 2, 3, 4, 5],

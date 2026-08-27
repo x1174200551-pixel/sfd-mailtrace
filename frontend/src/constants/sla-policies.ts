@@ -2,6 +2,7 @@ import type { SlaPolicyFormState } from '../types/sla-policy'
 
 export const emptySlaPolicyForm: SlaPolicyFormState = {
   id: null,
+  enterpriseId: '',
   policyName: '',
   enabled: true,
   defaultPolicy: false,

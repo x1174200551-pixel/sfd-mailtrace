@@ -1,5 +1,6 @@
 export type MailFetchLog = {
   id: number
+  enterpriseId: number
   mailboxId: number
   mailboxName: string | null
   emailAddress: string | null
@@ -32,8 +33,11 @@ export type MailFetchLogStats = {
 export type MailSendLog = {
   id: number
   ticketId: number | null
+  enterpriseId: number
   mailboxId: number | null
   sendType: string
+  templateId: number | null
+  templateType: string | null
   toAddress: string
   subject: string
   contentBody: string | null

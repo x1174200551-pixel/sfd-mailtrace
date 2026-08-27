@@ -9,7 +9,7 @@ import type {
   DepartmentStats,
 } from '../types/department'
 import type { ManagedUser } from '../types/user'
-import { countMembers, findDeptNode, flattenDepartments } from '../utils/departments'
+import { findDeptNode, flattenDepartments } from '../utils/departments'
 
 const emptyDeptForm: DepartmentFormState = {
   parentId: 0,
@@ -62,7 +62,6 @@ export function useDepartmentManage({ canReadDepartments, onAuthExpired }: UseDe
   const orgDeptOptions = useMemo(() => flattenDepartments(orgTree), [orgTree])
   const hasRootDepartment = orgTree.length > 0
   const selectedDeptNode = useMemo(() => selectedDeptId ? findDeptNode(orgTree, selectedDeptId) : null, [orgTree, selectedDeptId])
-  const selectedDeptTotalMemberCount = useMemo(() => selectedDeptNode ? countMembers([selectedDeptNode]) : 0, [selectedDeptNode])
   const movableParentOptions = useMemo(
     () => orgDeptOptions.filter((department) => department.id !== selectedDeptId && !(selectedDeptNode && findDeptNode(selectedDeptNode.children || [], department.id))),
     [orgDeptOptions, selectedDeptId, selectedDeptNode],
@@ -343,7 +342,6 @@ export function useDepartmentManage({ canReadDepartments, onAuthExpired }: UseDe
       orgError,
       selectedDeptId,
       selectedDeptNode,
-      selectedDeptTotalMemberCount,
       orgDeptOptions,
       hasRootDepartment,
       movableParentOptions,

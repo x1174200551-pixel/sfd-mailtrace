@@ -20,7 +20,10 @@ public class SlaCheckJob {
     /**
      * 固定延迟执行 SLA 检查。
      */
-    @Scheduled(fixedDelayString = "${mailtrace.sla.check-fixed-delay-ms:60000}")
+    @Scheduled(
+            fixedDelayString = "${mailtrace.sla.check-fixed-delay-ms:60000}",
+            initialDelayString = "${mailtrace.sla.check-initial-delay-ms:0}"
+    )
     public void checkSlaTickets() {
         // 1、委托业务服务执行扫描和幂等写入。
         SlaCheckResult result = slaCheckService.checkDueTickets(null);

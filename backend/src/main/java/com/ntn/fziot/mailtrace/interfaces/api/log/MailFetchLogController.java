@@ -31,6 +31,7 @@ public class MailFetchLogController {
     @RequirePermission(value = "mail_fetch_log:read", message = "无权访问拉取日志")
     public BasicResult<MailFetchLogPageResponse> pageFetchLogs(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
             @RequestParam(required = false) Long mailboxId,
             @RequestParam(required = false) Boolean success,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startFrom,
@@ -39,13 +40,14 @@ public class MailFetchLogController {
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         return BasicResult.ok(mailFetchLogBizService.pageFetchLogs(
-                principal, mailboxId, success, startFrom, startTo, keyword, page, size));
+                principal, enterpriseId, mailboxId, success, startFrom, startTo, keyword, page, size));
     }
 
     @Operation(summary = "拉取日志统计概览")
     @GetMapping("/stats")
     @RequirePermission(value = "mail_fetch_log:read", message = "无权访问拉取日志")
-    public BasicResult<MailFetchLogStatsVO> stats() {
-        return BasicResult.ok(mailFetchLogBizService.stats());
+    public BasicResult<MailFetchLogStatsVO> stats(
+            @AuthenticationPrincipal CurrentUserPrincipal principal) {
+        return BasicResult.ok(mailFetchLogBizService.stats(principal));
     }
 }

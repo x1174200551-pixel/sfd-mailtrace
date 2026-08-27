@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import dayjs from 'dayjs'
 import { dashboardApi } from '../api/dashboard'
+import { enterpriseApi } from '../api/enterprises'
+import { mailboxApi } from '../api/mailboxes'
 import { ApiError } from '../shared/api/error-handler'
 import type { DashboardReport, DashboardSummary, DashboardTodoListResponse } from '../types/dashboard'
+import type { EnterpriseOption } from '../types/enterprise'
+import type { MailboxOption } from '../types/mailbox'
 
 type UseDashboardManagementParams = {
   activeMenu: string
@@ -23,6 +27,10 @@ export function useDashboardManagement({
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [dashboardError, setDashboardError] = useState('')
   const [dashboardUpdatedAt, setDashboardUpdatedAt] = useState<string | null>(null)
+  const [dashboardEnterpriseFilter, setDashboardEnterpriseFilter] = useState('ALL')
+  const [dashboardMailboxFilter, setDashboardMailboxFilter] = useState('ALL')
+  const [dashboardEnterpriseOptions, setDashboardEnterpriseOptions] = useState<EnterpriseOption[]>([])
+  const [dashboardMailboxOptions, setDashboardMailboxOptions] = useState<MailboxOption[]>([])
 
   const fetchDashboard = useCallback(async () => {
     if (!token || activeMenu !== '工作台') return
@@ -36,10 +44,14 @@ export function useDashboardManagement({
     setDashboardLoading(true)
     setDashboardError('')
     try {
+      const filter = {
+        enterpriseId: dashboardEnterpriseFilter === 'ALL' ? undefined : Number(dashboardEnterpriseFilter),
+        mailboxId: dashboardMailboxFilter === 'ALL' ? undefined : Number(dashboardMailboxFilter),
+      }
       const [summary, todos, report] = await Promise.all([
-        dashboardApi.summary(),
-        dashboardApi.myTodos(5),
-        dashboardApi.report(),
+        dashboardApi.summary(filter),
+        dashboardApi.myTodos(5, filter),
+        dashboardApi.report(filter),
       ])
       setDashboardSummary(summary)
       setDashboardTodos(todos)
@@ -51,7 +63,26 @@ export function useDashboardManagement({
     } finally {
       setDashboardLoading(false)
     }
-  }, [activeMenu, canReadDashboard, handleAuthExpired, token])
+  }, [activeMenu, canReadDashboard, dashboardEnterpriseFilter, dashboardMailboxFilter, handleAuthExpired, token])
+
+  useEffect(() => {
+    if (!token || activeMenu !== '工作台') return
+    void Promise.all([
+      enterpriseApi.options(),
+      mailboxApi.options(dashboardEnterpriseFilter === 'ALL' ? undefined : Number(dashboardEnterpriseFilter)),
+    ]).then(([enterprises, mailboxes]) => {
+      setDashboardEnterpriseOptions(enterprises)
+      setDashboardMailboxOptions(mailboxes)
+      setDashboardMailboxFilter((current) => current === 'ALL' || mailboxes.some((mailbox) => String(mailbox.id) === current) ? current : 'ALL')
+    }).catch((error) => {
+      if (!handleAuthExpired(error)) setDashboardError(error instanceof Error ? error.message : '工作台筛选项加载失败')
+    })
+  }, [activeMenu, dashboardEnterpriseFilter, handleAuthExpired, token])
+
+  const changeDashboardEnterpriseFilter = useCallback((value: string) => {
+    setDashboardEnterpriseFilter(value)
+    setDashboardMailboxFilter('ALL')
+  }, [])
 
   useEffect(() => {
     if (activeMenu === '工作台') {
@@ -60,12 +91,18 @@ export function useDashboardManagement({
   }, [activeMenu, fetchDashboard])
 
   return {
+    changeDashboardEnterpriseFilter,
+    dashboardEnterpriseFilter,
+    dashboardEnterpriseOptions,
     dashboardError,
     dashboardLoading,
+    dashboardMailboxFilter,
+    dashboardMailboxOptions,
     dashboardReport,
     dashboardSummary,
     dashboardTodos,
     dashboardUpdatedAt,
     fetchDashboard,
+    setDashboardMailboxFilter,
   }
 }

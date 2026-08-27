@@ -30,7 +30,7 @@ public class MailSendLogController {
     @RequirePermission(value = "mail_send_log:read", message = "无权访问发送日志")
     public BasicResult<MailSendLogBizService.SendLogStats> stats(
             @AuthenticationPrincipal CurrentUserPrincipal principal) {
-        return BasicResult.ok(mailSendLogBizService.stats());
+        return BasicResult.ok(mailSendLogBizService.stats(principal));
     }
 
     @Operation(summary = "待处理数量统计（菜单角标）")
@@ -38,7 +38,7 @@ public class MailSendLogController {
     @RequirePermission(value = "mail_send_log:read", message = "无权访问发送日志")
     public BasicResult<Long> pendingCount(
             @AuthenticationPrincipal CurrentUserPrincipal principal) {
-        return BasicResult.ok(mailSendLogBizService.pendingCount());
+        return BasicResult.ok(mailSendLogBizService.pendingCount(principal));
     }
 
     @Operation(summary = "发送日志分页查询")
@@ -46,6 +46,7 @@ public class MailSendLogController {
     @RequirePermission(value = "mail_send_log:read", message = "无权访问发送日志")
     public BasicResult<MailSendLogPageResponse> pageSendLogs(
             @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @RequestParam(required = false) Long enterpriseId,
             @RequestParam(required = false) Long mailboxId,
             @RequestParam(required = false) String sendType,
             @RequestParam(required = false) String sendStatus,
@@ -54,6 +55,6 @@ public class MailSendLogController {
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
         return BasicResult.ok(mailSendLogBizService.pageSendLogs(
-                principal, mailboxId, sendType, sendStatus, startFrom, startTo, page, size));
+                principal, enterpriseId, mailboxId, sendType, sendStatus, startFrom, startTo, page, size));
     }
 }

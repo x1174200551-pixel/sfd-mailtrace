@@ -3,6 +3,7 @@ package com.ntn.fziot.mailtrace.application.bizservice.dashboard;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
+import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.dashboard.DashboardReportVO;
@@ -12,11 +13,13 @@ import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketSummaryVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailFetchLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailSendLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailFetchLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailSendLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -41,25 +44,32 @@ public class DashboardService {
     private final TicketMapper ticketMapper;
     private final UserMapper userMapper;
     private final MailboxMapper mailboxMapper;
+    private final EnterpriseMapper enterpriseMapper;
     private final MailFetchLogMapper mailFetchLogMapper;
     private final MailSendLogMapper mailSendLogMapper;
     private final DataScopeService dataScopeService;
     private final PermissionService permissionService;
+    private final EnterpriseMailboxAccessService enterpriseMailboxAccessService;
 
     /**
      * 查询工作台核心统计摘要。
      */
     public DashboardSummaryVO summary(CurrentUserPrincipal principal) {
+        return summary(principal, null, null);
+    }
+
+    public DashboardSummaryVO summary(CurrentUserPrincipal principal, Long enterpriseId, Long mailboxId) {
         // 1、工作台仅允许管理员和处理人访问，统计口径与工单列表一致。
         permissionService.assertPermission(principal, "dashboard:read", "无权查看工作台");
 
         // 2、按工单状态分别统计核心卡片指标。
-        long totalCount = countTickets(principal, null, null, false);
-        long pendingAssignCount = countTickets(principal, "PENDING_ASSIGN", null, false);
-        long processingCount = countTickets(principal, "PROCESSING", null, false);
-        long waitingCustomerCount = countTickets(principal, "WAITING_CUSTOMER", null, false);
-        long slaOverdueCount = countTickets(principal, null, true, false);
-        long closedTodayCount = countTickets(principal, "CLOSED", null, true);
+        DashboardFilter filter = new DashboardFilter(enterpriseId, mailboxId);
+        long totalCount = countTickets(principal, filter, null, null, false);
+        long pendingAssignCount = countTickets(principal, filter, "PENDING_ASSIGN", null, false);
+        long processingCount = countTickets(principal, filter, "PROCESSING", null, false);
+        long waitingCustomerCount = countTickets(principal, filter, "WAITING_CUSTOMER", null, false);
+        long slaOverdueCount = countTickets(principal, filter, null, true, false);
+        long closedTodayCount = countTickets(principal, filter, "CLOSED", null, true);
 
         // 3、汇总活跃工单数，供工作台顶部概览直接展示。
         long activeCount = pendingAssignCount + processingCount + waitingCustomerCount;
@@ -78,12 +88,17 @@ public class DashboardService {
      * 查询当前用户待办工单。
      */
     public DashboardTodoListResponse myTodos(CurrentUserPrincipal principal, Integer limit) {
+        return myTodos(principal, null, null, limit);
+    }
+
+    public DashboardTodoListResponse myTodos(CurrentUserPrincipal principal, Long enterpriseId, Long mailboxId, Integer limit) {
         // 1、工作台待办仅允许管理员和处理人访问，并且必须按当前登录用户过滤。
         permissionService.assertPermission(principal, "dashboard:read", "无权查看工作台");
         int normalizedLimit = normalizeLimit(limit);
 
         // 2、查询当前用户可见的可处理状态工单，SLA 近的优先，随后按创建时间倒序。
-        LambdaQueryWrapper<TicketEntity> baseWrapper = buildMyTodoWrapper(principal);
+        DashboardFilter filter = new DashboardFilter(enterpriseId, mailboxId);
+        LambdaQueryWrapper<TicketEntity> baseWrapper = buildMyTodoWrapper(principal, filter);
         List<TicketSummaryVO> records = ticketMapper.selectList(baseWrapper
                         .last("ORDER BY sla_response_deadline IS NULL ASC, sla_response_deadline ASC, created_at DESC LIMIT "
                                 + normalizedLimit))
@@ -92,12 +107,12 @@ public class DashboardService {
                 .toList();
 
         // 3、按相同用户和状态口径计算摘要，供工作台卡片和角标使用。
-        long totalCount = ticketMapper.selectCount(buildMyTodoWrapper(principal));
-        long processingCount = ticketMapper.selectCount(buildMyTodoWrapper(principal)
+        long totalCount = ticketMapper.selectCount(buildMyTodoWrapper(principal, filter));
+        long processingCount = ticketMapper.selectCount(buildMyTodoWrapper(principal, filter)
                 .eq(TicketEntity::getStatus, "PROCESSING"));
-        long waitingCustomerCount = ticketMapper.selectCount(buildMyTodoWrapper(principal)
+        long waitingCustomerCount = ticketMapper.selectCount(buildMyTodoWrapper(principal, filter)
                 .eq(TicketEntity::getStatus, "WAITING_CUSTOMER"));
-        long slaOverdueCount = ticketMapper.selectCount(buildMyTodoWrapper(principal)
+        long slaOverdueCount = ticketMapper.selectCount(buildMyTodoWrapper(principal, filter)
                 .eq(TicketEntity::getSlaBreached, true));
 
         // 4、返回待办列表和摘要。
@@ -115,6 +130,10 @@ public class DashboardService {
      * 查询工作台运营报表。
      */
     public DashboardReportVO report(CurrentUserPrincipal principal) {
+        return report(principal, null, null);
+    }
+
+    public DashboardReportVO report(CurrentUserPrincipal principal, Long enterpriseId, Long mailboxId) {
         // 1、工作台报表沿用工作台权限，工单相关指标沿用工单数据范围。
         permissionService.assertPermission(principal, "dashboard:read", "无权查看工作台");
 
@@ -125,33 +144,41 @@ public class DashboardService {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime soon = now.plusHours(2);
 
-        long todayCreatedCount = countTicketsCreatedBetween(principal, todayStart, tomorrowStart);
-        long todayClosedCount = countTicketsClosedBetween(principal, todayStart, tomorrowStart);
-        long activeCount = countTodoTickets(principal, null, null);
-        long overdueCount = countTodoTickets(principal, null, true);
-        long pendingAssignCount = countTodoTickets(principal, "PENDING_ASSIGN", null);
-        long waitingCustomerCount = countTodoTickets(principal, "WAITING_CUSTOMER", null);
-        long dueSoonCount = countDueSoonTickets(principal, now, soon);
-        long linkSuspectCount = countLinkSuspectTickets(principal);
+        DashboardFilter filter = new DashboardFilter(enterpriseId, mailboxId);
+        long todayCreatedCount = countTicketsCreatedBetween(principal, filter, todayStart, tomorrowStart);
+        long todayClosedCount = countTicketsClosedBetween(principal, filter, todayStart, tomorrowStart);
+        long activeCount = countTodoTickets(principal, filter, null, null);
+        long overdueCount = countTodoTickets(principal, filter, null, true);
+        long pendingAssignCount = countTodoTickets(principal, filter, "PENDING_ASSIGN", null);
+        long waitingCustomerCount = countTodoTickets(principal, filter, "WAITING_CUSTOMER", null);
+        long dueSoonCount = countDueSoonTickets(principal, filter, now, soon);
+        long linkSuspectCount = countLinkSuspectTickets(principal, filter);
         int completionRate = percent(todayClosedCount, todayCreatedCount);
         int slaRiskRate = percent(overdueCount, activeCount);
-        int firstReplyRate = countFirstReplyRate(principal, now);
-        int resolveRate = countResolveRate(principal);
+        int firstReplyRate = countFirstReplyRate(principal, filter, now);
+        int resolveRate = countResolveRate(principal, filter);
 
-        List<DashboardReportVO.ChartItem> priorityItems = buildPriorityItems(principal);
+        List<DashboardReportVO.ChartItem> priorityItems = buildPriorityItems(principal, filter);
         long priorityMaxValue = Math.max(priorityItems.stream().mapToLong(DashboardReportVO.ChartItem::value).max().orElse(0), 1);
 
         // 3、计算邮件链路运行指标，用于判断收发和追信关联是否异常。
-        List<MailFetchLogEntity> todayFetchLogs = mailFetchLogMapper.selectList(new LambdaQueryWrapper<MailFetchLogEntity>()
+        Set<Long> readableMailboxIds = enterpriseMailboxAccessService.resolveReadableMailboxIds(principal);
+        LambdaQueryWrapper<MailFetchLogEntity> fetchLogWrapper = new LambdaQueryWrapper<MailFetchLogEntity>()
                 .ge(MailFetchLogEntity::getStartedAt, todayStart)
-                .lt(MailFetchLogEntity::getStartedAt, tomorrowStart));
+                .lt(MailFetchLogEntity::getStartedAt, tomorrowStart);
+        applyFetchLogScope(fetchLogWrapper, readableMailboxIds);
+        applyFetchLogFilter(fetchLogWrapper, filter);
+        List<MailFetchLogEntity> todayFetchLogs = mailFetchLogMapper.selectList(fetchLogWrapper);
         long fetchTotal = todayFetchLogs.size();
         long fetchSuccess = todayFetchLogs.stream().filter(log -> Boolean.TRUE.equals(log.getSuccess())).count();
         long fetchedMailCount = todayFetchLogs.stream().mapToLong(log -> safeInt(log.getFetchedCount())).sum();
         long createdTicketCount = todayFetchLogs.stream().mapToLong(log -> safeInt(log.getCreatedTicketCount())).sum();
         long linkedTicketCount = todayFetchLogs.stream().mapToLong(log -> safeInt(log.getLinkedCount())).sum();
-        long sendExceptionCount = mailSendLogMapper.selectCount(new LambdaQueryWrapper<MailSendLogEntity>()
-                .in(MailSendLogEntity::getSendStatus, List.of("PENDING", "FAILED", "RETRYING")));
+        LambdaQueryWrapper<MailSendLogEntity> sendLogWrapper = new LambdaQueryWrapper<MailSendLogEntity>()
+                .in(MailSendLogEntity::getSendStatus, List.of("PENDING", "FAILED", "RETRYING"));
+        applySendLogScope(sendLogWrapper, readableMailboxIds);
+        applySendLogFilter(sendLogWrapper, filter);
+        long sendExceptionCount = mailSendLogMapper.selectCount(sendLogWrapper);
         int mailSuccessRate = fetchTotal == 0 ? 100 : percent(fetchSuccess, fetchTotal);
 
         // 4、组装页面需要的报表区块，前端不再自行推导业务口径。
@@ -195,7 +222,7 @@ public class DashboardService {
                                 action("排查发件异常", "失败和待重试邮件", sendExceptionCount, "danger", "mail-warning", "发件记录", null, false)
                         )
                 ),
-                buildAssigneeLoads(principal),
+                buildAssigneeLoads(principal, filter),
                 List.of(
                         quality("疑似断链工单", "需要核对邮件关联", linkSuspectCount, linkSuspectCount > 0 ? "warning" : "success", "bar-chart", null, "ALL", false),
                         quality("失败发送处理", "失败和待重试邮件进入发件记录排查", sendExceptionCount, sendExceptionCount > 0 ? "danger" : "success", "mail-warning", "发件记录", null, false),
@@ -204,15 +231,60 @@ public class DashboardService {
         );
     }
 
-    private LambdaQueryWrapper<TicketEntity> buildMyTodoWrapper(CurrentUserPrincipal principal) {
+    private LambdaQueryWrapper<TicketEntity> buildMyTodoWrapper(CurrentUserPrincipal principal, DashboardFilter filter) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
-                .in(TicketEntity::getStatus, TODO_STATUSES);
+                .in(TicketEntity::getStatus, TODO_STATUSES)
+                .eq(TicketEntity::getAssigneeId, principal.id());
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return wrapper;
     }
 
-    private long countTodoTickets(CurrentUserPrincipal principal, String status, Boolean slaBreached) {
-        LambdaQueryWrapper<TicketEntity> wrapper = buildMyTodoWrapper(principal);
+    private void applyTicketFilter(LambdaQueryWrapper<TicketEntity> wrapper, DashboardFilter filter) {
+        if (filter.enterpriseId() != null) {
+            wrapper.eq(TicketEntity::getEnterpriseId, filter.enterpriseId());
+        }
+        if (filter.mailboxId() != null) {
+            wrapper.eq(TicketEntity::getMailboxId, filter.mailboxId());
+        }
+    }
+
+    private void applyFetchLogFilter(LambdaQueryWrapper<MailFetchLogEntity> wrapper, DashboardFilter filter) {
+        if (filter.enterpriseId() != null) {
+            wrapper.eq(MailFetchLogEntity::getEnterpriseId, filter.enterpriseId());
+        }
+        if (filter.mailboxId() != null) {
+            wrapper.eq(MailFetchLogEntity::getMailboxId, filter.mailboxId());
+        }
+    }
+
+    private void applySendLogFilter(LambdaQueryWrapper<MailSendLogEntity> wrapper, DashboardFilter filter) {
+        if (filter.enterpriseId() != null) {
+            wrapper.eq(MailSendLogEntity::getEnterpriseId, filter.enterpriseId());
+        }
+        if (filter.mailboxId() != null) {
+            wrapper.eq(MailSendLogEntity::getMailboxId, filter.mailboxId());
+        }
+    }
+
+    private void applyFetchLogScope(LambdaQueryWrapper<MailFetchLogEntity> wrapper, Set<Long> mailboxIds) {
+        if (mailboxIds.isEmpty()) {
+            wrapper.apply("1 = 0");
+        } else {
+            wrapper.in(MailFetchLogEntity::getMailboxId, mailboxIds);
+        }
+    }
+
+    private void applySendLogScope(LambdaQueryWrapper<MailSendLogEntity> wrapper, Set<Long> mailboxIds) {
+        if (mailboxIds.isEmpty()) {
+            wrapper.apply("1 = 0");
+        } else {
+            wrapper.in(MailSendLogEntity::getMailboxId, mailboxIds);
+        }
+    }
+
+    private long countTodoTickets(CurrentUserPrincipal principal, DashboardFilter filter, String status, Boolean slaBreached) {
+        LambdaQueryWrapper<TicketEntity> wrapper = buildMyTodoWrapper(principal, filter);
         if (status != null) {
             wrapper.eq(TicketEntity::getStatus, status);
         }
@@ -222,25 +294,27 @@ public class DashboardService {
         return ticketMapper.selectCount(wrapper);
     }
 
-    private long countTicketsCreatedBetween(CurrentUserPrincipal principal, LocalDateTime start, LocalDateTime end) {
+    private long countTicketsCreatedBetween(CurrentUserPrincipal principal, DashboardFilter filter, LocalDateTime start, LocalDateTime end) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .ge(TicketEntity::getCreatedAt, start)
                 .lt(TicketEntity::getCreatedAt, end);
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private long countTicketsClosedBetween(CurrentUserPrincipal principal, LocalDateTime start, LocalDateTime end) {
+    private long countTicketsClosedBetween(CurrentUserPrincipal principal, DashboardFilter filter, LocalDateTime start, LocalDateTime end) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .eq(TicketEntity::getStatus, "CLOSED")
                 .ge(TicketEntity::getClosedAt, start)
                 .lt(TicketEntity::getClosedAt, end);
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private long countDueSoonTickets(CurrentUserPrincipal principal, LocalDateTime now, LocalDateTime soon) {
-        LambdaQueryWrapper<TicketEntity> wrapper = buildMyTodoWrapper(principal)
+    private long countDueSoonTickets(CurrentUserPrincipal principal, DashboardFilter filter, LocalDateTime now, LocalDateTime soon) {
+        LambdaQueryWrapper<TicketEntity> wrapper = buildMyTodoWrapper(principal, filter)
                 .and(scope -> scope
                         .between(TicketEntity::getSlaResponseDeadline, now, soon)
                         .or()
@@ -252,91 +326,97 @@ public class DashboardService {
         return ticketMapper.selectCount(wrapper);
     }
 
-    private long countLinkSuspectTickets(CurrentUserPrincipal principal) {
+    private long countLinkSuspectTickets(CurrentUserPrincipal principal, DashboardFilter filter) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .eq(TicketEntity::getLinkSuspect, true);
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private int countFirstReplyRate(CurrentUserPrincipal principal, LocalDateTime now) {
-        long total = countTicketsWithResponseDeadline(principal);
+    private int countFirstReplyRate(CurrentUserPrincipal principal, DashboardFilter filter, LocalDateTime now) {
+        long total = countTicketsWithResponseDeadline(principal, filter);
         if (total == 0) {
             return 100;
         }
-        long expiredMissing = countTicketsWithExpiredMissingFirstReply(principal, now);
-        long late = countTicketsWithLateFirstReply(principal);
+        long expiredMissing = countTicketsWithExpiredMissingFirstReply(principal, filter, now);
+        long late = countTicketsWithLateFirstReply(principal, filter);
         return Math.max(0, 100 - percent(expiredMissing + late, total));
     }
 
-    private long countTicketsWithResponseDeadline(CurrentUserPrincipal principal) {
+    private long countTicketsWithResponseDeadline(CurrentUserPrincipal principal, DashboardFilter filter) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .isNotNull(TicketEntity::getSlaResponseDeadline);
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private long countTicketsWithExpiredMissingFirstReply(CurrentUserPrincipal principal, LocalDateTime now) {
+    private long countTicketsWithExpiredMissingFirstReply(CurrentUserPrincipal principal, DashboardFilter filter, LocalDateTime now) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .isNull(TicketEntity::getFirstReplyAt)
                 .lt(TicketEntity::getSlaResponseDeadline, now);
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private long countTicketsWithLateFirstReply(CurrentUserPrincipal principal) {
+    private long countTicketsWithLateFirstReply(CurrentUserPrincipal principal, DashboardFilter filter) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .isNotNull(TicketEntity::getFirstReplyAt)
                 .isNotNull(TicketEntity::getSlaResponseDeadline)
                 .apply("first_reply_at > sla_response_deadline");
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private int countResolveRate(CurrentUserPrincipal principal) {
-        long total = countClosedTicketsWithResolveDeadline(principal);
+    private int countResolveRate(CurrentUserPrincipal principal, DashboardFilter filter) {
+        long total = countClosedTicketsWithResolveDeadline(principal, filter);
         if (total == 0) {
             return 100;
         }
-        long late = countLateResolvedTickets(principal);
+        long late = countLateResolvedTickets(principal, filter);
         return Math.max(0, 100 - percent(late, total));
     }
 
-    private long countClosedTicketsWithResolveDeadline(CurrentUserPrincipal principal) {
+    private long countClosedTicketsWithResolveDeadline(CurrentUserPrincipal principal, DashboardFilter filter) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .eq(TicketEntity::getStatus, "CLOSED")
                 .isNotNull(TicketEntity::getSlaResolveDeadline)
                 .isNotNull(TicketEntity::getClosedAt);
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private long countLateResolvedTickets(CurrentUserPrincipal principal) {
+    private long countLateResolvedTickets(CurrentUserPrincipal principal, DashboardFilter filter) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<TicketEntity>()
                 .eq(TicketEntity::getStatus, "CLOSED")
                 .isNotNull(TicketEntity::getSlaResolveDeadline)
                 .isNotNull(TicketEntity::getClosedAt)
                 .apply("closed_at > sla_resolve_deadline");
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         return ticketMapper.selectCount(wrapper);
     }
 
-    private List<DashboardReportVO.ChartItem> buildPriorityItems(CurrentUserPrincipal principal) {
+    private List<DashboardReportVO.ChartItem> buildPriorityItems(CurrentUserPrincipal principal, DashboardFilter filter) {
         return List.of(
-                chart("紧急", countPriorityTodos(principal, "URGENT"), "danger"),
-                chart("高", countPriorityTodos(principal, "HIGH"), "warning"),
-                chart("普通", countPriorityTodos(principal, "NORMAL"), "primary"),
-                chart("低", countPriorityTodos(principal, "LOW"), "success")
+                chart("紧急", countPriorityTodos(principal, filter, "URGENT"), "danger"),
+                chart("高", countPriorityTodos(principal, filter, "HIGH"), "warning"),
+                chart("普通", countPriorityTodos(principal, filter, "NORMAL"), "primary"),
+                chart("低", countPriorityTodos(principal, filter, "LOW"), "success")
         );
     }
 
-    private long countPriorityTodos(CurrentUserPrincipal principal, String priority) {
-        return ticketMapper.selectCount(buildMyTodoWrapper(principal)
+    private long countPriorityTodos(CurrentUserPrincipal principal, DashboardFilter filter, String priority) {
+        return ticketMapper.selectCount(buildMyTodoWrapper(principal, filter)
                 .eq(TicketEntity::getPriority, priority));
     }
 
-    private List<DashboardReportVO.AssigneeLoad> buildAssigneeLoads(CurrentUserPrincipal principal) {
-        List<TicketEntity> todoTickets = ticketMapper.selectList(buildMyTodoWrapper(principal)
+    private List<DashboardReportVO.AssigneeLoad> buildAssigneeLoads(CurrentUserPrincipal principal, DashboardFilter filter) {
+        List<TicketEntity> todoTickets = ticketMapper.selectList(buildMyTodoWrapper(principal, filter)
                 .last("ORDER BY sla_breached DESC, sla_response_deadline IS NULL ASC, sla_response_deadline ASC, created_at DESC LIMIT 200"));
         Map<Long, List<TicketEntity>> grouped = todoTickets.stream()
                 .collect(Collectors.groupingBy(ticket -> ticket.getAssigneeId() == null ? 0L : ticket.getAssigneeId()));
@@ -358,9 +438,10 @@ public class DashboardService {
                 .toList();
     }
 
-    private long countTickets(CurrentUserPrincipal principal, String status, Boolean slaBreached, boolean closedToday) {
+    private long countTickets(CurrentUserPrincipal principal, DashboardFilter filter, String status, Boolean slaBreached, boolean closedToday) {
         LambdaQueryWrapper<TicketEntity> wrapper = new LambdaQueryWrapper<>();
         dataScopeService.applyTicketScope(wrapper, principal);
+        applyTicketFilter(wrapper, filter);
         if (status != null) {
             wrapper.eq(TicketEntity::getStatus, status);
         }
@@ -375,13 +456,20 @@ public class DashboardService {
         return ticketMapper.selectCount(wrapper);
     }
 
+    private record DashboardFilter(Long enterpriseId, Long mailboxId) {
+    }
+
     private TicketSummaryVO toSummaryVO(TicketEntity ticket) {
         String assigneeName = resolveUserName(ticket.getAssigneeId());
         String mailboxName = resolveMailboxName(ticket.getMailboxId());
+        String enterpriseName = resolveEnterpriseName(ticket.getEnterpriseId());
         return new TicketSummaryVO(
                 ticket.getId(), ticket.getTicketNo(), ticket.getSubject(), ticket.getStatus(), ticket.getPriority(),
+                ticket.getEnterpriseId(), enterpriseName,
                 ticket.getCustomerEmail(), ticket.getAssigneeId(), assigneeName,
                 ticket.getMailboxId(), mailboxName,
+                ticket.getSlaPolicyId(), ticket.getAutoReplyTemplateId(),
+                ticket.getAssignmentRuleGroupId(), ticket.getAssignmentRuleId(),
                 ticket.getLinkSuspect(), ticket.getFirstReplyAt() != null,
                 ticket.getSlaResponseDeadline(), ticket.getSlaBreached(),
                 ticket.getRemark(),
@@ -403,6 +491,14 @@ public class DashboardService {
         }
         MailboxEntity mailbox = mailboxMapper.selectById(mailboxId);
         return mailbox == null ? null : mailbox.getMailboxName();
+    }
+
+    private String resolveEnterpriseName(Long enterpriseId) {
+        if (enterpriseId == null) {
+            return null;
+        }
+        EnterpriseEntity enterprise = enterpriseMapper.selectById(enterpriseId);
+        return enterprise == null ? null : enterprise.getEnterpriseName();
     }
 
     private int normalizeLimit(Integer limit) {

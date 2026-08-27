@@ -11,8 +11,13 @@ import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicySaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicySummaryVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.sla.SlaPolicyVO;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.OperationLogEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.SlaPolicyEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.WorkCalendarEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.WorkCalendarMapper;
@@ -31,7 +36,10 @@ public class SlaPolicyService {
     private static final int CODE_CONFLICT = 40901;
     private static final String MODULE_SLA_POLICY = "SLA_POLICY";
 
+    // P3：SLA 策略按企业归属，并限制跨企业日历和邮箱引用。
     private final SlaPolicyMapper slaPolicyMapper;
+    private final EnterpriseMapper enterpriseMapper;
+    private final MailboxMapper mailboxMapper;
     private final WorkCalendarMapper workCalendarMapper;
     private final OperationLogMapper operationLogMapper;
     private final PermissionService permissionService;
@@ -39,13 +47,13 @@ public class SlaPolicyService {
     /**
      * 查询 SLA 策略列表。
      */
-    public SlaPolicyListResponse listPolicies(CurrentUserPrincipal principal, String keyword,
-                                              Boolean enabled, Boolean defaultPolicy) {
+    public SlaPolicyListResponse listPolicies(CurrentUserPrincipal principal, Long enterpriseId,
+                                              String keyword, Boolean enabled, Boolean defaultPolicy) {
         // 1、仅管理员可进入 SLA 策略配置。
         permissionService.assertPermission(principal, "sla_policy:read", "无权查看 SLA 策略");
 
         // 2、按筛选条件查询策略，并保持默认策略、启用策略优先展示。
-        LambdaQueryWrapper<SlaPolicyEntity> wrapper = buildQuery(keyword, enabled, defaultPolicy)
+        LambdaQueryWrapper<SlaPolicyEntity> wrapper = buildQuery(enterpriseId, keyword, enabled, defaultPolicy)
                 .orderByDesc(SlaPolicyEntity::getDefaultPolicy)
                 .orderByDesc(SlaPolicyEntity::getEnabled)
                 .orderByAsc(SlaPolicyEntity::getId);
@@ -54,7 +62,7 @@ public class SlaPolicyService {
                 .toList();
 
         // 3、返回列表和摘要，供后续管理页顶部统计使用。
-        return new SlaPolicyListResponse(records, buildSummary());
+        return new SlaPolicyListResponse(records, buildSummary(enterpriseId));
     }
 
     /**
@@ -66,7 +74,7 @@ public class SlaPolicyService {
         permissionService.assertPermission(principal, "sla_policy:create", "无权新建 SLA 策略");
         validatePolicy(request);
         boolean defaultPolicy = Boolean.TRUE.equals(request.getDefaultPolicy());
-        ensureDefaultPolicyUnique(defaultPolicy, null);
+        ensureDefaultPolicyUnique(request.getEnterpriseId(), defaultPolicy, null);
 
         // 2、写入策略主体，当前阶段只保存配置，不计算工单 SLA 截止时间。
         SlaPolicyEntity policy = new SlaPolicyEntity();
@@ -90,7 +98,10 @@ public class SlaPolicyService {
         SlaPolicyEntity existing = requirePolicy(id);
         validatePolicy(request);
         boolean defaultPolicy = Boolean.TRUE.equals(request.getDefaultPolicy());
-        ensureDefaultPolicyUnique(defaultPolicy, id);
+        ensureDefaultPolicyUnique(request.getEnterpriseId(), defaultPolicy, id);
+        if (!existing.getEnterpriseId().equals(request.getEnterpriseId()) && isMailboxReferenced(id)) {
+            throw new BusinessException(CODE_CONFLICT, "SLA 策略已被邮箱引用，不能变更所属企业");
+        }
 
         // 2、覆盖可编辑配置字段。
         SlaPolicyEntity update = new SlaPolicyEntity();
@@ -150,6 +161,7 @@ public class SlaPolicyService {
         // 3、设为默认前先清理其他默认策略，保证默认策略唯一。
         slaPolicyMapper.update(null, new LambdaUpdateWrapper<SlaPolicyEntity>()
                 .ne(SlaPolicyEntity::getId, id)
+                .eq(SlaPolicyEntity::getEnterpriseId, existing.getEnterpriseId())
                 .eq(SlaPolicyEntity::getDefaultPolicy, true)
                 .set(SlaPolicyEntity::getDefaultPolicy, false)
                 .set(SlaPolicyEntity::getUpdatedBy, principal.account()));
@@ -178,15 +190,22 @@ public class SlaPolicyService {
         if (Boolean.TRUE.equals(existing.getDefaultPolicy())) {
             throw new BusinessException(CODE_BAD_REQUEST, "默认 SLA 策略不能删除，请先设置其他默认策略");
         }
+        if (isMailboxReferenced(id)) {
+            throw new BusinessException(CODE_CONFLICT, "SLA 策略已被邮箱引用，不能删除");
+        }
 
         // 3、逻辑删除并记录操作日志。
         slaPolicyMapper.deleteById(id);
         recordLog(principal, "DELETE", id, "删除 SLA 策略：" + existing.getPolicyName());
     }
 
-    private LambdaQueryWrapper<SlaPolicyEntity> buildQuery(String keyword, Boolean enabled, Boolean defaultPolicy) {
+    private LambdaQueryWrapper<SlaPolicyEntity> buildQuery(Long enterpriseId, String keyword,
+                                                            Boolean enabled, Boolean defaultPolicy) {
         String normalizedKeyword = normalize(keyword);
         LambdaQueryWrapper<SlaPolicyEntity> wrapper = new LambdaQueryWrapper<>();
+        if (enterpriseId != null) {
+            wrapper.eq(SlaPolicyEntity::getEnterpriseId, enterpriseId);
+        }
         if (!normalizedKeyword.isEmpty()) {
             wrapper.like(SlaPolicyEntity::getPolicyName, normalizedKeyword);
         }
@@ -199,16 +218,24 @@ public class SlaPolicyService {
         return wrapper;
     }
 
-    private SlaPolicySummaryVO buildSummary() {
-        long total = slaPolicyMapper.selectCount(new LambdaQueryWrapper<>());
+    private SlaPolicySummaryVO buildSummary(Long enterpriseId) {
+        long total = slaPolicyMapper.selectCount(buildQuery(enterpriseId, null, null, null));
         long enabled = slaPolicyMapper.selectCount(
-                new LambdaQueryWrapper<SlaPolicyEntity>().eq(SlaPolicyEntity::getEnabled, true));
+                buildQuery(enterpriseId, null, true, null));
         long defaultCount = slaPolicyMapper.selectCount(
-                new LambdaQueryWrapper<SlaPolicyEntity>().eq(SlaPolicyEntity::getDefaultPolicy, true));
+                buildQuery(enterpriseId, null, null, true));
         return new SlaPolicySummaryVO(total, enabled, total - enabled, defaultCount);
     }
 
     private void validatePolicy(SlaPolicySaveRequest request) {
+        EnterpriseEntity enterprise = request.getEnterpriseId() == null
+                ? null : enterpriseMapper.selectById(request.getEnterpriseId());
+        if (enterprise == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "所属企业不存在");
+        }
+        if (!Boolean.TRUE.equals(enterprise.getEnabled())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "所属企业已停用，不能配置 SLA 策略");
+        }
         if (request.getResolveHours() != null && request.getResolveHours() < request.getResponseHours()) {
             throw new BusinessException(CODE_BAD_REQUEST, "解决时限不能小于首次响应时限");
         }
@@ -218,19 +245,24 @@ public class SlaPolicyService {
         if (request.getCalendarId() == null || request.getCalendarId() <= 0) {
             throw new BusinessException(CODE_BAD_REQUEST, "请选择工作日历");
         }
-        if (workCalendarMapper.selectById(request.getCalendarId()) == null) {
+        WorkCalendarEntity calendar = workCalendarMapper.selectById(request.getCalendarId());
+        if (calendar == null) {
             throw new BusinessException(CODE_BAD_REQUEST, "工作日历不存在");
+        }
+        if (!request.getEnterpriseId().equals(calendar.getEnterpriseId())) {
+            throw new BusinessException(CODE_BAD_REQUEST, "工作日历与 SLA 策略不属于同一企业");
         }
         if (Boolean.TRUE.equals(request.getDefaultPolicy()) && Boolean.FALSE.equals(request.getEnabled())) {
             throw new BusinessException(CODE_BAD_REQUEST, "默认 SLA 策略必须启用");
         }
     }
 
-    private void ensureDefaultPolicyUnique(boolean defaultPolicy, Long excludeId) {
+    private void ensureDefaultPolicyUnique(Long enterpriseId, boolean defaultPolicy, Long excludeId) {
         if (!defaultPolicy) {
             return;
         }
         LambdaQueryWrapper<SlaPolicyEntity> wrapper = new LambdaQueryWrapper<SlaPolicyEntity>()
+                .eq(SlaPolicyEntity::getEnterpriseId, enterpriseId)
                 .eq(SlaPolicyEntity::getDefaultPolicy, true);
         if (excludeId != null) {
             wrapper.ne(SlaPolicyEntity::getId, excludeId);
@@ -239,6 +271,11 @@ public class SlaPolicyService {
         if (count != null && count > 0) {
             throw new BusinessException(CODE_CONFLICT, "默认 SLA 策略已存在，请先编辑原默认策略");
         }
+    }
+
+    private boolean isMailboxReferenced(Long policyId) {
+        return mailboxMapper.selectCount(new LambdaQueryWrapper<MailboxEntity>()
+                .eq(MailboxEntity::getSlaPolicyId, policyId)) > 0;
     }
 
     private SlaPolicyEntity requirePolicy(Long id) {
@@ -253,6 +290,7 @@ public class SlaPolicyService {
     }
 
     private void fillPolicy(SlaPolicyEntity policy, SlaPolicySaveRequest request, String operator) {
+        policy.setEnterpriseId(request.getEnterpriseId());
         policy.setPolicyName(normalize(request.getPolicyName()));
         policy.setEnabled(request.getEnabled() == null || request.getEnabled());
         policy.setDefaultPolicy(Boolean.TRUE.equals(request.getDefaultPolicy()));
@@ -279,6 +317,7 @@ public class SlaPolicyService {
     private SlaPolicyVO toVO(SlaPolicyEntity policy) {
         return new SlaPolicyVO(
                 policy.getId(),
+                policy.getEnterpriseId(),
                 policy.getPolicyName(),
                 policy.getEnabled(),
                 policy.getDefaultPolicy(),

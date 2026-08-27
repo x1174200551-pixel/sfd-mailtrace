@@ -18,6 +18,8 @@ public class MailFetchLogEntity {
 
     private Long mailboxId;
 
+    private Long enterpriseId;
+
     private String triggerType;
 
     private LocalDateTime startedAt;

@@ -16,6 +16,8 @@ public class CustomerEntity {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long enterpriseId;
+
     private String email;
 
     private String displayName;

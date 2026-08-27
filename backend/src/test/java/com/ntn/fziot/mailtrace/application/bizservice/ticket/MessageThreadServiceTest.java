@@ -57,8 +57,9 @@ class MessageThreadServiceTest {
         msg.setMessageId("parent@test.com");
 
         when(ticketMessageMapper.selectOne(any())).thenReturn(msg);
+        when(ticketMapper.selectById(100L)).thenReturn(ticket(100L, 1L));
 
-        assertEquals(100L, threadService.resolveTicketId(mail));
+        assertEquals(100L, threadService.resolveTicketId(mail, 1L));
     }
 
     @Test
@@ -69,8 +70,9 @@ class MessageThreadServiceTest {
         msg.setMessageId("parent@test.com");
 
         when(ticketMessageMapper.selectOne(any())).thenReturn(msg);
+        when(ticketMapper.selectById(200L)).thenReturn(ticket(200L, 1L));
 
-        assertEquals(200L, threadService.resolveTicketId(mail));
+        assertEquals(200L, threadService.resolveTicketId(mail, 1L));
     }
 
     // ========== 2. References 匹配 ==========
@@ -85,8 +87,9 @@ class MessageThreadServiceTest {
         msg.setMessageId("c@test.com");
 
         when(ticketMessageMapper.selectOne(any())).thenReturn(msg);
+        when(ticketMapper.selectById(300L)).thenReturn(ticket(300L, 1L));
 
-        assertEquals(300L, threadService.resolveTicketId(mail));
+        assertEquals(300L, threadService.resolveTicketId(mail, 1L));
     }
 
     // ========== 3. 主题工单号匹配 ==========
@@ -99,11 +102,12 @@ class MessageThreadServiceTest {
         TicketEntity ticket = new TicketEntity();
         ticket.setId(400L);
         ticket.setTicketNo("TCK-20260724-0001");
+        ticket.setEnterpriseId(1L);
 
         lenient().when(ticketMessageMapper.selectOne(any())).thenReturn(null);
         when(ticketMapper.selectOne(any())).thenReturn(ticket);
 
-        assertEquals(400L, threadService.resolveTicketId(mail));
+        assertEquals(400L, threadService.resolveTicketId(mail, 1L));
     }
 
     // ========== 4. 无匹配 ==========
@@ -112,7 +116,7 @@ class MessageThreadServiceTest {
     void resolveNoMatch_shouldReturnNull() {
         ParsedMail mail = createMail("<new@test.com>", null, null, "全新主题");
         // 主题不含工单号，任何 mapper 都不会被调用
-        assertNull(threadService.resolveTicketId(mail));
+        assertNull(threadService.resolveTicketId(mail, 1L));
     }
 
     // ========== 5. InReplyTo null + References null → 回退到工单号 ==========
@@ -125,11 +129,12 @@ class MessageThreadServiceTest {
         TicketEntity ticket = new TicketEntity();
         ticket.setId(500L);
         ticket.setTicketNo("TCK-20260724-0002");
+        ticket.setEnterpriseId(1L);
 
         lenient().when(ticketMessageMapper.selectOne(any())).thenReturn(null);
         when(ticketMapper.selectOne(any())).thenReturn(ticket);
 
-        assertEquals(500L, threadService.resolveTicketId(mail));
+        assertEquals(500L, threadService.resolveTicketId(mail, 1L));
     }
 
     @Test
@@ -139,7 +144,7 @@ class MessageThreadServiceTest {
         lenient().when(ticketMessageMapper.selectOne(any())).thenReturn(null);
         lenient().when(ticketMapper.selectOne(any())).thenReturn(null);
 
-        assertNull(threadService.resolveTicketId(mail));
+        assertNull(threadService.resolveTicketId(mail, 1L));
     }
 
     // ========== 6. In-Reply-To 优先于工单号 ==========
@@ -155,7 +160,26 @@ class MessageThreadServiceTest {
 
         // 即使主题有工单号，也应该优先匹配 In-Reply-To
         when(ticketMessageMapper.selectOne(any())).thenReturn(msg);
+        when(ticketMapper.selectById(600L)).thenReturn(ticket(600L, 1L));
 
-        assertEquals(600L, threadService.resolveTicketId(mail));
+        assertEquals(600L, threadService.resolveTicketId(mail, 1L));
+    }
+
+    @Test
+    void resolveByMessageId_whenTicketBelongsToOtherEnterprise_shouldNotLink() {
+        ParsedMail mail = createMail("<new@test.com>", "<parent@test.com>", null, "回复");
+        TicketMessageEntity msg = new TicketMessageEntity();
+        msg.setTicketId(700L);
+        when(ticketMessageMapper.selectOne(any())).thenReturn(msg);
+        when(ticketMapper.selectById(700L)).thenReturn(ticket(700L, 2L));
+
+        assertNull(threadService.resolveTicketId(mail, 1L));
+    }
+
+    private TicketEntity ticket(Long id, Long enterpriseId) {
+        TicketEntity ticket = new TicketEntity();
+        ticket.setId(id);
+        ticket.setEnterpriseId(enterpriseId);
+        return ticket;
     }
 }

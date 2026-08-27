@@ -4,12 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.PermissionEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleDataScopeEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RolePermissionEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.PermissionMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleDataScopeMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RolePermissionMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
@@ -40,7 +38,6 @@ public class PermissionService {
     private final PermissionMapper permissionMapper;
     private final RolePermissionMapper rolePermissionMapper;
     private final UserRoleMapper userRoleMapper;
-    private final RoleDataScopeMapper roleDataScopeMapper;
 
     public PermissionContext getCurrentPermissions(CurrentUserPrincipal principal) {
         if (principal == null) {
@@ -81,9 +78,8 @@ public class PermissionService {
                 .filter(code -> !code.isEmpty())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         Set<String> permissionCodes = resolvePermissionCodes(enabledRoleIds);
-        Map<String, Set<String>> dataScopes = resolveDataScopes(enabledRoleIds);
-
-        return new PermissionContext(userId, roleCodes, permissionCodes, dataScopes);
+        // P2-CUTOVER 后角色只承载功能权限，旧数据范围返回空对象兼容现有响应结构。
+        return new PermissionContext(userId, roleCodes, permissionCodes, Map.of());
     }
 
     public boolean hasPermission(CurrentUserPrincipal principal, String permissionCode) {
@@ -156,24 +152,6 @@ public class PermissionService {
                 .map(this::normalizePermissionCode)
                 .filter(code -> !code.isEmpty())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-    }
-
-    private Map<String, Set<String>> resolveDataScopes(Set<Long> roleIds) {
-        List<RoleDataScopeEntity> rows = roleDataScopeMapper.selectList(
-                new LambdaQueryWrapper<RoleDataScopeEntity>().in(RoleDataScopeEntity::getRoleId, roleIds));
-        Map<String, Set<String>> grouped = new LinkedHashMap<>();
-        for (RoleDataScopeEntity row : rows) {
-            String resourceType = normalizeUpper(row.getResourceType());
-            String scopeCode = normalizeUpper(row.getScopeCode());
-            if (resourceType.isEmpty() || scopeCode.isEmpty()) {
-                continue;
-            }
-            grouped.computeIfAbsent(resourceType, key -> new LinkedHashSet<>()).add(scopeCode);
-        }
-
-        Map<String, Set<String>> immutable = new LinkedHashMap<>();
-        grouped.forEach((resourceType, scopes) -> immutable.put(resourceType, Collections.unmodifiableSet(scopes)));
-        return Collections.unmodifiableMap(immutable);
     }
 
     private boolean isEnabled(RoleEntity role) {
