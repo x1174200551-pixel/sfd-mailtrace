@@ -48,6 +48,7 @@ public class EnterpriseMailboxAccessService {
     private final EnterpriseMapper enterpriseMapper;
     private final MailboxMapper mailboxMapper;
     private final UserMapper userMapper;
+    private final AccessCatalogCacheQueryService accessCatalogCacheQueryService;
 
     public boolean isAdmin(CurrentUserPrincipal principal) {
         return resolveAccessScope(principal).admin();
@@ -69,19 +70,7 @@ public class EnterpriseMailboxAccessService {
      * 系统定时任务不绑定登录用户，只允许启用企业下的启用邮箱参与新业务。
      */
     public Set<Long> resolveSystemOperationalMailboxIds() {
-        Map<Long, EnterpriseEntity> enabledEnterprises = indexEnterprises(
-                enterpriseMapper.selectList(new LambdaQueryWrapper<EnterpriseEntity>()
-                        .eq(EnterpriseEntity::getEnabled, true)));
-        if (enabledEnterprises.isEmpty()) {
-            return Set.of();
-        }
-        return mailboxMapper.selectList(new LambdaQueryWrapper<MailboxEntity>()
-                        .eq(MailboxEntity::getEnabled, true)
-                        .in(MailboxEntity::getEnterpriseId, enabledEnterprises.keySet()))
-                .stream()
-                .map(MailboxEntity::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toUnmodifiableSet());
+        return accessCatalogCacheQueryService.getAccessCatalog().operationalMailboxIds();
     }
 
     public void assertSystemMailboxOperational(Long mailboxId) {
@@ -213,27 +202,15 @@ public class EnterpriseMailboxAccessService {
     }
 
     private AccessScope loadAdminScope(Long userId, boolean ticketProcessor) {
-        List<EnterpriseEntity> enterprises = enterpriseMapper.selectList(new LambdaQueryWrapper<>());
-        Map<Long, EnterpriseEntity> enterpriseById = indexEnterprises(enterprises);
-        List<MailboxEntity> mailboxes = mailboxMapper.selectList(new LambdaQueryWrapper<>());
-
-        Set<Long> readableMailboxIds = mailboxes.stream()
-                .map(MailboxEntity::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        Set<Long> operationalMailboxIds = mailboxes.stream()
-                .filter(mailbox -> isOperational(mailbox, enterpriseById))
-                .map(MailboxEntity::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
+        AccessCatalogCacheQueryService.AccessCatalog catalog = accessCatalogCacheQueryService.getAccessCatalog();
 
         return new AccessScope(
                 userId,
                 true,
                 ticketProcessor,
-                enterpriseById.keySet(),
-                readableMailboxIds,
-                operationalMailboxIds
+                catalog.visibleEnterpriseIds(),
+                catalog.readableMailboxIds(),
+                catalog.operationalMailboxIds()
         );
     }
 

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
+import com.ntn.fziot.mailtrace.infrastructure.cache.MtRedisCacheDoubleDelete;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.PermissionTreeNodeVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.role.RoleEnabledRequest;
@@ -146,6 +147,7 @@ public class RoleManagementService {
      * 编辑自定义角色基础信息。
      */
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "role-authorization", key = "#id", delayMillis = 500)
     public RoleVO updateRole(CurrentUserPrincipal principal, Long id, RoleSaveRequest request) {
         // 1、校验当前用户具备角色编辑权限
         permissionService.assertPermission(principal, "role:update", "无权编辑角色");
@@ -173,6 +175,7 @@ public class RoleManagementService {
      * 启用或停用自定义角色。
      */
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "role-authorization", key = "#id", delayMillis = 500)
     public RoleVO updateEnabled(CurrentUserPrincipal principal, Long id, RoleEnabledRequest request) {
         // 1、校验当前用户具备角色启停权限
         permissionService.assertPermission(principal, "role:enable", "无权启停角色");
@@ -193,6 +196,7 @@ public class RoleManagementService {
     /**
      * 保存自定义角色的功能权限清单。旧 dataScopes 请求字段兼容接收但不再校验或写表。
      */
+    @MtRedisCacheDoubleDelete(cacheName = "role-permission-codes", key = "#id", delayMillis = 500)
     @Transactional
     public RoleVO saveRolePermissions(CurrentUserPrincipal principal, Long id, RolePermissionSaveRequest request) {
         // 1、校验当前用户具备角色权限配置权限

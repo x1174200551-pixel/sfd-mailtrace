@@ -7,6 +7,7 @@ import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.notification.FeishuNotificationService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
+import com.ntn.fziot.mailtrace.infrastructure.cache.MtRedisCacheDoubleDelete;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseEnabledRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseListResponse;
@@ -94,6 +95,7 @@ public class EnterpriseService {
     }
 
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "access-catalog", key = "'all'", delayMillis = 500)
     public EnterpriseVO createEnterprise(CurrentUserPrincipal principal, EnterpriseSaveRequest request) {
         permissionService.assertPermission(principal, "enterprise:create", "无权新建企业配置");
         String enterpriseName = normalize(request.getEnterpriseName());
@@ -110,6 +112,7 @@ public class EnterpriseService {
     }
 
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "access-catalog", key = "'all'", delayMillis = 500)
     public EnterpriseVO updateEnterprise(CurrentUserPrincipal principal, Long id, EnterpriseSaveRequest request) {
         permissionService.assertPermission(principal, "enterprise:update", "无权编辑企业配置");
         EnterpriseEntity existing = requireEnterprise(id);
@@ -140,6 +143,7 @@ public class EnterpriseService {
     }
 
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "access-catalog", key = "'all'", delayMillis = 500)
     public EnterpriseVO updateEnabled(CurrentUserPrincipal principal, Long id, EnterpriseEnabledRequest request) {
         permissionService.assertPermission(principal, "enterprise:enable", "无权启停企业配置");
         EnterpriseEntity existing = requireEnterprise(id);

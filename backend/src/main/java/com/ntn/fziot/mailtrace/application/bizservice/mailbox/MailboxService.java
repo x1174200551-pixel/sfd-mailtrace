@@ -8,6 +8,7 @@ import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailbox
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.crypto.MailPasswordCipher;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ImapStoreSupport;
+import com.ntn.fziot.mailtrace.infrastructure.cache.MtRedisCacheDoubleDelete;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.mailbox.MailboxConnectionTestResponse;
@@ -135,6 +136,7 @@ public class MailboxService {
      * 新建邮箱配置，密码或授权码加密后入库。
      */
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "access-catalog", key = "'all'", delayMillis = 500)
     public MailboxVO createMailbox(CurrentUserPrincipal principal, MailboxSaveRequest request) {
         // 1、校验当前用户具备邮箱新建权限
         permissionService.assertPermission(principal, "mailbox:create", "无权新建邮箱配置");
@@ -162,6 +164,7 @@ public class MailboxService {
      * 编辑邮箱配置，密码为空时沿用原密文。
      */
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "access-catalog", key = "'all'", delayMillis = 500)
     public MailboxVO updateMailbox(CurrentUserPrincipal principal, Long id, MailboxSaveRequest request) {
         // 1、校验当前用户具备邮箱编辑权限
         permissionService.assertPermission(principal, "mailbox:update", "无权编辑邮箱配置");
@@ -189,6 +192,7 @@ public class MailboxService {
      * 启用或停用邮箱配置。
      */
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "access-catalog", key = "'all'", delayMillis = 500)
     public MailboxVO updateEnabled(CurrentUserPrincipal principal, Long id, MailboxEnabledRequest request) {
         // 1、校验当前用户具备邮箱启停权限
         permissionService.assertPermission(principal, "mailbox:enable", "无权启停邮箱配置");
@@ -210,6 +214,7 @@ public class MailboxService {
      * 删除邮箱配置，历史邮件、工单和发送记录保留。
      */
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "access-catalog", key = "'all'", delayMillis = 500)
     public void deleteMailbox(CurrentUserPrincipal principal, Long id) {
         // 1、校验当前用户具备邮箱删除权限
         permissionService.assertPermission(principal, "mailbox:delete", "无权删除邮箱配置");

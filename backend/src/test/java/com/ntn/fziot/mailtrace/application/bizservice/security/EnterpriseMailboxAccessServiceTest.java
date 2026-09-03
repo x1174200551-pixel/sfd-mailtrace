@@ -49,6 +49,8 @@ class EnterpriseMailboxAccessServiceTest {
     private MailboxMapper mailboxMapper;
     @Mock
     private UserMapper userMapper;
+    @Mock
+    private AccessCatalogCacheQueryService accessCatalogCacheQueryService;
 
     private EnterpriseMailboxAccessService service;
 
@@ -62,7 +64,8 @@ class EnterpriseMailboxAccessServiceTest {
                 userDataGrantMapper,
                 enterpriseMapper,
                 mailboxMapper,
-                userMapper
+                userMapper,
+                accessCatalogCacheQueryService
         );
     }
 
@@ -74,15 +77,12 @@ class EnterpriseMailboxAccessServiceTest {
     @Test
     void admin_shouldReadAllMailboxes_butOperateOnlyEnabledMailboxInEnabledEnterprise() {
         mockRoles(1L, Set.of("ADMIN"));
-        when(enterpriseMapper.selectList(any())).thenReturn(List.of(
-                enterprise(100L, true),
-                enterprise(200L, false)
-        ));
-        when(mailboxMapper.selectList(any())).thenReturn(List.of(
-                mailbox(10L, 100L, true),
-                mailbox(11L, 100L, false),
-                mailbox(12L, 200L, true)
-        ));
+        when(accessCatalogCacheQueryService.getAccessCatalog()).thenReturn(
+                new AccessCatalogCacheQueryService.AccessCatalog(
+                        Set.of(100L, 200L),
+                        Set.of(10L, 11L, 12L),
+                        Set.of(10L)
+                ));
 
         assertTrue(service.isAdmin(admin));
         assertEquals(Set.of(100L, 200L), service.resolveVisibleEnterpriseIds(admin));

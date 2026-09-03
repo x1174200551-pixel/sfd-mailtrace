@@ -7,6 +7,7 @@ import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.OperationLogService;
+import com.ntn.fziot.mailtrace.infrastructure.cache.MtRedisCacheDoubleDelete;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserCreateRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.user.UserDataGrantDetailVO;
@@ -162,6 +163,7 @@ public class UserService {
      * 编辑用户基础资料和启用状态。
      */
     @Transactional
+    @MtRedisCacheDoubleDelete(cacheName = "user-primary-role-id", key = "#id", delayMillis = 500)
     public UserVO updateUser(CurrentUserPrincipal principal, Long id, UserUpdateRequest request) {
         // 1、校验当前用户具备管理员权限
         permissionService.assertPermission(principal, "user:update", "无权编辑用户");

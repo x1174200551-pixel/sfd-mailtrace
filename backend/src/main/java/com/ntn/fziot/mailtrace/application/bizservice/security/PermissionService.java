@@ -3,14 +3,8 @@ package com.ntn.fziot.mailtrace.application.bizservice.security;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.PermissionEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.RoleEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.RolePermissionEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.entity.UserRoleEntity;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.PermissionMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.RoleMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.RolePermissionMapper;
-import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserRoleMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestAttributes;
@@ -35,9 +29,8 @@ public class PermissionService {
     private static final String ATTR_PERMISSION_CONTEXT = PermissionService.class.getName() + ".PERMISSION_CONTEXT";
 
     private final RoleMapper roleMapper;
-    private final PermissionMapper permissionMapper;
-    private final RolePermissionMapper rolePermissionMapper;
-    private final UserRoleMapper userRoleMapper;
+    private final AuthorizationCacheQueryService authorizationCacheQueryService;
+    private final RolePermissionCacheQueryService rolePermissionCacheQueryService;
 
     public PermissionContext getCurrentPermissions(CurrentUserPrincipal principal) {
         if (principal == null) {
@@ -62,18 +55,23 @@ public class PermissionService {
             return PermissionContext.empty(userId);
         }
 
-        List<RoleEntity> roles = roleMapper.selectBatchIds(roleIds).stream()
+        List<AuthorizationCacheQueryService.RoleAuthorization> roles = roleIds.stream()
+                .map(authorizationCacheQueryService::getRoleAuthorization)
                 .filter(this::isEnabled)
-                .sorted(Comparator.comparing(RoleEntity::getSortOrder, Comparator.nullsLast(Integer::compareTo))
-                        .thenComparing(RoleEntity::getId, Comparator.nullsLast(Long::compareTo)))
+                .sorted(Comparator.comparing(AuthorizationCacheQueryService.RoleAuthorization::sortOrder,
+                                Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(AuthorizationCacheQueryService.RoleAuthorization::id,
+                                Comparator.nullsLast(Long::compareTo)))
                 .toList();
-        Set<Long> enabledRoleIds = roles.stream().map(RoleEntity::getId).collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<Long> enabledRoleIds = roles.stream()
+                .map(AuthorizationCacheQueryService.RoleAuthorization::id)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
         if (enabledRoleIds.isEmpty()) {
             return PermissionContext.empty(userId);
         }
 
         Set<String> roleCodes = roles.stream()
-                .map(RoleEntity::getRoleCode)
+                .map(AuthorizationCacheQueryService.RoleAuthorization::roleCode)
                 .map(this::normalizeUpper)
                 .filter(code -> !code.isEmpty())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
@@ -104,15 +102,10 @@ public class PermissionService {
     private Set<Long> resolveRoleIds(Long userId, String fallbackRoleCode) {
         Set<Long> roleIds = new LinkedHashSet<>();
         if (userId != null) {
-            userRoleMapper.selectList(new LambdaQueryWrapper<UserRoleEntity>()
-                            .eq(UserRoleEntity::getUserId, userId)
-                            .orderByDesc(UserRoleEntity::getPrimaryRole)
-                            .orderByAsc(UserRoleEntity::getId))
-                    .stream()
-                    .map(UserRoleEntity::getRoleId)
-                    .filter(id -> id != null)
-                    .findFirst()
-                    .ifPresent(roleIds::add);
+            Long primaryRoleId = authorizationCacheQueryService.getPrimaryRoleId(userId);
+            if (primaryRoleId != null) {
+                roleIds.add(primaryRoleId);
+            }
         }
         if (roleIds.isEmpty()) {
             RoleEntity fallbackRole = findRoleByCode(fallbackRoleCode);
@@ -134,32 +127,13 @@ public class PermissionService {
     }
 
     private Set<String> resolvePermissionCodes(Set<Long> roleIds) {
-        List<RolePermissionEntity> rolePermissions = rolePermissionMapper.selectList(
-                new LambdaQueryWrapper<RolePermissionEntity>().in(RolePermissionEntity::getRoleId, roleIds));
-        Set<Long> permissionIds = rolePermissions.stream()
-                .map(RolePermissionEntity::getPermissionId)
-                .filter(id -> id != null)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (permissionIds.isEmpty()) {
-            return Set.of();
-        }
-
-        return permissionMapper.selectBatchIds(permissionIds).stream()
-                .filter(this::isEnabled)
-                .sorted(Comparator.comparing(PermissionEntity::getSortOrder, Comparator.nullsLast(Integer::compareTo))
-                        .thenComparing(PermissionEntity::getId, Comparator.nullsLast(Long::compareTo)))
-                .map(PermissionEntity::getPermissionCode)
-                .map(this::normalizePermissionCode)
-                .filter(code -> !code.isEmpty())
+        return roleIds.stream()
+                .flatMap(roleId -> rolePermissionCacheQueryService.getPermissionCodes(roleId).stream())
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
-    private boolean isEnabled(RoleEntity role) {
-        return role != null && Boolean.TRUE.equals(role.getEnabled());
-    }
-
-    private boolean isEnabled(PermissionEntity permission) {
-        return permission != null && Boolean.TRUE.equals(permission.getEnabled());
+    private boolean isEnabled(AuthorizationCacheQueryService.RoleAuthorization role) {
+        return role != null && Boolean.TRUE.equals(role.enabled());
     }
 
     private String normalizeUpper(String value) {
