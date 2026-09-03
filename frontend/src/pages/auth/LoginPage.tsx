@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react'
 import loginCardVisual from '../../assets/login-prototype-card.png'
 import loginEnvelopeVisual from '../../assets/login-prototype-envelope.png'
+import { BrandLogo } from '../../components/branding/BrandLogo'
 
 export type LoginModalState = {
   title: string
@@ -56,14 +57,7 @@ export function LoginPage({
 
       <div className="brand">
         <div className="brand-logo">
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path
-              d="M3 6.8 12 13l9-6.2M4.5 5h15A1.5 1.5 0 0 1 21 6.5v11A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5v-11A1.5 1.5 0 0 1 4.5 5Z"
-              stroke="white"
-              strokeLinejoin="round"
-              strokeWidth="1.8"
-            />
-          </svg>
+          <BrandLogo />
         </div>
         <div>
           <div className="brand-title">邮件工单系统</div>

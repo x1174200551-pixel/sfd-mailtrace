@@ -33,6 +33,7 @@ import { getVisibleTicketEvents, isTerminalTicket } from './utils/ticket-events'
 import { workdayLabel } from './utils/work-calendar'
 
 function AdminApp() {
+  const deepLinkedTicketId = adminTicketIdFromPath()
   const {
     account,
     accountError,
@@ -61,6 +62,7 @@ function AdminApp() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [activeSystemGroup, setActiveSystemGroup] = useState<SystemGroupKey>('ticket')
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const deepLinkOpenedRef = useRef(false)
   const { canAccessPage, firstVisibleMenuTitle, hasPermission, isAdmin, isAgent, visibleMenuGroups } = usePermission(user)
   const canOpenTicketList = hasPermission('menu:tickets') && hasPermission('ticket:read')
   const canReadDashboard = hasPermission('dashboard:read')
@@ -158,6 +160,12 @@ function AdminApp() {
     onActiveMenuChange: setActiveMenu,
     token,
   })
+  useEffect(() => {
+    if (!token || !user || !deepLinkedTicketId || deepLinkOpenedRef.current) return
+    deepLinkOpenedRef.current = true
+    setActiveMenu('全部工单')
+    void handleOpenDetail(deepLinkedTicketId)
+  }, [deepLinkedTicketId, handleOpenDetail, token, user])
   const isCurrentTicketUnassigned = ticketDetail?.assigneeId == null
   const isCurrentTicketTerminal = ticketDetail ? isTerminalTicket(ticketDetail.status) : false
   const canOperateCurrentTicket = !!ticketDetail && !isCurrentTicketTerminal
@@ -247,6 +255,8 @@ function AdminApp() {
     data: enterprisesData,
     enabledFilter: enterpriseEnabledFilter,
     error: enterprisesError,
+    feishuTestMessage,
+    feishuTesting,
     fetchEnterprises,
     form: enterpriseForm,
     formOpen: enterpriseFormOpen,
@@ -266,6 +276,7 @@ function AdminApp() {
     setPage: setEnterprisePage,
     setPageSize: setEnterprisePageSize,
     submitConfirm: submitEnterpriseConfirm,
+    testFeishuGroup,
   } = useEnterpriseManagement({
     activeMenu,
     canRead: canReadEnterprises,
@@ -463,6 +474,7 @@ function AdminApp() {
     assignmentSaving,
     assignmentTestForm,
     assignmentTesting,
+    discardAssignmentRuleChanges,
     fetchAssignmentRules,
     fetchAssignmentGroups,
     moveAssignmentRule,
@@ -631,6 +643,7 @@ function AdminApp() {
     slaPreview,
     slaPreviewBaseTime,
     slaResolveHoursInvalid,
+    slaEscalationInvalid,
     slaWarningInvalid,
     submitSlaPolicyConfirm,
     toggleSlaPolicy,
@@ -843,6 +856,7 @@ function AdminApp() {
     assignmentSaving,
     assignmentTestForm,
     assignmentTesting,
+    discardAssignmentRuleChanges,
     calendarPreviewCreatedAtValue,
     calendarPreviewResolveHours,
     calendarPreviewResolveHoursValue,
@@ -967,6 +981,8 @@ function AdminApp() {
     enterprisePage,
     enterprisePageSize,
     enterpriseSaving,
+    feishuTestMessage,
+    feishuTesting,
     enterprisesData,
     enterprisesError,
     enterprisesLoading,
@@ -1238,6 +1254,7 @@ function AdminApp() {
     slaPreview,
     slaPreviewBaseTime,
     slaResolveHoursInvalid,
+    slaEscalationInvalid,
     slaWarningInvalid,
     statusModalOpen,
     statusReason,
@@ -1245,6 +1262,7 @@ function AdminApp() {
     statusValue,
     submitAssignmentConfirm,
     submitEnterpriseConfirm,
+    testFeishuGroup,
     submitConfirmAction,
     submitMailboxConfirm,
     submitRoleBase,
@@ -1427,6 +1445,13 @@ function customerTicketNoFromPath() {
   }
 
   return ''
+}
+
+function adminTicketIdFromPath() {
+  const match = window.location.pathname.match(/\/tickets\/(\d+)(?:\/|$)/)
+  if (!match) return null
+  const ticketId = Number(match[1])
+  return Number.isSafeInteger(ticketId) && ticketId > 0 ? ticketId : null
 }
 
 function App() {

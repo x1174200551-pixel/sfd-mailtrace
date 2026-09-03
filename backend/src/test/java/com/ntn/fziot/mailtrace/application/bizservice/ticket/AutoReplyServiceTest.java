@@ -3,12 +3,15 @@ package com.ntn.fziot.mailtrace.application.bizservice.ticket;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.application.bizservice.mailsend.OutboundMailRequest;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketMessageEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMessageMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.UserMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,6 +31,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
 class AutoReplyServiceTest {
@@ -38,6 +42,8 @@ class AutoReplyServiceTest {
     private MailboxMapper mailboxMapper;
     @Mock
     private TicketMapper ticketMapper;
+    @Mock
+    private TicketMessageMapper ticketMessageMapper;
     @Mock
     private UserMapper userMapper;
     @Mock
@@ -65,7 +71,7 @@ class AutoReplyServiceTest {
         assertFalse(result.success());
         assertTrue(result.message().contains("未绑定"));
         verify(templateMapper, never()).selectById(any());
-        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(mailSendService, never()).sendThreadedMail(any());
     }
 
     @Test
@@ -76,19 +82,34 @@ class AutoReplyServiceTest {
         when(templateMapper.selectById(30L)).thenReturn(template(30L, 1L, "AUTO_REPLY", true));
         when(customerTicketAccessService.buildTicketUrl(ticket)).thenReturn("/customer/tickets/TCK-100");
         when(customerTicketAccessService.formatExpiresAt(ticket.getCustomerAccessExpiresAt())).thenReturn("2026-08-29 10:00");
-        when(mailSendService.sendRawMail(
-                eq(11L), eq("customer@example.com"), any(), any(), eq("AUTO_REPLY"),
-                eq(100L), eq(30L), eq("AUTO_REPLY")))
-                .thenReturn(MailSendService.SendResult.ok("发送成功", "<reply@example.com>"));
+        TicketMessageEntity parent = new TicketMessageEntity();
+        parent.setId(200L);
+        parent.setTicketId(100L);
+        parent.setDirection(TicketBizService.DIRECTION_INBOUND);
+        parent.setMessageId("customer-mail@example.com");
+        parent.setMailReferences("<root@example.com>");
+        parent.setSubject("咨询");
+        when(ticketMessageMapper.selectById(200L)).thenReturn(parent);
+        when(ticketMessageMapper.insert(any(TicketMessageEntity.class))).thenAnswer(invocation -> {
+            TicketMessageEntity message = invocation.getArgument(0);
+            message.setId(201L);
+            return 1;
+        });
+        when(mailSendService.sendThreadedMail(any()))
+                .thenReturn(MailSendService.SendResult.ok("发送成功", "reply@example.com"));
 
-        AutoReplyService.AutoReplyResult result = autoReplyService.sendAutoReply(100L, 11L, "123456");
+        AutoReplyService.AutoReplyResult result = autoReplyService.sendAutoReply(100L, 11L, "123456", 200L);
 
         assertTrue(result.success());
         assertEquals(30L, ticket.getAutoReplyTemplateId());
         verify(ticketMapper).update(eq(null), any());
-        verify(mailSendService).sendRawMail(
-                eq(11L), eq("customer@example.com"), any(), any(), eq("AUTO_REPLY"),
-                eq(100L), eq(30L), eq("AUTO_REPLY"));
+        ArgumentCaptor<OutboundMailRequest> requestCaptor = ArgumentCaptor.forClass(OutboundMailRequest.class);
+        verify(mailSendService).sendThreadedMail(requestCaptor.capture());
+        assertEquals(201L, requestCaptor.getValue().ticketMessageId());
+        assertEquals("customer-mail@example.com", requestCaptor.getValue().inReplyTo());
+        assertEquals("<root@example.com> <customer-mail@example.com>", requestCaptor.getValue().references());
+        assertEquals("Re: 咨询", requestCaptor.getValue().subject());
+        assertEquals("support@example.com", requestCaptor.getValue().replyToAddress());
     }
 
     @Test
@@ -101,7 +122,7 @@ class AutoReplyServiceTest {
 
         assertFalse(result.success());
         verify(ticketMapper, never()).update(eq(null), any());
-        verify(mailSendService, never()).sendRawMail(any(), any(), any(), any(), any(), any(), any(), any());
+        verify(mailSendService, never()).sendThreadedMail(any());
     }
 
     private TicketEntity ticket() {

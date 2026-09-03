@@ -5,9 +5,17 @@ export const emptyTemplateForm: TemplateFormState = {
   templateCode: '',
   templateType: 'AUTO_REPLY',
   templateName: '',
-  subjectTpl: '',
+  subjectTpl: 'Re: {subject}',
   contentTpl: '',
   enabled: true,
+}
+
+export function isThreadedReplyTemplate(templateType: string) {
+  return templateType === 'AUTO_REPLY' || templateType === 'AGENT_REPLY'
+}
+
+export function normalizedTemplateSubject(templateType: string, subjectTpl: string) {
+  return isThreadedReplyTemplate(templateType) ? 'Re: {subject}' : subjectTpl
 }
 
 export const templateScenes: Record<string, string> = {

@@ -38,6 +38,15 @@ const sendTypeLabels: Record<string, string> = {
   AUTO_REPLY: '自动回执',
   ASSIGN_NOTIFY: '分配通知',
   AGENT_REPLY: '客服回复',
+  SLA_WARNING: 'SLA 预警',
+  SLA_BREACH: 'SLA 超时',
+  SLA_ESCALATION: 'SLA 升级',
+  SLA_RESPONSE_WARNING: '首次响应预警',
+  SLA_RESPONSE_BREACH: '首次响应超时',
+  SLA_RESPONSE_ESCALATION: '首次响应超时升级',
+  SLA_RESOLVE_WARNING: '解决预警',
+  SLA_RESOLVE_BREACH: '解决超时',
+  SLA_RESOLVE_ESCALATION: '解决超时升级',
 }
 
 export function MailSendLogPage({
@@ -123,11 +132,11 @@ export function MailSendLogPage({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>类型</span>
-            <Select value={typeFilter === 'ALL' ? undefined : typeFilter} onChange={(value) => onTypeFilterChange(value ?? 'ALL')} placeholder="全部类型" allowClear style={{ width: '100%' }} options={[{ value: 'TEST', label: '测试' }, { value: 'AUTO_REPLY', label: '自动回执' }, { value: 'ASSIGN_NOTIFY', label: '分配通知' }, { value: 'AGENT_REPLY', label: '客服回复' }]} />
+            <Select value={typeFilter === 'ALL' ? undefined : typeFilter} onChange={(value) => onTypeFilterChange(value ?? 'ALL')} placeholder="全部类型" allowClear style={{ width: '100%' }} options={Object.entries(sendTypeLabels).map(([value, label]) => ({ value, label }))} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>状态</span>
-            <Select value={statusFilter === 'ALL' ? undefined : statusFilter} onChange={(value) => onStatusFilterChange(value ?? 'ALL')} placeholder="全部状态" allowClear style={{ width: '100%' }} options={[{ value: 'SUCCESS', label: '成功' }, { value: 'FAILED', label: '失败' }, { value: 'PENDING', label: '待发送' }, { value: 'RETRYING', label: '重试中' }]} />
+            <Select value={statusFilter === 'ALL' ? undefined : statusFilter} onChange={(value) => onStatusFilterChange(value ?? 'ALL')} placeholder="全部状态" allowClear style={{ width: '100%' }} options={[{ value: 'SUCCESS', label: '成功' }, { value: 'FAILED', label: '失败' }, { value: 'PENDING', label: '待发送' }, { value: 'SENDING', label: '发送中' }, { value: 'RETRYING', label: '重试中' }, { value: 'DELIVERY_UNKNOWN', label: '待核实' }, { value: 'CANCELLED', label: '已取消' }]} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: '#595959', whiteSpace: 'nowrap', fontWeight: 500 }}>时间</span>
@@ -235,5 +244,9 @@ function renderSendStatus(value: string) {
   if (value === 'SUCCESS') return <Tag color="success">成功</Tag>
   if (value === 'FAILED') return <Tag color="error">失败</Tag>
   if (value === 'PENDING') return <Tag color="processing">待发</Tag>
-  return <Tag color="warning">重试中</Tag>
+  if (value === 'SENDING') return <Tag color="processing">发送中</Tag>
+  if (value === 'RETRYING') return <Tag color="warning">重试中</Tag>
+  if (value === 'DELIVERY_UNKNOWN') return <Tag color="warning">待核实</Tag>
+  if (value === 'CANCELLED') return <Tag>已取消</Tag>
+  return <Tag>{value || '未知'}</Tag>
 }

@@ -4,13 +4,13 @@ import {
   ChevronDown,
   CircleHelp,
   LogOut,
-  Mail,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
   UserRound,
 } from 'lucide-react'
+import { BrandLogo } from '../branding/BrandLogo'
 import { roleLabel } from '../../constants/roles'
 import type { MenuGroup } from '../../constants/menus'
 import type { CurrentUser } from '../../types/auth'
@@ -77,7 +77,7 @@ export function AppShell({
       <aside className={sidebarCollapsed ? 'app-sidebar collapsed' : 'app-sidebar'} aria-label="左侧菜单">
         <div className="app-logo">
           <span className="app-logo__mark">
-            <Mail size={18} strokeWidth={2.4} />
+            <BrandLogo />
           </span>
           {!sidebarCollapsed && <strong>邮件工单系统</strong>}
         </div>

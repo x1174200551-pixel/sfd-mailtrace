@@ -1,6 +1,7 @@
 package com.ntn.fziot.mailtrace.application.bizservice.ticket;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailThreadHeaders;
 import com.ntn.fziot.mailtrace.infrastructure.mail.ParsedMail;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketMessageEntity;
@@ -78,10 +79,11 @@ public class MessageThreadService {
             if (ticketId != null) return ticketId;
         }
 
-        // 再检查 References（取最后一个 ID）
+        // 再检查 References，从最近引用向最早祖先逐个回退。
         if (mail.references() != null && !mail.references().isBlank()) {
-            String refId = extractLastMessageId(mail.references());
-            if (refId != null) {
+            var referenceIds = MailThreadHeaders.parseMessageIds(mail.references());
+            for (int index = referenceIds.size() - 1; index >= 0; index--) {
+                String refId = referenceIds.get(index);
                 Long ticketId = findTicketIdByMessageId(refId, enterpriseId);
                 if (ticketId != null) return ticketId;
             }
@@ -98,23 +100,18 @@ public class MessageThreadService {
     }
 
     public static String normalizeMessageId(String raw) {
-        if (raw == null) return null;
-        String trimmed = raw.trim();
-        if (trimmed.isBlank()) return null;
-        if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
-            return trimmed.substring(1, trimmed.length() - 1).trim();
-        }
-        return trimmed;
+        return MailThreadHeaders.normalizeMessageId(raw);
     }
 
     /**
-     * 从 References 头中提取最后一个 Message-ID。
+     * 客服回复优先引用最近一封客户来信；历史数据缺失时退化到最近一封非内部消息。
      */
-    private String extractLastMessageId(String references) {
-        if (references == null || references.isBlank()) return null;
-        // References 可包含多个 <id1> <id2> <id3>
-        String[] parts = references.trim().split("\\s+");
-        return extractMessageId(parts[parts.length - 1]);
+    public TicketMessageEntity findReplyParent(Long ticketId) {
+        if (ticketId == null) {
+            return null;
+        }
+        TicketMessageEntity parent = ticketMessageMapper.selectLatestInboundForReply(ticketId);
+        return parent != null ? parent : ticketMessageMapper.selectLatestMessageForReply(ticketId);
     }
 
     /**

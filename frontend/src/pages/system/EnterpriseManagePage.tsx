@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Building2,
-  ChevronRight,
   CircleAlert,
   CircleCheck,
   CircleOff,
@@ -9,12 +8,14 @@ import {
   Edit3,
   FileText,
   Mail,
+  MessageCircle,
   Phone,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
   TicketCheck,
+  Send,
   X,
 } from 'lucide-react'
 import type {
@@ -34,6 +35,8 @@ type Props = {
   data: EnterpriseListResponse | null
   enabledFilter: string
   error: string
+  feishuTestMessage: string
+  feishuTesting: boolean
   form: EnterpriseFormState
   formOpen: boolean
   keyword: string
@@ -52,12 +55,20 @@ type Props = {
   onPageSizeChange: (size: number) => void
   onSave: () => void
   onSubmitConfirm: () => void
+  onTestFeishuGroup: () => void
   saving: boolean
 }
 
 function formatDateTime(value: string | null) {
   if (!value) return '—'
   return value.replace('T', ' ').slice(0, 16)
+}
+
+function feishuStatusLabel(status: string | null | undefined) {
+  if (status === 'OK') return '测试通过'
+  if (status === 'UNTESTED') return '未验证（可选）'
+  if (status === 'ERROR') return '测试失败'
+  return '未配置'
 }
 
 export function EnterpriseManagePage({
@@ -70,6 +81,8 @@ export function EnterpriseManagePage({
   data,
   enabledFilter,
   error,
+  feishuTestMessage,
+  feishuTesting,
   form,
   formOpen,
   keyword,
@@ -88,6 +101,7 @@ export function EnterpriseManagePage({
   onPageSizeChange,
   onSave,
   onSubmitConfirm,
+  onTestFeishuGroup,
   saving,
 }: Props) {
   const [selectedEnterpriseId, setSelectedEnterpriseId] = useState<number | null>(null)
@@ -196,7 +210,7 @@ export function EnterpriseManagePage({
                 ) : enterprises.length ? (
                   <table className="enterprise-table">
                     <thead>
-                      <tr><th>企业</th><th>联系人</th><th>业务规模</th><th>状态</th><th>最近更新</th><th aria-label="选择企业" /></tr>
+                      <tr><th>企业</th><th>联系人</th><th>业务规模</th><th>状态</th><th>最近更新</th><th>操作</th></tr>
                     </thead>
                     <tbody>
                       {enterprises.map((enterprise) => (
@@ -211,7 +225,33 @@ export function EnterpriseManagePage({
                           <td><strong>{enterprise.mailboxCount} 个邮箱</strong><small>{enterprise.ticketCount} 个工单</small></td>
                           <td><span className={`enterprise-state ${enterprise.enabled ? 'enabled' : 'disabled'}`}><i />{enterprise.enabled ? '启用' : '停用'}</span></td>
                           <td>{formatDateTime(enterprise.updatedAt)}</td>
-                          <td><button aria-label={`查看${enterprise.enterpriseName}`} className="enterprise-row-enter" onClick={() => setSelectedEnterpriseId(enterprise.id)} type="button"><ChevronRight size={16} /></button></td>
+                          <td className="enterprise-row-actions-cell">
+                            <div className="enterprise-row-actions">
+                              <button
+                                disabled={!canUpdate}
+                                onClick={() => {
+                                  setSelectedEnterpriseId(enterprise.id)
+                                  onOpenEdit(enterprise)
+                                }}
+                                type="button"
+                              >
+                                <Edit3 size={13} />
+                                编辑
+                              </button>
+                              <button
+                                className={enterprise.enabled ? 'danger' : 'success'}
+                                disabled={!canEnable}
+                                onClick={() => {
+                                  setSelectedEnterpriseId(enterprise.id)
+                                  onConfirmActionChange({ enterprise, nextEnabled: !enterprise.enabled })
+                                }}
+                                type="button"
+                              >
+                                {enterprise.enabled ? <CircleOff size={13} /> : <CircleCheck size={13} />}
+                                {enterprise.enabled ? '停用' : '启用'}
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -277,21 +317,22 @@ export function EnterpriseManagePage({
                       <p>{selectedEnterprise.remark || '暂未填写企业备注。'}</p>
                     </section>
 
+                    <section className="enterprise-detail-section enterprise-feishu-summary">
+                      <h3><MessageCircle size={15} />飞书通知群</h3>
+                      <dl>
+                        <div><dt>通知群</dt><dd>{selectedEnterprise.feishuGroupName || '未配置'}</dd></div>
+                        <div><dt>机器人配置</dt><dd>{selectedEnterprise.feishuConfigured ? '已配置' : '未配置'}</dd></div>
+                        <div><dt>最近测试</dt><dd>{feishuStatusLabel(selectedEnterprise.feishuConnectionStatus)}</dd></div>
+                        <div><dt>通知开关</dt><dd>{selectedEnterprise.feishuNotifyEnabled ? '已启用' : '未启用'}</dd></div>
+                      </dl>
+                      {selectedEnterprise.feishuLastError && <p className="enterprise-feishu-error">{selectedEnterprise.feishuLastError}</p>}
+                    </section>
+
                     <div className="enterprise-scope-note">
                       <ShieldCheck size={15} />
                       <span>邮箱、工单、策略与用户授权均以该企业作为业务边界。</span>
                     </div>
                   </div>
-
-                  <footer className="enterprise-detail-actions">
-                    <button disabled={!canEnable} onClick={() => onConfirmActionChange({ enterprise: selectedEnterprise, nextEnabled: !selectedEnterprise.enabled })} type="button">
-                      {selectedEnterprise.enabled ? <CircleOff size={15} /> : <CircleCheck size={15} />}
-                      {selectedEnterprise.enabled ? '停用' : '启用'}
-                    </button>
-                    <button className="primary-action" disabled={!canUpdate} onClick={() => onOpenEdit(selectedEnterprise)} type="button">
-                      <Edit3 size={15} />编辑企业
-                    </button>
-                  </footer>
                 </>
               ) : (
                 <div className="enterprise-detail-empty">
@@ -308,19 +349,59 @@ export function EnterpriseManagePage({
       {formOpen && (
         <div className="p5-modal-backdrop" role="presentation">
           <section className="p5-modal enterprise-modal" role="dialog" aria-modal="true" aria-label={form.id ? '编辑企业' : '新建企业'}>
-            <header>
-              <div><h3>{form.id ? '编辑企业' : '新建企业'}</h3><p>企业是邮箱、工单、策略和数据授权的业务边界。</p></div>
+            <header className="enterprise-modal__head">
+              <span className="enterprise-modal__mark"><Building2 size={19} /></span>
+              <div><h3>{form.id ? '编辑企业' : '新建企业'}</h3><p>统一维护企业档案、业务状态与通知渠道</p></div>
               <button aria-label="关闭" onClick={onCloseForm} type="button"><X size={18} /></button>
             </header>
-            <div className="p5-form-grid">
-              <label className="wide"><span>企业名称 *</span><input autoFocus maxLength={128} onChange={(event) => onFormChange({ enterpriseName: event.target.value })} placeholder="请输入企业名称" value={form.enterpriseName} /></label>
-              <label><span>联系人</span><input maxLength={64} onChange={(event) => onFormChange({ contactName: event.target.value })} placeholder="请输入联系人姓名" value={form.contactName} /></label>
-              <label><span>联系电话</span><input maxLength={32} onChange={(event) => onFormChange({ contactPhone: event.target.value })} placeholder="请输入联系电话" value={form.contactPhone} /></label>
-              <label className="wide"><span>联系邮箱</span><input maxLength={128} onChange={(event) => onFormChange({ contactEmail: event.target.value })} placeholder="name@example.com" type="email" value={form.contactEmail} /></label>
-              <label className="wide"><span>备注</span><textarea maxLength={512} onChange={(event) => onFormChange({ remark: event.target.value })} placeholder="补充该企业的业务说明" rows={4} value={form.remark} /></label>
-              <label className="p5-switch-row wide enterprise-toggle-field"><input checked={form.enabled} onChange={(event) => onFormChange({ enabled: event.target.checked })} type="checkbox" /><span><strong>{form.enabled ? '企业启用' : '企业停用'}</strong><small>{form.enabled ? '保存后可正常开展新业务' : '保存后仅保留历史数据访问'}</small></span></label>
+            <div className="enterprise-modal__body">
+              <section className="enterprise-form-card">
+                <div className="enterprise-form-card__head">
+                  <span><Contact size={16} /></span>
+                  <div><strong>基础资料</strong><small>用于企业识别、业务联系和后台检索</small></div>
+                </div>
+                <div className="enterprise-profile-grid">
+                  <label className="enterprise-field enterprise-field--name"><span>企业名称 <em>*</em></span><input autoFocus maxLength={128} onChange={(event) => onFormChange({ enterpriseName: event.target.value })} placeholder="请输入企业名称" value={form.enterpriseName} /></label>
+                  <label className={`enterprise-status-card ${form.enabled ? 'is-enabled' : 'is-disabled'}`}>
+                    <input checked={form.enabled} onChange={(event) => onFormChange({ enabled: event.target.checked })} type="checkbox" />
+                    <span><strong>{form.enabled ? '企业启用' : '企业停用'}</strong><small>{form.enabled ? '允许开展新业务' : '仅保留历史数据'}</small></span>
+                  </label>
+                  <label className="enterprise-field"><span>联系人</span><input maxLength={64} onChange={(event) => onFormChange({ contactName: event.target.value })} placeholder="请输入联系人姓名" value={form.contactName} /></label>
+                  <label className="enterprise-field"><span>联系电话</span><input maxLength={32} onChange={(event) => onFormChange({ contactPhone: event.target.value })} placeholder="请输入联系电话" value={form.contactPhone} /></label>
+                  <label className="enterprise-field"><span>联系邮箱</span><input maxLength={128} onChange={(event) => onFormChange({ contactEmail: event.target.value })} placeholder="name@example.com" type="email" value={form.contactEmail} /></label>
+                  <label className="enterprise-field enterprise-field--remark"><span>企业备注</span><textarea maxLength={512} onChange={(event) => onFormChange({ remark: event.target.value })} placeholder="补充业务范围、服务约定等说明" rows={3} value={form.remark} /></label>
+                </div>
+              </section>
+
+              <section className="enterprise-form-card enterprise-feishu-editor">
+                <div className="enterprise-feishu-editor__head">
+                  <div><span className="enterprise-form-card__icon"><MessageCircle size={16} /></span><span><strong>飞书通知群</strong><small>分配通知与 SLA 提醒统一发送到该企业群</small></span></div>
+                  <em>{form.id && selectedEnterprise ? feishuStatusLabel(selectedEnterprise.feishuConnectionStatus) : '未保存'}</em>
+                </div>
+                <div className="enterprise-feishu-grid">
+                  <label className="enterprise-field"><span>通知群名称</span><input disabled={form.clearFeishuConfig} maxLength={128} onChange={(event) => onFormChange({ feishuGroupName: event.target.value })} placeholder="例如：A 企业工单通知群" value={form.feishuGroupName} /></label>
+                  <label className="enterprise-field enterprise-field--webhook"><span>机器人 Webhook</span><input disabled={form.clearFeishuConfig} maxLength={1024} onChange={(event) => onFormChange({ feishuWebhookUrl: event.target.value })} placeholder={selectedEnterprise?.feishuConfigured ? '已配置，留空保持原值' : 'https://open.feishu.cn/open-apis/bot/v2/hook/...'} value={form.feishuWebhookUrl} /></label>
+                  <label className="enterprise-field"><span>签名密钥</span><input autoComplete="new-password" disabled={form.clearFeishuConfig} maxLength={512} onChange={(event) => onFormChange({ feishuSigningSecret: event.target.value })} placeholder={selectedEnterprise?.feishuConfigured ? '已配置，留空保持原值' : '请输入群机器人签名密钥'} type="password" value={form.feishuSigningSecret} /></label>
+                  <label className={`enterprise-status-card enterprise-feishu-switch ${form.feishuNotifyEnabled ? 'is-enabled' : 'is-disabled'}`}>
+                    <input checked={form.feishuNotifyEnabled} disabled={form.clearFeishuConfig} onChange={(event) => onFormChange({ feishuNotifyEnabled: event.target.checked })} type="checkbox" />
+                    <span><strong>{form.feishuNotifyEnabled ? '群通知已启用' : '群通知未启用'}</strong><small>{form.feishuNotifyEnabled ? '分配与 SLA 消息将进入群聊' : '保存配置但暂不发送消息'}</small></span>
+                  </label>
+                </div>
+                {form.id && selectedEnterprise?.feishuConfigured && (
+                  <div className="enterprise-feishu-test">
+                    <span><strong>连接测试</strong><small>使用已保存配置向当前通知群发送一条普通消息，不会 @ 群成员。</small></span>
+                    <button disabled={feishuTesting} onClick={onTestFeishuGroup} type="button"><Send size={14} />{feishuTesting ? '发送中...' : '发送测试消息'}</button>
+                  </div>
+                )}
+                {form.id && selectedEnterprise?.feishuConfigured && <small className="enterprise-feishu-help">可选：测试使用数据库中已保存的机器人配置；修改 Webhook 或密钥后请先保存再测试。</small>}
+                {feishuTestMessage && <p className="enterprise-feishu-message">{feishuTestMessage}</p>}
+                {form.id && selectedEnterprise?.feishuConfigured && <label className="enterprise-feishu-clear"><input checked={form.clearFeishuConfig} onChange={(event) => onFormChange({ clearFeishuConfig: event.target.checked, feishuNotifyEnabled: event.target.checked ? false : form.feishuNotifyEnabled })} type="checkbox" /><span>清除该企业的飞书群机器人配置</span></label>}
+              </section>
             </div>
-            <footer><button onClick={onCloseForm} type="button">取消</button><button className="primary-action" disabled={saving} onClick={onSave} type="button">{saving ? '保存中...' : '保存企业'}</button></footer>
+            <footer className="enterprise-modal__footer">
+              <span><ShieldCheck size={14} />保存仅影响后续业务，历史工单数据保持不变</span>
+              <div><button onClick={onCloseForm} type="button">取消</button><button className="primary-action" disabled={saving} onClick={onSave} type="button">{saving ? '保存中...' : '保存企业'}</button></div>
+            </footer>
           </section>
         </div>
       )}

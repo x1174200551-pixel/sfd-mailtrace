@@ -148,6 +148,10 @@ export function useSlaPolicyManagement({
       if (patch.enabled === false && value.defaultPolicy) {
         next.defaultPolicy = false
       }
+      if (patch.escalateAfterBreachHours === '') {
+        next.responseEscalationNotifyEnabled = false
+        next.resolveEscalationNotifyEnabled = false
+      }
       return next
     })
     setSlaPolicyDirty(true)
@@ -181,6 +185,12 @@ export function useSlaPolicyManagement({
     escalateAfterBreachHours: slaPolicyForm.escalateAfterBreachHours.trim()
       ? Number(slaPolicyForm.escalateAfterBreachHours)
       : null,
+    responseWarningNotifyEnabled: slaPolicyForm.responseWarningNotifyEnabled,
+    responseBreachNotifyEnabled: slaPolicyForm.responseBreachNotifyEnabled,
+    responseEscalationNotifyEnabled: slaPolicyForm.responseEscalationNotifyEnabled,
+    resolveWarningNotifyEnabled: slaPolicyForm.resolveWarningNotifyEnabled,
+    resolveBreachNotifyEnabled: slaPolicyForm.resolveBreachNotifyEnabled,
+    resolveEscalationNotifyEnabled: slaPolicyForm.resolveEscalationNotifyEnabled,
     calendarId: slaPolicyForm.calendarId ? Number(slaPolicyForm.calendarId) : null,
   }), [slaPolicyForm])
 
@@ -281,6 +291,10 @@ export function useSlaPolicyManagement({
     && Number(slaPolicyForm.resolveHours) < Number(slaPolicyForm.responseHours),
   )
   const slaWarningInvalid = Number(slaPolicyForm.warningRemainHours) >= Number(slaPolicyForm.responseHours)
+  const slaEscalationInvalid = Boolean(
+    (slaPolicyForm.responseEscalationNotifyEnabled || slaPolicyForm.resolveEscalationNotifyEnabled)
+    && !slaPolicyForm.escalateAfterBreachHours.trim(),
+  )
 
   return {
     fetchSlaPolicies,
@@ -312,6 +326,7 @@ export function useSlaPolicyManagement({
     slaPreview,
     slaPreviewBaseTime,
     slaResolveHoursInvalid,
+    slaEscalationInvalid,
     slaWarningInvalid,
     submitSlaPolicyConfirm,
     toggleSlaPolicy,

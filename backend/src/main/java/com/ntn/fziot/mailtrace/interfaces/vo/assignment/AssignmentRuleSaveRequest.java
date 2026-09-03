@@ -30,11 +30,11 @@ public class AssignmentRuleSaveRequest {
     @Schema(description = "匹配优先级，数字越小越优先", example = "10")
     private Integer priorityOrder = 100;
 
-    @Schema(description = "旧版默认规则兼容字段；P3 页面固定为 false", example = "false")
+    @Schema(description = "是否为规则组默认分配规则；匹配类型为 DEFAULT 时由服务端置为 true", example = "false")
     private Boolean defaultRule = false;
 
     @NotBlank(message = "请选择匹配类型")
-    @Schema(description = "匹配类型：SUBJECT_KEYWORD/MAILBOX/FROM_EMAIL", example = "SUBJECT_KEYWORD")
+    @Schema(description = "匹配类型：DEFAULT/SUBJECT_KEYWORD/MAILBOX/FROM_EMAIL", example = "SUBJECT_KEYWORD")
     private String matchType;
 
     @Size(max = 256, message = "匹配值不能超过 256 个字符")

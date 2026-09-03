@@ -20,6 +20,10 @@ public class TicketMessageEntity {
 
     private String direction;
 
+    private String sendStatus;
+
+    private LocalDateTime deliveryCompletedAt;
+
     private String messageId;
 
     private String inReplyTo;

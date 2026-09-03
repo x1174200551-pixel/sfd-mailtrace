@@ -34,6 +34,7 @@ type AppContentModelKey =
   | 'assignmentSaving'
   | 'assignmentTestForm'
   | 'assignmentTesting'
+  | 'discardAssignmentRuleChanges'
   | 'calendarPreviewCreatedAtValue'
   | 'calendarPreviewResolveHours'
   | 'calendarPreviewResolveHoursValue'
@@ -165,6 +166,8 @@ type AppContentModelKey =
   | 'enterprisesData'
   | 'enterprisesError'
   | 'enterprisesLoading'
+  | 'feishuTestMessage'
+  | 'feishuTesting'
   | 'fetchAgentUsers'
   | 'fetchAssignmentRules'
   | 'fetchAssignmentGroups'
@@ -431,6 +434,7 @@ type AppContentModelKey =
   | 'slaPreview'
   | 'slaPreviewBaseTime'
   | 'slaResolveHoursInvalid'
+  | 'slaEscalationInvalid'
   | 'slaWarningInvalid'
   | 'statusModalOpen'
   | 'statusReason'
@@ -438,6 +442,7 @@ type AppContentModelKey =
   | 'statusValue'
   | 'submitAssignmentConfirm'
   | 'submitEnterpriseConfirm'
+  | 'testFeishuGroup'
   | 'submitConfirmAction'
   | 'submitMailboxConfirm'
   | 'submitRoleBase'
@@ -710,7 +715,7 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
                 m.setStatusModalOpen(true)
               }}
               onRemoveUploadedFile={m.handleRemoveFile}
-              onReply={() => void m.handleReply()}
+              onReply={(replyTemplateId) => m.handleReply(replyTemplateId)}
               onReplyUpdate={(html, text) => {
                 m.setReplyHtml(html)
                 m.setReplyContent(text)
@@ -813,9 +818,9 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             matchTypeFilter={m.assignmentMatchTypeFilter}
             mailboxOptions={m.assignmentMailboxOptions}
             onCancelConfirm={() => m.setAssignmentConfirmAction(null)}
+            onDiscardRuleChanges={m.discardAssignmentRuleChanges}
             onEnabledFilterChange={m.setAssignmentEnabledFilter}
             onFetchAssignmentRules={m.fetchAssignmentRules}
-            onFetchAssignmentGroups={m.fetchAssignmentGroups}
             onKeywordChange={m.setAssignmentKeyword}
             onMatchTypeFilterChange={m.setAssignmentMatchTypeFilter}
             onMoveRule={m.moveAssignmentRule}
@@ -883,6 +888,7 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             preview={m.slaPreview}
             previewBaseTime={m.slaPreviewBaseTime}
             resolveHoursInvalid={m.slaResolveHoursInvalid}
+            escalationInvalid={m.slaEscalationInvalid}
             saving={m.slaPolicySaving}
             selectedPolicy={m.selectedSlaPolicy}
             selectedWorkCalendar={m.selectedWorkCalendar}
@@ -1013,6 +1019,8 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             data={m.enterprisesData}
             enabledFilter={m.enterpriseEnabledFilter}
             error={m.enterprisesError}
+            feishuTestMessage={m.feishuTestMessage}
+            feishuTesting={m.feishuTesting}
             form={m.enterpriseForm}
             formOpen={m.enterpriseFormOpen}
             keyword={m.enterpriseKeyword}
@@ -1031,6 +1039,7 @@ export function AppContentRenderer({ activeMenu, model: m }: AppContentRendererP
             onPageSizeChange={m.setEnterprisePageSize}
             onSave={() => void m.saveEnterprise()}
             onSubmitConfirm={() => void m.submitEnterpriseConfirm()}
+            onTestFeishuGroup={() => void m.testFeishuGroup()}
             saving={m.enterpriseSaving}
           />
         </Suspense>

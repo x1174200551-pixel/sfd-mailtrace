@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public record TicketMessageVO(
         @Schema(description = "消息ID") Long id,
         @Schema(description = "方向：INBOUND客户来信/OUTBOUND外发/INTERNAL内部备注") String direction,
+        @Schema(description = "发送状态：PENDING/SUCCESS/FAILED") String sendStatus,
         @Schema(description = "发件人地址") String fromAddress,
         @Schema(description = "收件人地址") String toAddress,
         @Schema(description = "原始收件人列表") String toAddresses,

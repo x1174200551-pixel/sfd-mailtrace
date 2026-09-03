@@ -93,6 +93,20 @@ class NotificationTemplateServiceTest {
     }
 
     @Test
+    void createAgentReplyTemplate_withoutReplyContentVariable_shouldReject() {
+        NotificationTemplateCreateRequest request = request();
+        request.setTemplateType("AGENT_REPLY");
+        request.setTemplateCode("AGENT_REPLY_CUSTOM");
+        request.setContentTpl("您好，您的问题已经处理完成。");
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> templateService.createTemplate(admin, request));
+
+        assertTrue(exception.getMessage().contains("必须包含 {reply_content}"));
+        verify(templateMapper, never()).insert(any());
+    }
+
+    @Test
     void deleteTemplate_whenMailboxReferenced_shouldReject() {
         when(templateMapper.selectById(100L)).thenReturn(template(100L, "AUTO_REPLY_STD", "AUTO_REPLY"));
         when(mailboxMapper.selectCount(any())).thenReturn(1L);
@@ -102,6 +116,26 @@ class NotificationTemplateServiceTest {
 
         assertTrue(exception.getMessage().contains("已被邮箱引用"));
         verify(templateMapper, never()).deleteById(100L);
+    }
+
+    @Test
+    void createSlaTemplate_shouldAcceptStageAndOverdueHourVariables() {
+        NotificationTemplateCreateRequest request = request();
+        request.setTemplateType("SLA_BREACH");
+        request.setTemplateCode("SLA_BREACH_STAGE");
+        request.setContentTpl("{sla_stage}{sla_action}，当前截止：{sla_deadline}，响应：{sla_response_deadline}，"
+                + "解决：{sla_resolve_deadline}，触发：{sla_triggered_at}，已超时{sla_overdue_hours}个工作小时");
+        when(templateMapper.insert(any())).thenAnswer(invocation -> {
+            NotificationTemplateEntity entity = invocation.getArgument(0);
+            entity.setId(101L);
+            return 1;
+        });
+        when(templateMapper.selectById(101L)).thenReturn(template(101L, "SLA_BREACH_STAGE", "SLA_BREACH"));
+
+        NotificationTemplateVO result = templateService.createTemplate(admin, request);
+
+        assertEquals("SLA_BREACH", result.templateType());
+        verify(templateMapper).insert(any());
     }
 
     private NotificationTemplateCreateRequest request() {

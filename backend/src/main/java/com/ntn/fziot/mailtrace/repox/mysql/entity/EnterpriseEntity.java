@@ -27,6 +27,22 @@ public class EnterpriseEntity {
     @TableField("is_enabled")
     private Boolean enabled;
 
+    private Boolean feishuNotifyEnabled;
+
+    private String feishuGroupName;
+
+    private String feishuWebhookUrl;
+
+    private String feishuSigningSecret;
+
+    private Integer feishuConfigVersion;
+
+    private String feishuConnectionStatus;
+
+    private LocalDateTime feishuLastTestAt;
+
+    private String feishuLastError;
+
     private String remark;
 
     private String createdBy;

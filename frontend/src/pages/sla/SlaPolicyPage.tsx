@@ -49,6 +49,7 @@ type SlaPolicyPageProps = {
   preview: SlaPolicyPreview
   previewBaseTime: { format: (template: string) => string }
   resolveHoursInvalid: boolean
+  escalationInvalid: boolean
   saving: boolean
   selectedPolicy: SlaPolicy | null
   selectedWorkCalendar: SlaWorkCalendar | null
@@ -90,6 +91,7 @@ export function SlaPolicyPage({
   preview,
   previewBaseTime,
   resolveHoursInvalid,
+  escalationInvalid,
   saving,
   selectedPolicy,
   selectedWorkCalendar,
@@ -372,17 +374,41 @@ export function SlaPolicyPage({
                       onChange={(value) => onUpdateForm({ calendarId: value })}
                     />
                   </label>
+                  <section className="sla-form-wide sla-notification-controls" aria-label="SLA通知节点">
+                    <header>
+                      <div>
+                        <strong>通知节点</strong>
+                        <span>邮件与飞书群通知共用以下开关；关闭后该节点仍留痕，但不发送消息。</span>
+                      </div>
+                      <Tag color="blue">默认 4 项</Tag>
+                    </header>
+                    <div className="sla-notification-grid">
+                      <NotificationSwitch label="首次响应预警" checked={form.responseWarningNotifyEnabled} onChange={(checked) => onUpdateForm({ responseWarningNotifyEnabled: checked })} />
+                      <NotificationSwitch label="首次响应超时" checked={form.responseBreachNotifyEnabled} onChange={(checked) => onUpdateForm({ responseBreachNotifyEnabled: checked })} />
+                      <NotificationSwitch label="解决预警" checked={form.resolveWarningNotifyEnabled} onChange={(checked) => onUpdateForm({ resolveWarningNotifyEnabled: checked })} />
+                      <NotificationSwitch label="解决超时" checked={form.resolveBreachNotifyEnabled} onChange={(checked) => onUpdateForm({ resolveBreachNotifyEnabled: checked })} />
+                    </div>
+                    <details className="sla-notification-advanced">
+                      <summary>高级通知（默认关闭）</summary>
+                      <div className="sla-notification-grid">
+                        <NotificationSwitch label="首次响应超时升级" checked={form.responseEscalationNotifyEnabled} disabled={!form.escalateAfterBreachHours.trim()} onChange={(checked) => onUpdateForm({ responseEscalationNotifyEnabled: checked })} />
+                        <NotificationSwitch label="解决超时升级" checked={form.resolveEscalationNotifyEnabled} disabled={!form.escalateAfterBreachHours.trim()} onChange={(checked) => onUpdateForm({ resolveEscalationNotifyEnabled: checked })} />
+                      </div>
+                    </details>
+                  </section>
                   <Alert
                     className="sla-form-wide"
-                    type={resolveHoursInvalid || warningInvalid ? 'error' : 'info'}
+                    type={resolveHoursInvalid || warningInvalid || escalationInvalid ? 'error' : 'info'}
                     showIcon
-                    title={resolveHoursInvalid || warningInvalid ? '策略校验未通过' : '策略校验'}
+                    title={resolveHoursInvalid || warningInvalid || escalationInvalid ? '策略校验未通过' : '策略校验'}
                     description={
                       resolveHoursInvalid
                         ? '解决时限不能小于首次响应时限。'
                         : warningInvalid
                           ? '预警阈值必须小于首次响应时限。'
-                          : '保存后可供同企业邮箱显式绑定，仅影响后续新建工单。'
+                          : escalationInvalid
+                            ? '启用超时升级通知前，请先配置升级阈值。'
+                            : '时间配置仅影响后续新建工单；通知开关会作用于当前尚未发送的节点与队列任务。'
                     }
                   />
                 </div>
@@ -392,7 +418,7 @@ export function SlaPolicyPage({
                   <Button
                     type="primary"
                     loading={saving}
-                    disabled={!form.policyName.trim() || !form.calendarId || resolveHoursInvalid || warningInvalid}
+                    disabled={!form.policyName.trim() || !form.calendarId || resolveHoursInvalid || warningInvalid || escalationInvalid}
                     onClick={() => void onSavePolicy()}
                   >
                     保存策略
@@ -439,8 +465,11 @@ export function SlaPolicyPage({
                   className="sla-preview-timeline"
                   items={[
                     { color: 'blue', content: <span>新建工单：写入策略和截止时间</span> },
-                    { color: 'orange', content: <span>即将超时：{preview.warningAt.format('YYYY-MM-DD HH:mm')}</span> },
-                    { color: 'red', content: <span>升级提醒：{preview.escalateAt ? preview.escalateAt.format('YYYY-MM-DD HH:mm') : '未配置'}</span> },
+                    { color: form.responseWarningNotifyEnabled ? 'orange' : 'gray', content: <span>首次响应预警：{form.responseWarningNotifyEnabled ? preview.responseWarningAt.format('YYYY-MM-DD HH:mm') : '已关闭'}</span> },
+                    { color: form.responseBreachNotifyEnabled ? 'red' : 'gray', content: <span>首次响应超时：{form.responseBreachNotifyEnabled ? preview.responseDeadline.format('YYYY-MM-DD HH:mm') : '已关闭'}</span> },
+                    { color: form.resolveWarningNotifyEnabled ? 'orange' : 'gray', content: <span>解决预警：{form.resolveWarningNotifyEnabled && preview.resolveWarningAt ? preview.resolveWarningAt.format('YYYY-MM-DD HH:mm') : form.resolveWarningNotifyEnabled ? '未配置解决时限' : '已关闭'}</span> },
+                    { color: form.resolveBreachNotifyEnabled ? 'red' : 'gray', content: <span>解决超时：{form.resolveBreachNotifyEnabled && preview.resolveDeadline ? preview.resolveDeadline.format('YYYY-MM-DD HH:mm') : form.resolveBreachNotifyEnabled ? '未配置解决时限' : '已关闭'}</span> },
+                    { color: 'gray', content: <span>升级通知：{form.responseEscalationNotifyEnabled || form.resolveEscalationNotifyEnabled ? '按高级配置发送' : '默认关闭'}</span> },
                   ]}
                 />
               </aside>
@@ -473,5 +502,19 @@ export function SlaPolicyPage({
         </div>
       )}
     </>
+  )
+}
+
+function NotificationSwitch({ label, checked, disabled = false, onChange }: {
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className={`sla-notification-switch${disabled ? ' is-disabled' : ''}`}>
+      <span>{label}</span>
+      <Switch size="small" checked={checked} disabled={disabled} onChange={onChange} />
+    </label>
   )
 }

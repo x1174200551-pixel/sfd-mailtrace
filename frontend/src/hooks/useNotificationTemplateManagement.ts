@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { notificationTemplateApi } from '../api/notification-templates'
-import { emptyTemplateForm } from '../constants/notification-templates'
+import { emptyTemplateForm, normalizedTemplateSubject } from '../constants/notification-templates'
 import type {
   NotificationTemplate,
   NotificationTemplateListResponse,
@@ -113,7 +113,7 @@ export function useNotificationTemplateManagement({
       templateCode: createInternalTemplateCode(),
       templateType: 'AUTO_REPLY',
       templateName: '自定义通知模板',
-      subjectTpl: '通知：{ticket_no}',
+      subjectTpl: 'Re: {subject}',
       contentTpl: '您好，工单 {ticket_no} 有新的通知。\n\n工单主题：{subject}',
       enabled: true,
     })
@@ -135,7 +135,7 @@ export function useNotificationTemplateManagement({
     try {
       const data = await notificationTemplateApi.preview({
         contentTpl: templateForm.contentTpl,
-        subjectTpl: templateForm.subjectTpl,
+        subjectTpl: normalizedTemplateSubject(templateForm.templateType, templateForm.subjectTpl),
       })
       setTemplatePreview(data)
     } catch (error) {
@@ -144,7 +144,7 @@ export function useNotificationTemplateManagement({
     } finally {
       setTemplatePreviewLoading(false)
     }
-  }, [handleAuthExpired, templateForm.contentTpl, templateForm.subjectTpl, token])
+  }, [handleAuthExpired, templateForm.contentTpl, templateForm.subjectTpl, templateForm.templateType, token])
 
   const saveTemplate = useCallback(async () => {
     if (!token) return
@@ -154,7 +154,7 @@ export function useNotificationTemplateManagement({
       const saved = await notificationTemplateApi.save(templateForm.id, {
         contentTpl: templateForm.contentTpl,
         enabled: templateForm.enabled,
-        subjectTpl: templateForm.subjectTpl,
+        subjectTpl: normalizedTemplateSubject(templateForm.templateType, templateForm.subjectTpl),
         templateCode: templateForm.templateCode,
         templateType: templateForm.templateType,
         templateName: templateForm.templateName,

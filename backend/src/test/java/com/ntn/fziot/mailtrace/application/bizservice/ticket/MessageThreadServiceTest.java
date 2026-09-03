@@ -92,6 +92,20 @@ class MessageThreadServiceTest {
         assertEquals(300L, threadService.resolveTicketId(mail, 1L));
     }
 
+    @Test
+    void resolveByReferences_whenLatestMissing_shouldFallbackToEarlierAncestor() {
+        ParsedMail mail = createMail("<new@test.com>", null,
+                "<root@test.com> <parent@test.com>", "回复");
+        TicketMessageEntity ancestor = new TicketMessageEntity();
+        ancestor.setTicketId(301L);
+        ancestor.setMessageId("root@test.com");
+
+        when(ticketMessageMapper.selectOne(any())).thenReturn(null, ancestor);
+        when(ticketMapper.selectById(301L)).thenReturn(ticket(301L, 1L));
+
+        assertEquals(301L, threadService.resolveTicketId(mail, 1L));
+    }
+
     // ========== 3. 主题工单号匹配 ==========
 
     @Test

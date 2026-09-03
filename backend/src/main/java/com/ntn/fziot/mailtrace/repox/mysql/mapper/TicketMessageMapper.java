@@ -15,4 +15,20 @@ public interface TicketMessageMapper extends BaseMapper<TicketMessageEntity> {
      */
     @Select("SELECT COUNT(1) FROM mt_ticket_message WHERE message_id = #{messageId}")
     int countExistingByMessageId(@Param("messageId") String messageId);
+
+    @Select("SELECT * FROM mt_ticket_message " +
+            "WHERE ticket_id = #{ticketId} AND direction = 'INBOUND' " +
+            "AND message_id IS NOT NULL AND message_id <> '' AND is_deleted = 0 " +
+            "ORDER BY id DESC LIMIT 1")
+    TicketMessageEntity selectLatestInboundForReply(@Param("ticketId") Long ticketId);
+
+    @Select("SELECT * FROM mt_ticket_message " +
+            "WHERE ticket_id = #{ticketId} " +
+            "AND (direction = 'INBOUND' OR (direction = 'OUTBOUND' AND send_status = 'SUCCESS')) " +
+            "AND message_id IS NOT NULL AND message_id <> '' AND is_deleted = 0 " +
+            "ORDER BY id DESC LIMIT 1")
+    TicketMessageEntity selectLatestMessageForReply(@Param("ticketId") Long ticketId);
+
+    @Select("SELECT * FROM mt_ticket_message WHERE id = #{id} AND is_deleted = 0 FOR UPDATE")
+    TicketMessageEntity selectByIdForUpdate(@Param("id") Long id);
 }

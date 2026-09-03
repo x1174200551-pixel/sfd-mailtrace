@@ -1,6 +1,6 @@
-import { useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
-import { Alert, Button, Empty, Input, Segmented, Space, Tabs, Tag, message } from 'antd'
+import { Alert, Button, Empty, Input, Modal, Segmented, Space, Tabs, Tag, message } from 'antd'
 import {
   ArrowLeftOutlined,
   CloseCircleOutlined,
@@ -17,6 +17,8 @@ import {
 import { Clock3, Inbox, MessageCircle, ShieldCheck, TriangleAlert, UserPlus, UserRound } from 'lucide-react'
 import dayjs from 'dayjs'
 import TiptapRichEditor from '../../TiptapRichEditor'
+import { ticketApi } from '../../api/tickets'
+import type { TicketReplyPreview, TicketReplyTemplate } from '../../api/tickets'
 import { EmailHtmlFrame } from '../../components/ticket/EmailHtmlFrame'
 import {
   priorityBadgeClass,
@@ -48,7 +50,7 @@ type TicketDetailPageProps = {
   onOpenPriority: () => void
   onOpenStatus: () => void
   onRemoveUploadedFile: (objectKey: string) => void
-  onReply: () => void
+  onReply: (replyTemplateId?: number | null) => Promise<boolean>
   onReplyUpdate: (html: string, text: string) => void
   onSaveRemark: (remark: string) => void
   onTabChange: (key: string) => void
@@ -86,7 +88,12 @@ function msgBodyText(msg: TicketMessage): string {
 function MessageBody({ msg }: { msg: TicketMessage }) {
   const html = msg.contentHtml?.trim()
   if (html) {
-    return <EmailHtmlFrame html={html} />
+    return (
+      <EmailHtmlFrame
+        html={html}
+        compactParagraphMargins={messageDirection(msg) === 'OUTBOUND'}
+      />
+    )
   }
   return <div className="msg-body msg-body-text">{msgBodyText(msg)}</div>
 }
@@ -97,6 +104,18 @@ function messageDirection(msg: TicketMessage) {
 
 function formatDetailDate(value: string | null | undefined) {
   return value ? dayjs(value).format('YYYY-MM-DD HH:mm') : '-'
+}
+
+function slaStatusMeta(status: string | null | undefined) {
+  switch (status) {
+    case 'WARNING': return { color: 'orange', label: '即将超时' }
+    case 'BREACHED': return { color: 'red', label: '已超时' }
+    case 'COMPLETED': return { color: 'green', label: '按时完成' }
+    case 'COMPLETED_BREACHED': return { color: 'red', label: '超时完成' }
+    case 'CANCELLED': return { color: 'default', label: '已取消' }
+    case 'NOT_CONFIGURED': return { color: 'default', label: '未配置' }
+    default: return { color: 'blue', label: '监控中' }
+  }
 }
 
 async function parseDownloadError(response: Response) {
@@ -160,6 +179,14 @@ export function TicketDetailPage({
   uploadingFile,
 }: TicketDetailPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [replyTemplates, setReplyTemplates] = useState<TicketReplyTemplate[]>([])
+  const [replyTemplatesLoading, setReplyTemplatesLoading] = useState(false)
+  const [templateModalOpen, setTemplateModalOpen] = useState(false)
+  const [templateChoiceId, setTemplateChoiceId] = useState<number | null>(null)
+  const [selectedReplyTemplateId, setSelectedReplyTemplateId] = useState<number | null>(null)
+  const [replyPreview, setReplyPreview] = useState<TicketReplyPreview | null>(null)
+  const [replyPreviewOpen, setReplyPreviewOpen] = useState(false)
+  const [replyPreviewLoading, setReplyPreviewLoading] = useState(false)
   const inboundCount = detail.messages.filter((msg) => messageDirection(msg) === 'INBOUND').length
   const outboundCount = detail.messages.filter((msg) => messageDirection(msg) === 'OUTBOUND').length
   const visibleMessageCount = detail.messages.filter((msg) => messageDirection(msg) !== 'INTERNAL').length
@@ -176,9 +203,92 @@ export function TicketDetailPage({
         ? new Date(leftTime).getTime() - new Date(rightTime).getTime()
         : new Date(rightTime).getTime() - new Date(leftTime).getTime()
     })
+
+  useEffect(() => {
+    setReplyTemplates([])
+    setTemplateChoiceId(null)
+    setSelectedReplyTemplateId(null)
+    setReplyPreview(null)
+    setReplyPreviewOpen(false)
+    setTemplateModalOpen(false)
+  }, [detail.id])
+
+  const defaultReplyTemplate = replyTemplates.find((template) => template.defaultTemplate) || null
+  const selectedReplyTemplate = selectedReplyTemplateId == null
+    ? defaultReplyTemplate
+    : replyTemplates.find((template) => template.id === selectedReplyTemplateId) || null
+
+  const loadReplyTemplates = async () => {
+    setReplyTemplatesLoading(true)
+    try {
+      const templates = await ticketApi.replyTemplates(detail.id)
+      setReplyTemplates(templates)
+      setTemplateChoiceId(selectedReplyTemplateId ?? templates.find((template) => template.defaultTemplate)?.id ?? templates[0]?.id ?? null)
+      return templates
+    } catch (error: any) {
+      message.error(error?.message || '回复模板加载失败')
+      return []
+    } finally {
+      setReplyTemplatesLoading(false)
+    }
+  }
+
+  const openTemplateSelector = async () => {
+    setTemplateModalOpen(true)
+    await loadReplyTemplates()
+  }
+
+  const applyTemplateChoice = () => {
+    const chosen = replyTemplates.find((template) => template.id === templateChoiceId)
+    if (!chosen) {
+      message.warning('请选择一个回复模板')
+      return
+    }
+    setSelectedReplyTemplateId(chosen.defaultTemplate ? null : chosen.id)
+    setReplyPreview(null)
+    setTemplateModalOpen(false)
+  }
+
+  const previewFinalReply = async () => {
+    const content = replyContent.trim()
+    const html = replyHtml.trim()
+    if (!content && !html) {
+      message.warning('请先填写回复内容')
+      return
+    }
+    setReplyPreviewLoading(true)
+    try {
+      const preview = await ticketApi.previewReply(detail.id, {
+        content: content || html,
+        htmlContent: html || content,
+        replyTemplateId: selectedReplyTemplateId,
+      })
+      setReplyPreview(preview)
+      setReplyPreviewOpen(true)
+    } catch (error: any) {
+      message.error(error?.message || '邮件预览生成失败')
+    } finally {
+      setReplyPreviewLoading(false)
+    }
+  }
+
+  const sendReply = async () => {
+    const sent = await onReply(selectedReplyTemplateId)
+    if (sent) {
+      setSelectedReplyTemplateId(null)
+      setReplyPreview(null)
+      setReplyPreviewOpen(false)
+    }
+  }
   const lifecycleEvents = [...events].reverse()
   const responseDeadline = formatDetailDate(detail.slaResponseDeadline)
   const resolveDeadline = formatDetailDate(detail.slaResolveDeadline)
+  const responseSla = slaStatusMeta(detail.responseSlaStatus)
+  const resolveSla = slaStatusMeta(detail.resolveSlaStatus)
+  const hasStageBreach = ['BREACHED', 'COMPLETED_BREACHED'].includes(detail.responseSlaStatus)
+    || ['BREACHED', 'COMPLETED_BREACHED'].includes(detail.resolveSlaStatus)
+  const hasStageWarning = detail.responseSlaStatus === 'WARNING' || detail.resolveSlaStatus === 'WARNING'
+  const overallSlaLabel = hasStageBreach ? '已超时' : hasStageWarning ? '即将超时' : '监控中'
   const handleAttachmentDownload = async (event: MouseEvent<HTMLAnchorElement>, attachment: TicketAttachment) => {
     event.preventDefault()
     if (!attachment.downloadUrl) {
@@ -238,7 +348,7 @@ export function TicketDetailPage({
             <span>当前状态</span>
             <small>{statusLabel(detail.status)}</small>
           </span>
-          <strong>{detail.slaBreached ? '超时' : '正常'}</strong>
+          <strong>{hasStageBreach ? '超时' : '正常'}</strong>
         </div>
         <div className="detail-summary-item detail-summary-item--info">
           <span className="detail-summary-icon"><UserRound size={17} /></span>
@@ -256,13 +366,13 @@ export function TicketDetailPage({
           </span>
           <strong>{visibleMessageCount}</strong>
         </div>
-        <div className={`detail-summary-item ${detail.slaBreached ? 'detail-summary-item--danger' : 'detail-summary-item--warning'}`}>
-          <span className="detail-summary-icon">{detail.slaBreached ? <TriangleAlert size={17} /> : <Clock3 size={17} />}</span>
+        <div className={`detail-summary-item ${hasStageBreach ? 'detail-summary-item--danger' : 'detail-summary-item--warning'}`}>
+          <span className="detail-summary-icon">{hasStageBreach ? <TriangleAlert size={17} /> : <Clock3 size={17} />}</span>
           <span className="detail-summary-copy">
             <span>SLA</span>
             <small>首次响应 {responseDeadline}</small>
           </span>
-          <strong>{detail.slaBreached ? '已超时' : '监控中'}</strong>
+          <strong>{overallSlaLabel}</strong>
         </div>
       </section>
 
@@ -275,7 +385,7 @@ export function TicketDetailPage({
                 <span className={`detail-priority-text priority-${detail.priority.toLowerCase()}`}>{priorityLabel(detail.priority)}</span>
                 <StarTwoTone twoToneColor="#f59e0b" />
                 <span className="detail-ticket-no">{detail.ticketNo}</span>
-                <span className={`ticket-status-tag ${detail.slaBreached ? 'overdue' : detail.status === 'WAITING_CUSTOMER' ? 'waiting' : detail.status === 'CLOSED' ? 'closed' : 'processing'}`}>
+                <span className={`ticket-status-tag ${hasStageBreach ? 'overdue' : detail.status === 'WAITING_CUSTOMER' ? 'waiting' : detail.status === 'CLOSED' ? 'closed' : 'processing'}`}>
                   {statusLabel(detail.status)}
                 </span>
                 {detail.linkSuspect && <Tag color="warning">疑似断链</Tag>}
@@ -354,6 +464,12 @@ export function TicketDetailPage({
                                     <span className={`msg-badge ${isAuto ? 'badge-system' : isAgent ? 'badge-agent' : 'badge-customer'}`}>
                                       {isAuto ? '系统' : isAgent ? '客服' : '客户'}
                                     </span>
+                                    {isAgent && msg.sendStatus === 'PENDING' && (
+                                      <span className="msg-send-status pending">发送中</span>
+                                    )}
+                                    {isAgent && msg.sendStatus === 'FAILED' && (
+                                      <span className="msg-send-status failed">发送失败</span>
+                                    )}
                                   </div>
                                   <span className="msg-time">{formatDetailDate(msg.sentAt || msg.createdAt)}</span>
                                 </header>
@@ -384,8 +500,17 @@ export function TicketDetailPage({
 
                       <section className="detail-editor">
                         <header className="detail-editor-head">
-                          <strong>回复客户</strong>
-                          <span>{canOperateCurrentTicket ? '将通过邮件发送给客户' : '当前不可回复'}</span>
+                          <div>
+                            <strong>回复客户</strong>
+                            <span>{canOperateCurrentTicket ? '将通过邮件发送给客户' : '当前不可回复'}</span>
+                          </div>
+                          {canOperateCurrentTicket && (
+                            <Tag color={selectedReplyTemplateId == null ? 'default' : 'blue'}>
+                              {selectedReplyTemplateId == null
+                                ? `邮箱默认${selectedReplyTemplate ? `：${selectedReplyTemplate.templateName}` : ''}`
+                                : `本次模板：${selectedReplyTemplate?.templateName || `#${selectedReplyTemplateId}`}`}
+                            </Tag>
+                          )}
                         </header>
                         {!canOperateCurrentTicket && !isCurrentTicketTerminal && (
                           <Alert
@@ -426,14 +551,41 @@ export function TicketDetailPage({
                             <Button type="text" icon={<PaperClipOutlined />} loading={uploadingFile} disabled={!canOperateCurrentTicket} onClick={() => fileInputRef.current?.click()}>
                               添加附件
                             </Button>
-                            <Button type="text" icon={<FileTextOutlined />} disabled>插入模板</Button>
+                            <Button
+                              type="text"
+                              icon={<FileTextOutlined />}
+                              disabled={!canOperateCurrentTicket}
+                              loading={replyTemplatesLoading}
+                              onClick={() => void openTemplateSelector()}
+                            >
+                              选择回复模板
+                            </Button>
+                            {selectedReplyTemplateId != null && (
+                              <Button
+                                type="link"
+                                size="small"
+                                onClick={() => {
+                                  setSelectedReplyTemplateId(null)
+                                  setReplyPreview(null)
+                                }}
+                              >
+                                恢复邮箱默认
+                              </Button>
+                            )}
                           </div>
                           <Space>
                             <Button disabled>保存草稿</Button>
                             <Button
+                              onClick={() => void previewFinalReply()}
+                              loading={replyPreviewLoading}
+                              disabled={!canOperateCurrentTicket || (!replyContent.trim() && !replyHtml.trim())}
+                            >
+                              预览邮件
+                            </Button>
+                            <Button
                               type="primary"
                               icon={<SendOutlined />}
-                              onClick={onReply}
+                              onClick={() => void sendReply()}
                               loading={replySending}
                               disabled={!canOperateCurrentTicket || (!replyContent.trim() && !replyHtml.trim())}
                             >
@@ -479,8 +631,9 @@ export function TicketDetailPage({
                   label: 'SLA',
                   children: (
                     <div className="detail-tab-scroll detail-info-list">
-                      <div><span>SLA 状态</span><strong className={detail.slaBreached ? 'danger' : 'success'}>{detail.slaBreached ? '已超时' : '正常'}</strong></div>
+                      <div><span>首次响应阶段</span><strong><Tag color={responseSla.color}>{responseSla.label}</Tag></strong></div>
                       <div><span>首次响应截止</span><strong>{responseDeadline}</strong></div>
+                      <div><span>解决阶段</span><strong><Tag color={resolveSla.color}>{resolveSla.label}</Tag></strong></div>
                       <div><span>解决截止</span><strong>{resolveDeadline}</strong></div>
                     </div>
                   ),
@@ -562,10 +715,10 @@ export function TicketDetailPage({
             <div className="detail-side-list">
               <div><span>所属企业</span><strong>{detail.enterpriseName || `企业 #${detail.enterpriseId}`}</strong></div>
               <div><span>来源邮箱</span><strong>{detail.mailboxName || `邮箱 #${detail.mailboxId}`}</strong></div>
-              <div><span>自动回复模板</span><strong>{detail.autoReplyTemplateId ? `模板 #${detail.autoReplyTemplateId}` : '未配置'}</strong></div>
-              <div><span>SLA 策略</span><strong>{detail.slaPolicyId ? `SLA #${detail.slaPolicyId}` : '未配置'}</strong></div>
-              <div><span>分配规则组</span><strong>{detail.assignmentRuleGroupId ? `规则组 #${detail.assignmentRuleGroupId}` : '未配置'}</strong></div>
-              <div><span>命中规则</span><strong>{detail.assignmentRuleId ? `规则 #${detail.assignmentRuleId}` : '未命中 / 待分配'}</strong></div>
+              <div><span>自动回复模板</span><strong>{detail.autoReplyTemplateName || (detail.autoReplyTemplateId ? '模板已删除或不可用' : '未配置')}</strong></div>
+              <div><span>SLA 策略</span><strong>{detail.slaPolicyName || (detail.slaPolicyId ? '策略已删除或不可用' : '未配置')}</strong></div>
+              <div><span>分配规则组</span><strong>{detail.assignmentRuleGroupName || (detail.assignmentRuleGroupId ? '规则组已删除或不可用' : '未配置')}</strong></div>
+              <div><span>命中规则</span><strong>{detail.assignmentRuleName || (detail.assignmentRuleId ? '规则已删除或不可用' : '未命中 / 待分配')}</strong></div>
             </div>
           </section>
 
@@ -596,12 +749,14 @@ export function TicketDetailPage({
             <header>
               <div>
                 <strong>SLA 信息</strong>
-                <span>{detail.slaBreached ? '已超时' : '监控中'}</span>
+                <span>{overallSlaLabel}</span>
               </div>
-              <Tag color={detail.slaBreached ? 'red' : 'green'}>{detail.slaBreached ? '已超时' : '正常'}</Tag>
+              <Tag color={hasStageBreach ? 'red' : hasStageWarning ? 'orange' : 'green'}>{overallSlaLabel}</Tag>
             </header>
             <div className="detail-side-list">
+              <div><span>首次响应阶段</span><strong><Tag color={responseSla.color}>{responseSla.label}</Tag></strong></div>
               <div><span>首次响应截止</span><strong>{responseDeadline}</strong></div>
+              <div><span>解决阶段</span><strong><Tag color={resolveSla.color}>{resolveSla.label}</Tag></strong></div>
               <div><span>解决截止</span><strong>{resolveDeadline}</strong></div>
               <div><span>首次回复</span><strong>{formatDetailDate(detail.firstReplyAt)}</strong></div>
               <div><span>关闭时间</span><strong>{formatDetailDate(detail.closedAt)}</strong></div>
@@ -633,6 +788,89 @@ export function TicketDetailPage({
           </section>
         </aside>
       </div>
+
+      <Modal
+        title="选择回复模板"
+        open={templateModalOpen}
+        onCancel={() => setTemplateModalOpen(false)}
+        okText="使用此模板"
+        cancelText="取消"
+        okButtonProps={{ disabled: templateChoiceId == null || replyTemplatesLoading }}
+        onOk={applyTemplateChoice}
+        width={620}
+      >
+        <div className="reply-template-dialog-hint">
+          本次选择只影响当前回复，不会修改邮箱默认配置。未选择其他模板时继续使用邮箱默认模板。
+        </div>
+        {replyTemplatesLoading ? (
+          <div className="reply-template-loading">正在加载可用模板...</div>
+        ) : replyTemplates.length > 0 ? (
+          <div className="reply-template-options">
+            {replyTemplates.map((template) => (
+              <button
+                type="button"
+                key={template.id}
+                className={`reply-template-option ${templateChoiceId === template.id ? 'active' : ''}`}
+                onClick={() => setTemplateChoiceId(template.id)}
+              >
+                <span>
+                  <strong>{template.templateName}</strong>
+                  <small>{template.defaultTemplate ? '当前邮箱默认模板' : '本次选择后将覆盖邮箱默认模板'}</small>
+                </span>
+                {template.defaultTemplate && <Tag color="blue">邮箱默认</Tag>}
+                <i aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可用的处理人回复模板" />
+        )}
+      </Modal>
+
+      <Modal
+        title="最终邮件预览"
+        open={replyPreviewOpen}
+        onCancel={() => setReplyPreviewOpen(false)}
+        footer={[
+          <Button key="back" onClick={() => setReplyPreviewOpen(false)}>返回修改</Button>,
+          <Button
+            key="send"
+            type="primary"
+            icon={<SendOutlined />}
+            loading={replySending}
+            onClick={() => void sendReply()}
+          >
+            确认发送
+          </Button>,
+        ]}
+        width={760}
+      >
+        {replyPreview && (
+          <div className="reply-preview-panel">
+            <div className="reply-preview-meta">
+              <div><span>使用模板</span><strong>{replyPreview.templateName}</strong></div>
+              <div><span>模板来源</span><strong>{replyPreview.templateSource === 'SELECTED' ? '本次选择' : '邮箱默认'}</strong></div>
+              <div><span>发件人</span><strong>{replyPreview.fromAddress}</strong></div>
+              <div><span>收件人</span><strong>{replyPreview.toAddress}</strong></div>
+            </div>
+            <div className="reply-preview-subject">
+              <span>邮件主题</span>
+              <strong>{replyPreview.subject}</strong>
+            </div>
+            <div className="reply-preview-body">
+              <span>邮件正文</span>
+              {replyPreview.contentHtml
+                ? <EmailHtmlFrame html={replyPreview.contentHtml} compactParagraphMargins />
+                : <div className="msg-body msg-body-text">{replyPreview.contentText}</div>}
+            </div>
+            <div className="reply-preview-attachments">
+              <span>附件</span>
+              <strong>{uploadedFiles.length > 0 ? `${uploadedFiles.length} 个` : '无附件'}</strong>
+              {uploadedFiles.map((file) => <Tag key={file.objectKey}>{file.fileName}</Tag>)}
+            </div>
+          </div>
+        )}
+      </Modal>
     </section>
   )
 }

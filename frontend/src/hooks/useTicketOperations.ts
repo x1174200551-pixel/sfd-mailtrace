@@ -62,10 +62,10 @@ export function useTicketOperations({
     }
   }, [token])
 
-  const handleReply = useCallback(async () => {
+  const handleReply = useCallback(async (replyTemplateId?: number | null) => {
     const content = replyContent.trim()
     const html = replyHtml.trim()
-    if (!token || !ticketDetail || !canOperateCurrentTicket || (!content && !html)) return
+    if (!token || !ticketDetail || !canOperateCurrentTicket || (!content && !html)) return false
     setReplySending(true)
     try {
       const attachments = uploadedFiles.map((file) => ({
@@ -74,21 +74,33 @@ export function useTicketOperations({
         fileSize: file.fileSize,
         contentType: file.contentType,
       }))
-      await ticketApi.reply(ticketDetail.id, {
+      const updatedTicket = await ticketApi.reply(ticketDetail.id, {
         attachments,
         content: content || html,
         htmlContent: html || content,
         internal: false,
+        replyTemplateId: replyTemplateId ?? null,
       })
       setReplyContent('')
       setReplyHtml('')
       setUploadedFiles([])
       await reloadTicketDetail()
       void fetchTickets()
-      message.success('回复已发送')
+      const latestOutbound = [...updatedTicket.messages]
+        .reverse()
+        .find((item) => (item.direction || item.messageDirection) === 'OUTBOUND')
+      if (latestOutbound?.sendStatus === 'FAILED') {
+        message.error('邮件发送失败，已保留失败记录，可在发件记录中重试')
+      } else if (latestOutbound?.sendStatus === 'PENDING') {
+        message.success('回复已提交，正在发送')
+      } else {
+        message.success('回复已发送')
+      }
+      return true
     } catch (error: any) {
       message.error(error?.message || '回复发送失败')
-      if (handleAuthExpired(error)) return
+      if (handleAuthExpired(error)) return false
+      return false
     } finally {
       setReplySending(false)
     }

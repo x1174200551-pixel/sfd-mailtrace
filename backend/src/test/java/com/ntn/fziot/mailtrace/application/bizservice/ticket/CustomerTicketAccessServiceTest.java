@@ -77,12 +77,15 @@ class CustomerTicketAccessServiceTest {
     @Test
     void verifyAndGetDetail_shouldReturnOnlyCustomerVisibleTimelineAndMessages() {
         TicketEntity ticket = ticket();
+        TicketMessageEntity failedOutbound = message(TicketBizService.DIRECTION_OUTBOUND, "发送失败内容");
+        failedOutbound.setSendStatus("FAILED");
         when(ticketMapper.selectOne(any())).thenReturn(ticket);
         when(passwordEncoder.matches("123456", "hash")).thenReturn(true);
         when(ticketMessageMapper.selectList(any())).thenReturn(List.of(
                 message(TicketBizService.DIRECTION_INBOUND, "客户邮件正文"),
                 message(TicketBizService.DIRECTION_INTERNAL, "内部备注内容"),
-                message(TicketBizService.DIRECTION_OUTBOUND, "对外回复内容")
+                message(TicketBizService.DIRECTION_OUTBOUND, "对外回复内容"),
+                failedOutbound
         ));
         when(ticketEventMapper.selectList(any())).thenReturn(List.of(
                 event(TicketBizService.EVENT_CREATED, "工单已创建"),
@@ -164,6 +167,7 @@ class CustomerTicketAccessServiceTest {
         message.setToAddress("service@example.com");
         message.setSubject("订单咨询");
         message.setContentText(content);
+        message.setSendStatus("SUCCESS");
         message.setSentAt(LocalDateTime.parse("2026-08-21T10:15:00"));
         return message;
     }

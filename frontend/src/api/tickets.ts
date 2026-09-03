@@ -22,6 +22,31 @@ export type TicketReplyPayload = {
   content: string
   htmlContent: string
   internal: boolean
+  replyTemplateId?: number | null
+}
+
+export type TicketReplyTemplate = {
+  defaultTemplate: boolean
+  id: number
+  templateName: string
+}
+
+export type TicketReplyPreviewPayload = {
+  content: string
+  htmlContent: string
+  replyTemplateId?: number | null
+}
+
+export type TicketReplyPreview = {
+  contentHtml: string | null
+  contentText: string
+  contentType: string
+  fromAddress: string
+  subject: string
+  templateId: number
+  templateName: string
+  templateSource: 'SELECTED' | 'MAILBOX_DEFAULT'
+  toAddress: string
 }
 
 export type TicketAssignPayload = {
@@ -73,7 +98,18 @@ export const ticketApi = {
   },
 
   reply(ticketId: number, payload: TicketReplyPayload) {
-    return requestApi<void>(`/api/v1/tickets/${ticketId}/reply`, {
+    return requestApi<TicketDetail>(`/api/v1/tickets/${ticketId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  replyTemplates(ticketId: number) {
+    return requestApi<TicketReplyTemplate[]>(`/api/v1/tickets/${ticketId}/reply-templates`)
+  },
+
+  previewReply(ticketId: number, payload: TicketReplyPreviewPayload) {
+    return requestApi<TicketReplyPreview>(`/api/v1/tickets/${ticketId}/reply-preview`, {
       method: 'POST',
       body: JSON.stringify(payload),
     })

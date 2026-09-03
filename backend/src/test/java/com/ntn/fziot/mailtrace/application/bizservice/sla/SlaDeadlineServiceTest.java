@@ -122,6 +122,34 @@ class SlaDeadlineServiceTest {
         assertNull(result.resolveDeadline());
     }
 
+    @Test
+    void calculateForNewTicket_shouldFreezeWarningAndEscalationAcrossWeekend() {
+        when(slaPolicyMapper.selectById(20L)).thenReturn(policy(20L, 1L, 10L, 1, 10));
+
+        SlaDeadlineResult result = slaDeadlineService.calculateForNewTicket(
+                11L, LocalDateTime.parse("2026-07-31T17:30:00"));
+
+        assertEquals(1, result.warningRemainHours());
+        assertEquals(2, result.escalateAfterBreachHours());
+        assertEquals(LocalDateTime.parse("2026-08-03T09:30:00"), result.responseDeadline());
+        assertEquals(LocalDateTime.parse("2026-07-31T17:30:00"), result.responseWarningAt());
+        assertEquals(LocalDateTime.parse("2026-08-03T11:30:00"), result.responseEscalationAt());
+    }
+
+    @Test
+    void calculateForNewTicket_shouldCalculateInCalendarTimezoneAndStoreInShanghaiTime() {
+        when(slaPolicyMapper.selectById(20L)).thenReturn(policy(20L, 1L, 10L, 1, null));
+        WorkCalendarEntity tokyoCalendar = calendar(10L);
+        tokyoCalendar.setTimezone("Asia/Tokyo");
+        when(workCalendarMapper.selectById(10L)).thenReturn(tokyoCalendar);
+
+        SlaDeadlineResult result = slaDeadlineService.calculateForNewTicket(
+                11L, LocalDateTime.parse("2026-07-27T08:00:00"));
+
+        assertEquals(LocalDateTime.parse("2026-07-27T09:00:00"), result.responseDeadline());
+        assertEquals(LocalDateTime.parse("2026-07-27T08:00:00"), result.responseWarningAt());
+    }
+
     private SlaPolicyEntity policy(Long id, Long enterpriseId, Long calendarId,
                                    Integer responseHours, Integer resolveHours) {
         SlaPolicyEntity policy = new SlaPolicyEntity();
@@ -134,6 +162,7 @@ class SlaDeadlineServiceTest {
         policy.setResponseHours(responseHours);
         policy.setResolveHours(resolveHours);
         policy.setWarningRemainHours(1);
+        policy.setEscalateAfterBreachHours(2);
         return policy;
     }
 

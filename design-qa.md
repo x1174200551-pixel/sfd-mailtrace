@@ -208,3 +208,49 @@ final result: functional checks passed; authenticated visual comparison pending
 - Re-run full-view and focused comparisons, then resolve any remaining P0/P1/P2 issue.
 
 final result: blocked
+
+## Enterprise edit modal persistent actions QA (2026-08-28)
+
+- Source visual truth: `/var/folders/cs/qt1bk1s555qg0plj2vbd3m0r0000gn/T/codex-clipboard-4d29850d-512b-4e17-9714-c65a1e4ee12f.png`.
+- Source pixels: 2140 × 1958 at Retina density; normalized to a 1070 × 979 CSS-pixel comparison.
+- Browser-rendered implementation: `/private/tmp/mailtrace-enterprise-modal-save-fixed-1070x979.png`.
+- Normalized side-by-side comparison: `/private/tmp/mailtrace-enterprise-modal-save-comparison-normalized.jpg`.
+- Implementation viewport: 1070 × 979 CSS pixels with the temporary viewport override reset after testing.
+- State: authenticated administrator, 企业管理, 默认企业 selected, 编辑企业 dialog open.
+- Primary interactions tested: open enterprise management, open the edit dialog, scroll the form body to its maximum position, and verify the persistent action footer.
+- Console errors checked: none.
+- Build checks: frontend oxlint, TypeScript build and Vite production build passed.
+
+**Full-view comparison evidence**
+
+- Before: the form content expanded the dialog beyond the viewport and pushed the footer, including 保存企业, outside the visible area.
+- After: the dialog is a bounded column layout. Header and footer remain fixed inside the modal while only the form body scrolls.
+- At 1070 × 979, the dialog is 820 × 931 CSS pixels and remains within the viewport. The save button occupies y=902–938 and is fully visible.
+
+**Focused region comparison evidence**
+
+- The modal footer remains at y=885–954 while the form body scrolls from 0 to 112.5 pixels.
+- After scrolling the form body to the bottom, 保存企业 remains fully visible at y=902–938.
+- The footer uses the existing white surface, divider, button sizes, typography and violet primary action token; no unrelated visual style changed.
+
+**Findings**
+
+- [P1 resolved] The long enterprise form had no constrained flex layout, so `overflow-y: auto` on the body had no usable height and the footer was pushed below the viewport.
+- Fix: make `.enterprise-modal` a bounded vertical flex container with hidden outer overflow; give `.p5-form-grid` `min-height: 0`, flexible remaining height and vertical scrolling; keep direct header/footer children non-shrinking.
+- No remaining P0/P1/P2 issue was found in the affected modal action flow.
+
+**Required fidelity surfaces**
+
+- Fonts and typography: unchanged from the existing enterprise modal.
+- Spacing and layout rhythm: header, scrollable body and 69px action footer now remain structurally separated.
+- Colors and visual tokens: unchanged; the established white surface, subtle dividers and violet primary action remain intact.
+- Image quality and assets: no image assets are used or changed in this fix.
+- Copy and content: unchanged; 取消 and 保存企业 are visible and retain their existing actions.
+
+**Comparison history**
+
+1. Initial evidence: supplied screenshot shows the modal continuing below the viewport with no visible save action.
+2. Fix: introduced the constrained three-part flex layout and body-only scrolling.
+3. Post-fix evidence: same-density browser capture shows both footer actions; scroll testing confirms they remain visible, with zero console errors.
+
+final result: passed

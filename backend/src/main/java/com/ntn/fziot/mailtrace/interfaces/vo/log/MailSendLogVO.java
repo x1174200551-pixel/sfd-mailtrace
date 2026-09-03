@@ -16,7 +16,7 @@ public record MailSendLogVO(
         @Schema(description = "收件人") String toAddress,
         @Schema(description = "邮件主题") String subject,
         @Schema(description = "邮件正文") String contentBody,
-        @Schema(description = "发送状态：PENDING/SUCCESS/FAILED/RETRYING") String sendStatus,
+        @Schema(description = "发送状态：PENDING/SENDING/SUCCESS/FAILED/RETRYING/DELIVERY_UNKNOWN/CANCELLED") String sendStatus,
         @Schema(description = "已重试次数") Integer retryCount,
         @Schema(description = "最大重试次数") Integer maxRetry,
         @Schema(description = "失败原因") String errorMessage,

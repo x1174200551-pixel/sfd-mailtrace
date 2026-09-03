@@ -41,6 +41,13 @@ frontend/coverage/
 tmp/
 temp/
 
+# Local user-manual artifacts
+/docs/user-manual/assets/
+/docs/user-manual/rendered*/
+/docs/user-manual/*.docx
+/docs/user-manual/*.pdf
+/docs/user-manual/__pycache__/
+
 # Docker local override files
 docker-compose.override.yml
 docker-compose.*.override.yml

@@ -34,6 +34,18 @@ public class SlaPolicyEntity {
 
     private Integer escalateAfterBreachHours;
 
+    private Boolean responseWarningNotifyEnabled;
+
+    private Boolean responseBreachNotifyEnabled;
+
+    private Boolean responseEscalationNotifyEnabled;
+
+    private Boolean resolveWarningNotifyEnabled;
+
+    private Boolean resolveBreachNotifyEnabled;
+
+    private Boolean resolveEscalationNotifyEnabled;
+
     private Long calendarId;
 
     private String createdBy;

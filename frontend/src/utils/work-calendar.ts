@@ -17,6 +17,12 @@ export function toSlaPolicyForm(policy: SlaPolicy): SlaPolicyFormState {
     resolveHours: policy.resolveHours == null ? '' : String(policy.resolveHours),
     warningRemainHours: policy.warningRemainHours,
     escalateAfterBreachHours: policy.escalateAfterBreachHours == null ? '' : String(policy.escalateAfterBreachHours),
+    responseWarningNotifyEnabled: policy.responseWarningNotifyEnabled ?? true,
+    responseBreachNotifyEnabled: policy.responseBreachNotifyEnabled ?? true,
+    responseEscalationNotifyEnabled: policy.responseEscalationNotifyEnabled ?? false,
+    resolveWarningNotifyEnabled: policy.resolveWarningNotifyEnabled ?? true,
+    resolveBreachNotifyEnabled: policy.resolveBreachNotifyEnabled ?? true,
+    resolveEscalationNotifyEnabled: policy.resolveEscalationNotifyEnabled ?? false,
     calendarId: String(policy.calendarId),
   }
 }
@@ -154,16 +160,20 @@ export function resolveSlaPreview(form: SlaPolicyFormState, calendar: WorkCalend
     : null
   const responseDeadline = addWorkHours(slaPreviewBaseTime, responseHours, calendar)
   const resolveDeadline = resolveHours == null ? null : addWorkHours(slaPreviewBaseTime, resolveHours, calendar)
-  const warningAt = resolveDeadline
-    ? addWorkHours(resolveDeadline, -warningHours, null)
-    : addWorkHours(responseDeadline, -warningHours, null)
-  const escalateAt = resolveDeadline && escalateHours != null ? addWorkHours(resolveDeadline, escalateHours, calendar) : null
+  const responseWarningAt = responseDeadline.subtract(warningHours, 'hour')
+  const resolveWarningAt = resolveDeadline ? resolveDeadline.subtract(warningHours, 'hour') : null
+  const responseEscalationAt = escalateHours == null ? null : addWorkHours(responseDeadline, escalateHours, calendar)
+  const resolveEscalationAt = resolveDeadline && escalateHours != null
+    ? addWorkHours(resolveDeadline, escalateHours, calendar)
+    : null
 
   return {
     responseDeadline,
     resolveDeadline,
-    warningAt,
-    escalateAt,
+    responseWarningAt,
+    responseEscalationAt,
+    resolveWarningAt,
+    resolveEscalationAt,
   }
 }
 

@@ -10,6 +10,12 @@ export type SlaPolicy = {
   resolveHours: number | null
   warningRemainHours: number
   escalateAfterBreachHours: number | null
+  responseWarningNotifyEnabled: boolean
+  responseBreachNotifyEnabled: boolean
+  responseEscalationNotifyEnabled: boolean
+  resolveWarningNotifyEnabled: boolean
+  resolveBreachNotifyEnabled: boolean
+  resolveEscalationNotifyEnabled: boolean
   calendarId: number
   createdAt: string | null
   updatedAt: string | null
@@ -37,6 +43,12 @@ export type SlaPolicyFormState = {
   resolveHours: string
   warningRemainHours: number
   escalateAfterBreachHours: string
+  responseWarningNotifyEnabled: boolean
+  responseBreachNotifyEnabled: boolean
+  responseEscalationNotifyEnabled: boolean
+  resolveWarningNotifyEnabled: boolean
+  resolveBreachNotifyEnabled: boolean
+  resolveEscalationNotifyEnabled: boolean
   calendarId: string
 }
 
@@ -59,6 +71,8 @@ export type SlaWorkCalendar = {
 export type SlaPolicyPreview = {
   responseDeadline: Dayjs
   resolveDeadline: Dayjs | null
-  warningAt: Dayjs
-  escalateAt: Dayjs | null
+  responseWarningAt: Dayjs
+  responseEscalationAt: Dayjs | null
+  resolveWarningAt: Dayjs | null
+  resolveEscalationAt: Dayjs | null
 }

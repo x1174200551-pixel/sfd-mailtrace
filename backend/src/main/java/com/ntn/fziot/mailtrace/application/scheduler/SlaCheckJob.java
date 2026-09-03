@@ -29,9 +29,10 @@ public class SlaCheckJob {
         SlaCheckResult result = slaCheckService.checkDueTickets(null);
 
         // 2、输出本轮执行摘要。
-        if (result.scannedCount() > 0 || result.warningCount() > 0 || result.breachCount() > 0) {
-            log.info("SLA 检查完成 scanned={} warning={} breach={}",
-                    result.scannedCount(), result.warningCount(), result.breachCount());
+        if (result.scannedCount() > 0 || result.warningCount() > 0
+                || result.breachCount() > 0 || result.escalationCount() > 0) {
+            log.info("SLA 检查完成 scanned={} warning={} breach={} escalation={}",
+                    result.scannedCount(), result.warningCount(), result.breachCount(), result.escalationCount());
         }
     }
 }

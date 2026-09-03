@@ -9,11 +9,13 @@ import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleM
 import com.ntn.fziot.mailtrace.application.bizservice.assignment.AssignmentRuleService;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
 import com.ntn.fziot.mailtrace.application.bizservice.mailsend.MailSendService;
+import com.ntn.fziot.mailtrace.application.bizservice.notification.FeishuNotificationService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.DataScopeService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineResult;
 import com.ntn.fziot.mailtrace.application.bizservice.sla.SlaDeadlineService;
+import com.ntn.fziot.mailtrace.application.event.SlaMilestoneCompletedEvent;
 import com.ntn.fziot.mailtrace.application.bizservice.sysparam.TicketNumberRuleService;
 import com.ntn.fziot.mailtrace.infrastructure.mail.AttachmentInfo;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
@@ -21,7 +23,9 @@ import com.ntn.fziot.mailtrace.infrastructure.storage.FileStorageService;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketAssignRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPriorityRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyPreviewRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketStatusRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketVO;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.NotificationTemplateEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.CustomerEntity;
@@ -30,11 +34,14 @@ import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEventEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketMessageEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.UserEntity;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.AssignmentRuleGroupMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.AssignmentRuleMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.CustomerMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.NotificationTemplateMapper;
+import com.ntn.fziot.mailtrace.repox.mysql.mapper.SlaPolicyMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketAttachmentMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketEventMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
@@ -50,6 +57,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
@@ -90,9 +98,19 @@ class TicketBizServiceTest {
     @Mock
     private NotificationTemplateMapper notificationTemplateMapper;
     @Mock
+    private SlaPolicyMapper slaPolicyMapper;
+    @Mock
+    private AssignmentRuleGroupMapper assignmentRuleGroupMapper;
+    @Mock
+    private AssignmentRuleMapper assignmentRuleMapper;
+    @Mock
     private TicketNumberRuleService ticketNumberRuleService;
     @Mock
     private AutoReplyService autoReplyService;
+    @Mock
+    private MessageThreadService messageThreadService;
+    @Mock
+    private AgentReplyTemplateService agentReplyTemplateService;
     @Mock
     private CustomerTicketAccessService customerTicketAccessService;
     @Mock
@@ -111,6 +129,10 @@ class TicketBizServiceTest {
     private DataScopeService dataScopeService;
     @Mock
     private EnterpriseMailboxAccessService enterpriseMailboxAccessService;
+    @Mock
+    private FeishuNotificationService feishuNotificationService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private TicketBizService ticketBizService;
@@ -139,6 +161,25 @@ class TicketBizServiceTest {
         lenient().when(notificationTemplateMapper.selectById(502L)).thenReturn(template(502L, "ASSIGN_NOTIFY"));
         lenient().when(mailSendService.sendRawMail(any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(MailSendService.SendResult.ok("OK", "<smtp-reply@example.com>"));
+        lenient().when(mailSendService.sendThreadedMail(any()))
+                .thenReturn(MailSendService.SendResult.ok("OK", "smtp-reply@example.com"));
+        lenient().when(agentReplyTemplateService.render(any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> new AgentReplyTemplateService.RenderedReply(
+                        invocation.getArgument(2) == null ? 501L : invocation.getArgument(2),
+                        "处理人回复模板",
+                        invocation.getArgument(2) == null ? "MAILBOX_DEFAULT" : "SELECTED",
+                        "AGENT_REPLY",
+                        invocation.getArgument(5),
+                        invocation.getArgument(3),
+                        invocation.getArgument(4),
+                        MailSendService.CONTENT_TYPE_HTML));
+        TicketMessageEntity replyParent = new TicketMessageEntity();
+        replyParent.setId(301L);
+        replyParent.setTicketId(100L);
+        replyParent.setDirection(TicketBizService.DIRECTION_INBOUND);
+        replyParent.setMessageId("inbound@example.com");
+        replyParent.setSubject("咨询");
+        lenient().when(messageThreadService.findReplyParent(anyLong())).thenReturn(replyParent);
         lenient().when(userMapper.selectById(2L)).thenReturn(agent(2L, "张三", "agent@example.com"));
         lenient().when(assignmentRuleService.matchForTicket(any(), any(), any(), any())).thenReturn(null);
         lenient().when(slaDeadlineService.calculateForNewTicket(any(), any())).thenReturn(SlaDeadlineResult.none());
@@ -198,11 +239,109 @@ class TicketBizServiceTest {
 
         ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
         verify(ticketMessageMapper).insert(messageCaptor.capture());
-        assertTrue(messageCaptor.getValue().getSubject().contains(ticket.getTicketNo()));
+        assertEquals("Re: 咨询", messageCaptor.getValue().getSubject());
 
         ArgumentCaptor<TicketMessageEntity> messageUpdateCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
         verify(ticketMessageMapper).updateById(messageUpdateCaptor.capture());
         assertEquals("smtp-reply@example.com", messageUpdateCaptor.getValue().getMessageId());
+        verify(eventPublisher).publishEvent(any(SlaMilestoneCompletedEvent.class));
+    }
+
+    @Test
+    void replyTicket_whenTemplateSelected_shouldOverrideMailboxDefaultForThisSend() {
+        TicketEntity ticket = ticket(119L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(119L)).thenReturn(ticket);
+        when(agentReplyTemplateService.render(
+                org.mockito.ArgumentMatchers.eq(ticket),
+                any(MailboxEntity.class),
+                org.mockito.ArgumentMatchers.eq(777L),
+                org.mockito.ArgumentMatchers.eq("使用售后模板"),
+                org.mockito.ArgumentMatchers.eq("<p>使用售后模板</p>"),
+                org.mockito.ArgumentMatchers.eq("Re: 咨询")))
+                .thenReturn(new AgentReplyTemplateService.RenderedReply(
+                        777L, "售后回复模板", "SELECTED", "AGENT_REPLY", "Re: 咨询",
+                        "您好，工单处理结果如下：使用售后模板",
+                        "<p>您好，工单处理结果如下：</p><p>使用售后模板</p>",
+                        MailSendService.CONTENT_TYPE_HTML));
+
+        ticketBizService.replyTicket(admin, 119L,
+                new TicketReplyRequest("使用售后模板", "<p>使用售后模板</p>", 777L, false, List.of()));
+
+        verify(agentReplyTemplateService).render(
+                org.mockito.ArgumentMatchers.eq(ticket),
+                any(MailboxEntity.class),
+                org.mockito.ArgumentMatchers.eq(777L),
+                org.mockito.ArgumentMatchers.eq("使用售后模板"),
+                org.mockito.ArgumentMatchers.eq("<p>使用售后模板</p>"),
+                org.mockito.ArgumentMatchers.eq("Re: 咨询"));
+
+        ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper).insert(messageCaptor.capture());
+        assertEquals("您好，工单处理结果如下：使用售后模板", messageCaptor.getValue().getContentText());
+        assertEquals("<p>您好，工单处理结果如下：</p><p>使用售后模板</p>",
+                messageCaptor.getValue().getContentHtml());
+    }
+
+    @Test
+    void previewReply_shouldUseSameRendererWithoutSendingMail() {
+        TicketEntity ticket = ticket(118L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(118L)).thenReturn(ticket);
+
+        var preview = ticketBizService.previewReply(admin, 118L,
+                new TicketReplyPreviewRequest(777L, "预览内容", "<p>预览内容</p>"));
+
+        assertEquals(777L, preview.templateId());
+        assertEquals("Re: 咨询", preview.subject());
+        verify(agentReplyTemplateService).render(
+                org.mockito.ArgumentMatchers.eq(ticket),
+                any(MailboxEntity.class),
+                org.mockito.ArgumentMatchers.eq(777L),
+                org.mockito.ArgumentMatchers.eq("预览内容"),
+                org.mockito.ArgumentMatchers.eq("<p>预览内容</p>"),
+                org.mockito.ArgumentMatchers.eq("Re: 咨询"));
+        verify(mailSendService, never()).sendThreadedMail(any());
+    }
+
+    @Test
+    void replyTicket_whenSmtpFails_shouldKeepBusinessStatusAndMarkMessageFailed() {
+        TicketEntity ticket = ticket(120L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(120L)).thenReturn(ticket);
+        when(mailSendService.sendThreadedMail(any()))
+                .thenReturn(MailSendService.SendResult.fail("SMTP unavailable", "failed@example.com"));
+
+        ticketBizService.replyTicket(admin, 120L,
+                new TicketReplyRequest("请稍后重试", "<p>请稍后重试</p>", false, List.of()));
+
+        verify(ticketMapper, never()).updateById(any(TicketEntity.class));
+        ArgumentCaptor<TicketEventEntity> eventCaptor = ArgumentCaptor.forClass(TicketEventEntity.class);
+        verify(ticketEventMapper).insert(eventCaptor.capture());
+        assertEquals(TicketBizService.EVENT_MAIL_SEND_FAILED, eventCaptor.getValue().getEventType());
+
+        ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper).updateById(messageCaptor.capture());
+        assertEquals("FAILED", messageCaptor.getValue().getSendStatus());
+        assertEquals("failed@example.com", messageCaptor.getValue().getMessageId());
+        assertEquals(TicketBizService.STATUS_PROCESSING, ticket.getStatus());
+    }
+
+    @Test
+    void replyTicket_whenTransactionDeliveryQueued_shouldKeepMessagePendingAndDeferBusinessState() {
+        TicketEntity ticket = ticket(121L, TicketBizService.STATUS_PROCESSING);
+        when(ticketMapper.selectById(121L)).thenReturn(ticket);
+        when(mailSendService.sendThreadedMail(any()))
+                .thenReturn(MailSendService.SendResult.queued("已提交发送", "queued@example.com"));
+
+        ticketBizService.replyTicket(admin, 121L,
+                new TicketReplyRequest("排队回复", "<p>排队回复</p>", false, List.of()));
+
+        verify(ticketMapper, never()).updateById(any(TicketEntity.class));
+        verify(ticketEventMapper, never()).insert(any(TicketEventEntity.class));
+        ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
+        verify(ticketMessageMapper).updateById(messageCaptor.capture());
+        assertEquals("PENDING", messageCaptor.getValue().getSendStatus());
+        assertEquals("queued@example.com", messageCaptor.getValue().getMessageId());
+        assertEquals(TicketBizService.STATUS_PROCESSING, ticket.getStatus());
+        verify(eventPublisher, never()).publishEvent(any(SlaMilestoneCompletedEvent.class));
     }
 
     @Test
@@ -332,6 +471,7 @@ class TicketBizServiceTest {
         assertEquals(TicketBizService.EVENT_CLOSED, eventCaptor.getValue().getEventType());
         assertTrue(eventCaptor.getValue().getEventContent().contains("待客户回复 → 已关闭"));
         assertTrue(eventCaptor.getValue().getEventContent().contains("说明：客户确认完成"));
+        verify(eventPublisher).publishEvent(any(SlaMilestoneCompletedEvent.class));
     }
 
     @Test
@@ -350,6 +490,7 @@ class TicketBizServiceTest {
         assertEquals(TicketBizService.EVENT_CLOSED, eventCaptor.getValue().getEventType());
         assertTrue(eventCaptor.getValue().getEventContent().contains("处理中 → 已关闭"));
         assertTrue(eventCaptor.getValue().getEventContent().contains("说明：后台手动关闭"));
+        verify(eventPublisher).publishEvent(any(SlaMilestoneCompletedEvent.class));
     }
 
     @Test
@@ -442,6 +583,28 @@ class TicketBizServiceTest {
     }
 
     @Test
+    void getTicket_shouldReturnStrategyNamesInsteadOfOnlyIds() {
+        TicketEntity ticket = ticket(122L, TicketBizService.STATUS_PROCESSING);
+        ticket.setSlaPolicyId(5L);
+        ticket.setAutoReplyTemplateId(501L);
+        ticket.setAssignmentRuleGroupId(1L);
+        ticket.setAssignmentRuleId(8L);
+        when(ticketMapper.selectById(122L)).thenReturn(ticket);
+
+        when(slaPolicyMapper.selectHistoricalNameById(5L)).thenReturn("标准服务 SLA");
+        when(notificationTemplateMapper.selectHistoricalNameById(501L)).thenReturn("客户自动回执");
+        when(assignmentRuleGroupMapper.selectHistoricalNameById(1L)).thenReturn("默认分配规则组");
+        when(assignmentRuleMapper.selectHistoricalNameById(8L)).thenReturn("VIP 客户优先分配");
+
+        TicketVO detail = ticketBizService.getTicket(admin, 122L);
+
+        assertEquals("标准服务 SLA", detail.slaPolicyName());
+        assertEquals("客户自动回执", detail.autoReplyTemplateName());
+        assertEquals("默认分配规则组", detail.assignmentRuleGroupName());
+        assertEquals("VIP 客户优先分配", detail.assignmentRuleName());
+    }
+
+    @Test
     void replyTicket_whenAgentOperatesUnassignedTicket_shouldReject() {
         TicketEntity ticket = ticket(110L, TicketBizService.STATUS_PENDING_ASSIGN);
         when(ticketMapper.selectById(110L)).thenReturn(ticket);
@@ -526,7 +689,11 @@ class TicketBizServiceTest {
         LocalDateTime resolveDeadline = LocalDateTime.parse("2026-07-28T11:00:00");
         when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-202");
         when(slaDeadlineService.calculateForNewTicket(11L, mailSentAt))
-                .thenReturn(new SlaDeadlineResult(20L, responseDeadline, resolveDeadline));
+                .thenReturn(new SlaDeadlineResult(
+                        20L, 1, 2,
+                        responseDeadline, resolveDeadline,
+                        responseDeadline.minusHours(1), responseDeadline.plusHours(2),
+                        resolveDeadline.minusHours(1), resolveDeadline.plusHours(2)));
         when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
             TicketEntity ticket = invocation.getArgument(0);
             ticket.setId(202L);
@@ -553,6 +720,7 @@ class TicketBizServiceTest {
         assertEquals(false, saved.getSlaBreached());
         assertEquals(false, saved.getSlaWarningSent());
         assertEquals(false, saved.getSlaBreachNotified());
+        assertEquals(false, saved.getSlaNotificationSuppressed());
         assertEquals(mailSentAt, saved.getLastCustomerMailAt());
         assertEquals("encoded-customer-access-code", saved.getCustomerAccessCodeHash());
         assertEquals(LocalDateTime.parse("2026-07-30T10:00:00"), saved.getCustomerAccessExpiresAt());
@@ -560,7 +728,7 @@ class TicketBizServiceTest {
     }
 
     @Test
-    void createTicket_whenAutoReplySucceeds_shouldPersistOutboundMessageId() {
+    void createTicket_shouldPassExplicitInboundMessageToAutoReply() {
         when(mailboxMapper.selectById(11L)).thenReturn(mailbox());
         when(ticketNumberRuleService.generateNextTicketNo()).thenReturn("TCK-20260727-203");
         when(ticketMapper.insert(any(TicketEntity.class))).thenAnswer(invocation -> {
@@ -568,7 +736,12 @@ class TicketBizServiceTest {
             ticket.setId(203L);
             return 1;
         });
-        when(autoReplyService.sendAutoReply(203L, 11L, "123456"))
+        when(ticketMessageMapper.insert(any(TicketMessageEntity.class))).thenAnswer(invocation -> {
+            TicketMessageEntity message = invocation.getArgument(0);
+            message.setId(303L);
+            return 1;
+        });
+        when(autoReplyService.sendAutoReply(203L, 11L, "123456", 303L))
                 .thenReturn(new AutoReplyService.AutoReplyResult(
                         true,
                         "OK",
@@ -585,15 +758,13 @@ class TicketBizServiceTest {
 
         assertEquals(203L, ticketId);
         ArgumentCaptor<TicketMessageEntity> messageCaptor = ArgumentCaptor.forClass(TicketMessageEntity.class);
-        verify(ticketMessageMapper, org.mockito.Mockito.times(2)).insert(messageCaptor.capture());
+        verify(ticketMessageMapper).insert(messageCaptor.capture());
 
         List<TicketMessageEntity> messages = messageCaptor.getAllValues();
         assertEquals(TicketBizService.DIRECTION_INBOUND, messages.get(0).getDirection());
         assertEquals("inbound@example.com", messages.get(0).getMessageId());
-        assertEquals(TicketBizService.DIRECTION_OUTBOUND, messages.get(1).getDirection());
-        assertEquals("auto-reply@example.com", messages.get(1).getMessageId());
-        assertEquals("您的工单已创建：TCK-20260727-203", messages.get(1).getSubject());
-        assertEquals("您好，您的邮件已进入工单系统。\n\n工单号：TCK-20260727-203", messages.get(1).getContentText());
+        assertEquals("SUCCESS", messages.get(0).getSendStatus());
+        verify(autoReplyService).sendAutoReply(203L, 11L, "123456", 303L);
     }
 
     @Test

@@ -228,6 +228,7 @@ export function useTicketManagement({
     setShowTicketDetailPage(true)
     setTicketDetailTab('mail')
     if (!token) return
+    setTicketsError('')
     try {
       const data = await ticketApi.detail(id)
       setTicketDetail(data)
@@ -240,6 +241,9 @@ export function useTicketManagement({
       }
     } catch (error) {
       if (handleAuthExpired(error)) return
+      setShowTicketDetailPage(false)
+      setTicketDetail(null)
+      setTicketsError(error instanceof ApiError ? error.message : '工单详情加载失败或无权访问')
     }
   }, [handleAuthExpired, token])
 

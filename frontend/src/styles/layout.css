@@ -45,12 +45,20 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
+  overflow: hidden;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
   color: #fff;
   background: #2563eb;
+}
+
+.app-logo__mark img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .app-logo strong {

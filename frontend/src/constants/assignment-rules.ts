@@ -21,7 +21,7 @@ export const emptyAssignmentRuleTestForm: AssignmentRuleTestForm = {
 
 export function assignmentMatchTypeLabel(value: string | null) {
   return ({
-    DEFAULT: '默认兜底',
+    DEFAULT: '默认分配',
     SUBJECT_KEYWORD: '主题关键词',
     MAILBOX: '来源邮箱',
     FROM_EMAIL: '客户邮箱',
@@ -29,6 +29,6 @@ export function assignmentMatchTypeLabel(value: string | null) {
 }
 
 export function assignmentRuleText(rule: AssignmentRule) {
-  if (rule.matchType === 'DEFAULT') return 'DEFAULT · 未命中其他规则时兜底'
+  if (rule.matchType === 'DEFAULT') return '未命中其他规则时执行默认分配'
   return `${assignmentMatchTypeLabel(rule.matchType)} = ${rule.matchValue || '-'}`
 }

@@ -9,6 +9,9 @@ import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPageResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketPriorityRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketRemarkRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyPreviewRequest;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyPreviewVO;
+import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketReplyTemplateVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketStatusRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.ticket.TicketVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Tag(name = "工单管理", description = "工单查询、分配、回复、状态变更")
 @RestController
@@ -121,6 +125,25 @@ public class TicketController {
             @PathVariable Long id,
             @Valid @RequestBody TicketReplyRequest request) {
         return BasicResult.ok(ticketBizService.replyTicket(principal, id, request));
+    }
+
+    @Operation(summary = "查询当前工单可用的处理人回复模板")
+    @GetMapping("/{id}/reply-templates")
+    @RequirePermission(value = "ticket:reply", message = "无权回复客户")
+    public BasicResult<List<TicketReplyTemplateVO>> listReplyTemplates(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id) {
+        return BasicResult.ok(ticketBizService.listReplyTemplates(principal, id));
+    }
+
+    @Operation(summary = "预览当前工单的最终回复邮件")
+    @PostMapping("/{id}/reply-preview")
+    @RequirePermission(value = "ticket:reply", message = "无权回复客户")
+    public BasicResult<TicketReplyPreviewVO> previewReply(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id,
+            @Valid @RequestBody TicketReplyPreviewRequest request) {
+        return BasicResult.ok(ticketBizService.previewReply(principal, id, request));
     }
 
     @Operation(summary = "变更工单状态")

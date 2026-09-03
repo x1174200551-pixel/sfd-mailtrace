@@ -21,7 +21,7 @@ spring:
           max-attempts: 0
       config:
         # 当前本地启动默认启用 Nacos；不用 Nacos 时设 NACOS_CONFIG_ENABLED=false。
-        enabled: ${NACOS_CONFIG_ENABLED:true}
+        enabled: ${NACOS_CONFIG_ENABLED:false}
         # 使用 yaml 后缀，Data ID 为 ntn-cmp-mailtrace-api.yaml。
         file-extension: ${NACOS_FILE_EXTENSION:yaml}
         # 需和 Nacos 上配置所在 group/namespace 一致。

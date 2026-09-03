@@ -1,5 +1,5 @@
 import { requestApi } from '../shared/api/request'
-import type { Enterprise, EnterpriseListResponse, EnterpriseOption } from '../types/enterprise'
+import type { Enterprise, EnterpriseListResponse, EnterpriseOption, FeishuGroupTestResponse } from '../types/enterprise'
 
 export type EnterprisePayload = {
   enterpriseName: string
@@ -7,6 +7,11 @@ export type EnterprisePayload = {
   contactEmail: string
   contactPhone: string
   enabled: boolean
+  feishuNotifyEnabled: boolean
+  feishuGroupName: string
+  feishuWebhookUrl: string
+  feishuSigningSecret: string
+  clearFeishuConfig: boolean
   remark: string
 }
 
@@ -38,6 +43,12 @@ export const enterpriseApi = {
     return requestApi<Enterprise>(`/api/v1/enterprises/${id}/enabled`, {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
+    })
+  },
+
+  testFeishuGroup(id: number) {
+    return requestApi<FeishuGroupTestResponse>(`/api/v1/enterprises/${id}/feishu-group-test`, {
+      method: 'POST',
     })
   },
 }

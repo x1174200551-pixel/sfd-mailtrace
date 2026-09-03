@@ -4,11 +4,17 @@ import java.time.LocalDateTime;
 
 public record SlaDeadlineResult(
         Long policyId,
+        Integer warningRemainHours,
+        Integer escalateAfterBreachHours,
         LocalDateTime responseDeadline,
-        LocalDateTime resolveDeadline
+        LocalDateTime resolveDeadline,
+        LocalDateTime responseWarningAt,
+        LocalDateTime responseEscalationAt,
+        LocalDateTime resolveWarningAt,
+        LocalDateTime resolveEscalationAt
 ) {
 
     public static SlaDeadlineResult none() {
-        return new SlaDeadlineResult(null, null, null);
+        return new SlaDeadlineResult(null, null, null, null, null, null, null, null, null);
     }
 }

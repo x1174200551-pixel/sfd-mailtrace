@@ -51,9 +51,7 @@ public class MailSendLogBizService {
         );
     }
 
-    /**
-     * 待处理数量（失败+待发+重试中），用于菜单角标。
-     */
+    /** 待处理数量（失败、待发、发送中、重试中、待核实），用于菜单角标。 */
     public long pendingCount(CurrentUserPrincipal principal) {
         permissionService.assertPermission(principal, "mail_send_log:read", "无权访问发送日志");
         Set<Long> readableMailboxIds = enterpriseMailboxAccessService.resolveReadableMailboxIds(principal);
@@ -62,7 +60,8 @@ public class MailSendLogBizService {
         }
         return mailSendLogMapper.selectCount(new LambdaQueryWrapper<MailSendLogEntity>()
                 .in(MailSendLogEntity::getMailboxId, readableMailboxIds)
-                .in(MailSendLogEntity::getSendStatus, List.of("PENDING", "FAILED", "RETRYING")));
+                .in(MailSendLogEntity::getSendStatus,
+                        List.of("PENDING", "SENDING", "FAILED", "RETRYING", "DELIVERY_UNKNOWN")));
     }
 
     public MailSendLogPageResponse pageSendLogs(CurrentUserPrincipal principal,

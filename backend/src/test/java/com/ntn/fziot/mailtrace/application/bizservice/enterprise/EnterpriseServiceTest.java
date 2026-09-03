@@ -4,12 +4,14 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.notification.FeishuNotificationService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseOptionVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseVO;
+import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.FeishuGroupTestResponse;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.EnterpriseMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
@@ -31,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,6 +53,8 @@ class EnterpriseServiceTest {
     private MailboxMapper mailboxMapper;
     @Mock
     private TicketMapper ticketMapper;
+    @Mock
+    private FeishuNotificationService feishuNotificationService;
 
     @InjectMocks
     private EnterpriseService enterpriseService;
@@ -85,6 +90,32 @@ class EnterpriseServiceTest {
         assertEquals("sales@example.com", captor.getValue().getContactEmail());
         assertEquals("admin", captor.getValue().getCreatedBy());
         assertEquals(100L, result.id());
+    }
+
+    @Test
+    void createEnterprise_whenFeishuConfigCompleteAndEnabled_shouldNotRequireSuccessfulTest() {
+        when(enterpriseMapper.selectCount(any())).thenReturn(0L);
+        when(enterpriseMapper.insert(any())).thenAnswer(invocation -> {
+            EnterpriseEntity entity = invocation.getArgument(0);
+            entity.setId(100L);
+            return 1;
+        });
+        when(enterpriseMapper.selectById(100L)).thenReturn(enterprise(100L, "示例企业", true));
+
+        EnterpriseSaveRequest request = new EnterpriseSaveRequest();
+        request.setEnterpriseName("示例企业");
+        request.setFeishuGroupName("工单通知群");
+        request.setFeishuWebhookUrl("https://open.feishu.cn/open-apis/bot/v2/hook/test");
+        request.setFeishuSigningSecret("secret");
+        request.setFeishuNotifyEnabled(true);
+
+        enterpriseService.createEnterprise(admin, request);
+
+        ArgumentCaptor<EnterpriseEntity> captor = ArgumentCaptor.forClass(EnterpriseEntity.class);
+        verify(enterpriseMapper).insert(captor.capture());
+        assertTrue(captor.getValue().getFeishuNotifyEnabled());
+        assertEquals("UNTESTED", captor.getValue().getFeishuConnectionStatus());
+        verify(feishuNotificationService).validateWebhook(request.getFeishuWebhookUrl());
     }
 
     @Test
@@ -142,6 +173,20 @@ class EnterpriseServiceTest {
         assertEquals(2L, result.pages());
         assertEquals(20L, result.totalCount());
         assertEquals(15L, result.enabledCount());
+    }
+
+    @Test
+    void testFeishuGroup_whenAuditLogFails_shouldKeepSuccessfulSendResult() {
+        when(enterpriseMapper.selectById(10L)).thenReturn(enterprise(10L, "测试企业", true));
+        when(feishuNotificationService.sendTest(10L))
+                .thenReturn(new FeishuGroupTestResponse(true, "测试消息发送成功", 99L));
+        doThrow(new RuntimeException("audit unavailable")).when(operationLogMapper).insert(any());
+
+        FeishuGroupTestResponse result = enterpriseService.testFeishuGroup(admin, 10L);
+
+        assertTrue(result.accepted());
+        assertEquals(99L, result.sendLogId());
+        verify(feishuNotificationService).sendTest(10L);
     }
 
     private EnterpriseEntity enterprise(Long id, String name, boolean enabled) {

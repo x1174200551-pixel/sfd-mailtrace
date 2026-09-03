@@ -14,6 +14,12 @@ export type SlaPolicyPayload = {
   defaultPolicy: boolean
   enabled: boolean
   escalateAfterBreachHours: number | null
+  responseWarningNotifyEnabled: boolean
+  responseBreachNotifyEnabled: boolean
+  responseEscalationNotifyEnabled: boolean
+  resolveWarningNotifyEnabled: boolean
+  resolveBreachNotifyEnabled: boolean
+  resolveEscalationNotifyEnabled: boolean
   policyName: string
   resolveHours: number | null
   responseHours: number

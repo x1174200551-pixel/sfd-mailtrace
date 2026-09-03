@@ -52,6 +52,10 @@ public class TicketEntity {
 
     private Long slaPolicyId;
 
+    private Integer slaWarningRemainHoursSnapshot;
+
+    private Integer slaEscalateAfterBreachHoursSnapshot;
+
     private Long autoReplyTemplateId;
 
     private Long assignmentRuleGroupId;
@@ -60,7 +64,15 @@ public class TicketEntity {
 
     private LocalDateTime slaResponseDeadline;
 
+    private LocalDateTime slaResponseWarningAt;
+
+    private LocalDateTime slaResponseEscalationAt;
+
     private LocalDateTime slaResolveDeadline;
+
+    private LocalDateTime slaResolveWarningAt;
+
+    private LocalDateTime slaResolveEscalationAt;
 
     @TableField("sla_breached")
     private Boolean slaBreached;
@@ -70,6 +82,21 @@ public class TicketEntity {
 
     @TableField("sla_breach_notified")
     private Boolean slaBreachNotified;
+
+    private LocalDateTime slaResponseWarningTriggeredAt;
+
+    private LocalDateTime slaResponseBreachTriggeredAt;
+
+    private LocalDateTime slaResponseEscalationTriggeredAt;
+
+    private LocalDateTime slaResolveWarningTriggeredAt;
+
+    private LocalDateTime slaResolveBreachTriggeredAt;
+
+    private LocalDateTime slaResolveEscalationTriggeredAt;
+
+    @TableField("sla_notification_suppressed")
+    private Boolean slaNotificationSuppressed;
 
     private LocalDateTime lastCustomerMailAt;
 

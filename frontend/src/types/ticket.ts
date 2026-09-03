@@ -52,6 +52,7 @@ export type TicketMessage = {
   id: number
   direction?: string | null
   messageDirection?: string | null
+  sendStatus?: 'PENDING' | 'SUCCESS' | 'FAILED' | null
   fromAddress?: string | null
   toAddress?: string | null
   toAddresses?: string | null
@@ -80,9 +81,13 @@ export type TicketDetail = {
   mailboxId: number
   mailboxName: string | null
   slaPolicyId: number | null
+  slaPolicyName: string | null
   autoReplyTemplateId: number | null
+  autoReplyTemplateName: string | null
   assignmentRuleGroupId: number | null
+  assignmentRuleGroupName: string | null
   assignmentRuleId: number | null
+  assignmentRuleName: string | null
   assigneeId: number | null
   assigneeName: string | null
   linkSuspect: boolean
@@ -92,6 +97,8 @@ export type TicketDetail = {
   closedAt: string | null
   slaResponseDeadline: string | null
   slaResolveDeadline: string | null
+  responseSlaStatus: string
+  resolveSlaStatus: string
   slaBreached: boolean
   remark: string | null
   messages: TicketMessage[]

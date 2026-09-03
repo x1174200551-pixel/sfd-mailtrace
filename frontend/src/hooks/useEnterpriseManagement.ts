@@ -14,6 +14,11 @@ const emptyForm: EnterpriseFormState = {
   contactEmail: '',
   contactPhone: '',
   enabled: true,
+  feishuNotifyEnabled: false,
+  feishuGroupName: '',
+  feishuWebhookUrl: '',
+  feishuSigningSecret: '',
+  clearFeishuConfig: false,
   remark: '',
 }
 
@@ -32,6 +37,11 @@ function toForm(enterprise: Enterprise): EnterpriseFormState {
     contactEmail: enterprise.contactEmail || '',
     contactPhone: enterprise.contactPhone || '',
     enabled: enterprise.enabled,
+    feishuNotifyEnabled: enterprise.feishuNotifyEnabled,
+    feishuGroupName: enterprise.feishuGroupName || '',
+    feishuWebhookUrl: '',
+    feishuSigningSecret: '',
+    clearFeishuConfig: false,
     remark: enterprise.remark || '',
   }
 }
@@ -49,6 +59,8 @@ export function useEnterpriseManagement({ activeMenu, canRead, handleAuthExpired
   const [formOpen, setFormOpen] = useState(false)
   const [form, setForm] = useState<EnterpriseFormState>(emptyForm)
   const [confirmAction, setConfirmAction] = useState<EnterpriseConfirmAction>(null)
+  const [feishuTesting, setFeishuTesting] = useState(false)
+  const [feishuTestMessage, setFeishuTestMessage] = useState('')
 
   const fetchEnterprises = useCallback(async () => {
     if (!token || activeMenu !== '企业管理') return
@@ -87,6 +99,7 @@ export function useEnterpriseManagement({ activeMenu, canRead, handleAuthExpired
     setForm(emptyForm)
     setError('')
     setFormOpen(true)
+    setFeishuTestMessage('')
   }, [])
 
   const changeKeyword = useCallback((value: string) => {
@@ -108,11 +121,15 @@ export function useEnterpriseManagement({ activeMenu, canRead, handleAuthExpired
     setForm(toForm(enterprise))
     setError('')
     setFormOpen(true)
+    setFeishuTestMessage('')
   }, [])
 
   const save = useCallback(async () => {
     if (!form.enterpriseName.trim()) {
       setError('请输入企业名称')
+      return
+    }
+    if (form.clearFeishuConfig && !window.confirm('确认清除该企业的飞书群机器人配置吗？清除后企业飞书通知会立即关闭。')) {
       return
     }
     setSaving(true)
@@ -124,6 +141,11 @@ export function useEnterpriseManagement({ activeMenu, canRead, handleAuthExpired
         contactEmail: form.contactEmail.trim(),
         contactPhone: form.contactPhone.trim(),
         enabled: form.enabled,
+        feishuNotifyEnabled: form.feishuNotifyEnabled,
+        feishuGroupName: form.feishuGroupName.trim(),
+        feishuWebhookUrl: form.feishuWebhookUrl.trim(),
+        feishuSigningSecret: form.feishuSigningSecret.trim(),
+        clearFeishuConfig: form.clearFeishuConfig,
         remark: form.remark.trim(),
       })
       setFormOpen(false)
@@ -135,6 +157,25 @@ export function useEnterpriseManagement({ activeMenu, canRead, handleAuthExpired
       setSaving(false)
     }
   }, [fetchEnterprises, form, handleAuthExpired])
+
+  const testFeishuGroup = useCallback(async () => {
+    if (!form.id) {
+      setFeishuTestMessage('请先保存企业和群机器人配置，再发送测试消息')
+      return
+    }
+    setFeishuTesting(true)
+    setFeishuTestMessage('')
+    try {
+      const result = await enterpriseApi.testFeishuGroup(form.id)
+      setFeishuTestMessage(result.message)
+      await fetchEnterprises()
+    } catch (nextError) {
+      if (handleAuthExpired(nextError)) return
+      setFeishuTestMessage(nextError instanceof Error ? nextError.message : '飞书通知群测试失败')
+    } finally {
+      setFeishuTesting(false)
+    }
+  }, [fetchEnterprises, form.id, handleAuthExpired])
 
   const submitConfirm = useCallback(async () => {
     if (!confirmAction) return
@@ -158,6 +199,8 @@ export function useEnterpriseManagement({ activeMenu, canRead, handleAuthExpired
     data,
     enabledFilter,
     error,
+    feishuTestMessage,
+    feishuTesting,
     fetchEnterprises,
     form,
     formOpen,
@@ -177,5 +220,6 @@ export function useEnterpriseManagement({ activeMenu, canRead, handleAuthExpired
     setPage,
     setPageSize: changePageSize,
     submitConfirm,
+    testFeishuGroup,
   }
 }

@@ -10,6 +10,12 @@ export const emptySlaPolicyForm: SlaPolicyFormState = {
   resolveHours: '24',
   warningRemainHours: 1,
   escalateAfterBreachHours: '2',
+  responseWarningNotifyEnabled: true,
+  responseBreachNotifyEnabled: true,
+  responseEscalationNotifyEnabled: false,
+  resolveWarningNotifyEnabled: true,
+  resolveBreachNotifyEnabled: true,
+  resolveEscalationNotifyEnabled: false,
   calendarId: '',
 }
 

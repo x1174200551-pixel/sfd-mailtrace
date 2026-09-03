@@ -7,6 +7,12 @@ export type Enterprise = {
   mailboxCount: number
   ticketCount: number
   enabled: boolean
+  feishuNotifyEnabled: boolean
+  feishuGroupName: string | null
+  feishuConfigured: boolean
+  feishuConnectionStatus: 'UNCONFIGURED' | 'UNTESTED' | 'OK' | 'ERROR' | string
+  feishuLastTestAt: string | null
+  feishuLastError: string | null
   remark: string | null
   createdAt: string | null
   updatedAt: string | null
@@ -32,7 +38,18 @@ export type EnterpriseFormState = {
   contactEmail: string
   contactPhone: string
   enabled: boolean
+  feishuNotifyEnabled: boolean
+  feishuGroupName: string
+  feishuWebhookUrl: string
+  feishuSigningSecret: string
+  clearFeishuConfig: boolean
   remark: string
+}
+
+export type FeishuGroupTestResponse = {
+  accepted: boolean
+  message: string
+  sendLogId: number | null
 }
 
 export type EnterpriseConfirmAction = {

@@ -6,12 +6,13 @@ import {
   CircleOff,
   FileText,
   MailCheck,
+  MessageCircle,
   Plus,
   RefreshCw,
   Search,
   ShieldCheck,
 } from 'lucide-react'
-import { templateSceneLabel } from '../../constants/notification-templates'
+import { isThreadedReplyTemplate, templateSceneLabel } from '../../constants/notification-templates'
 import type {
   NotificationTemplate,
   NotificationTemplateListResponse,
@@ -74,10 +75,12 @@ export function NotificationTemplatePage({
 }: NotificationTemplatePageProps) {
   const templateContentRef = useRef<HTMLTextAreaElement>(null)
   const [activeWorkspace, setActiveWorkspace] = useState<'editor' | 'preview'>('editor')
+  const [previewChannel, setPreviewChannel] = useState<'email' | 'feishu'>('email')
+  const threadedReplyTemplate = isThreadedReplyTemplate(templateForm.templateType)
   const templateFormReady = Boolean(
     templateForm.templateCode.trim() &&
     templateForm.templateName.trim() &&
-    templateForm.subjectTpl.trim() &&
+    (threadedReplyTemplate || templateForm.subjectTpl.trim()) &&
     templateForm.contentTpl.trim(),
   )
 
@@ -355,7 +358,13 @@ export function NotificationTemplatePage({
                         </label>
                         <label>
                           <span>模板类型</span>
-                          <select onChange={(event) => onUpdateTemplateForm({ templateType: event.target.value })} value={templateForm.templateType}>
+                          <select
+                            onChange={(event) => onUpdateTemplateForm({
+                              templateType: event.target.value,
+                              ...(isThreadedReplyTemplate(event.target.value) ? { subjectTpl: 'Re: {subject}' } : {}),
+                            })}
+                            value={templateForm.templateType}
+                          >
                             <option value="AUTO_REPLY">自动回执</option><option value="ASSIGN_NOTIFY">分配通知</option><option value="AGENT_REPLY">处理人回复</option><option value="SLA_WARNING">SLA 预警</option><option value="SLA_BREACH">SLA 超时</option><option value="SYSTEM">系统通知</option>
                           </select>
                         </label>
@@ -375,17 +384,22 @@ export function NotificationTemplatePage({
 
                     <section className="template-form-section template-compose-section">
                       <div className="template-section-title">
-                        <strong>邮件内容</strong>
-                        <span>先写主题，再通过变量快速补充工单上下文</span>
+                        <strong>通知内容</strong>
+                        <span>{threadedReplyTemplate
+                          ? '回复主题由系统沿用原邮件，正文可通过变量补充工单上下文'
+                          : '邮件与飞书群通知共用内容，先写主题，再通过变量补充工单上下文'}</span>
                       </div>
                       <div className="template-form-grid">
                         <label className="full">
-                          <span>邮件主题</span>
+                          <span>{threadedReplyTemplate ? '邮件主题' : '通知主题'}</span>
                           <input
+                            disabled={threadedReplyTemplate}
                             onChange={(event) => onUpdateTemplateForm({ subjectTpl: event.target.value })}
-                            value={templateForm.subjectTpl}
+                            value={threadedReplyTemplate ? '跟随原邮件主题（Re: 原主题）' : templateForm.subjectTpl}
                           />
-                          <small>主题可插入变量，保存前会校验变量格式。</small>
+                          <small>{threadedReplyTemplate
+                            ? '系统自动保持邮件会话关系，无需手工填写主题或 Message-ID。'
+                            : '主题可插入变量，保存前会校验变量格式。'}</small>
                         </label>
                         <div className="template-variable-dock full">
                           <div>
@@ -408,7 +422,7 @@ export function NotificationTemplatePage({
                           </div>
                         </div>
                         <label className="full">
-                          <span>邮件正文</span>
+                          <span>通知正文</span>
                           <textarea
                             onChange={(event) => onUpdateTemplateForm({ contentTpl: event.target.value })}
                             ref={templateContentRef}
@@ -424,20 +438,33 @@ export function NotificationTemplatePage({
                     <header>
                       <div>
                         <strong>发送效果预览</strong>
-                        <span>使用系统示例数据替换变量，不会实际发送邮件。</span>
+                        <span>使用系统示例数据替换变量，不会实际发送通知。</span>
                       </div>
                       <button disabled={templatePreviewLoading} onClick={previewTemplate} type="button">
                         {templatePreviewLoading ? '生成中...' : templatePreview ? '重新生成预览' : '生成预览'}
                       </button>
                     </header>
-                    <div className="template-preview template-preview-large">
-                      <div className="mail-subject">
-                        {templatePreview?.subject || '点击“重新生成预览”后显示邮件主题'}
+                    <nav className="template-channel-tabs" aria-label="通知渠道预览">
+                      <button className={previewChannel === 'email' ? 'active' : ''} onClick={() => setPreviewChannel('email')} type="button"><MailCheck size={14} />邮件</button>
+                      <button className={previewChannel === 'feishu' ? 'active' : ''} onClick={() => setPreviewChannel('feishu')} type="button"><MessageCircle size={14} />飞书群卡片</button>
+                    </nav>
+                    {previewChannel === 'email' ? (
+                      <div className="template-preview template-preview-large">
+                        <div className="mail-subject">
+                          {templatePreview?.subject || '点击“生成预览”后显示邮件主题'}
+                        </div>
+                        <div className="mail-body">
+                          {templatePreview?.content || '模板正文预览会使用系统默认示例数据进行变量替换。'}
+                        </div>
                       </div>
-                      <div className="mail-body">
-                        {templatePreview?.content || '模板正文预览会使用系统默认示例数据进行变量替换。'}
+                    ) : (
+                      <div className="template-feishu-preview">
+                        <header><MessageCircle size={16} /><strong>{templatePreview?.subject || '工单通知标题'}</strong></header>
+                        <div className="template-feishu-at">处理人：张三（群通知不 @ 个人）</div>
+                        <p>{templatePreview?.content || '生成预览后，这里会展示与邮件共用的通知正文。'}</p>
+                        <footer><span>MailTrace 邮件工单系统</span><button type="button">查看工单</button></footer>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </section>

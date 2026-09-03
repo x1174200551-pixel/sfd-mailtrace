@@ -53,10 +53,16 @@ export function useAssignmentRuleManagement({
   const [assignmentRulesLoading, setAssignmentRulesLoading] = useState(false)
   const [assignmentRulesError, setAssignmentRulesError] = useState('')
   const [assignmentKeyword, setAssignmentKeyword] = useState('')
+  const [debouncedAssignmentKeyword, setDebouncedAssignmentKeyword] = useState('')
   const [assignmentEnabledFilter, setAssignmentEnabledFilter] = useState('ALL')
   const [assignmentMatchTypeFilter, setAssignmentMatchTypeFilter] = useState('ALL')
   const [assignmentForm, setAssignmentForm] = useState<AssignmentRuleFormState>(emptyAssignmentRuleForm)
-  const [assignmentRuleDirty, setAssignmentRuleDirty] = useState(false)
+  const [assignmentFormBaseline, setAssignmentFormBaseline] = useState<AssignmentRuleFormState>(emptyAssignmentRuleForm)
+  const assignmentRuleDirty = useMemo(
+    () => JSON.stringify(assignmentForm) !== JSON.stringify(assignmentFormBaseline),
+    [assignmentForm, assignmentFormBaseline],
+  )
+  const [assignmentRuleCreating, setAssignmentRuleCreating] = useState(false)
   const [assignmentSaving, setAssignmentSaving] = useState(false)
   const [assignmentActionLoading, setAssignmentActionLoading] = useState(false)
   const [assignmentConfirmAction, setAssignmentConfirmAction] = useState<AssignmentRuleConfirmAction>(null)
@@ -101,7 +107,9 @@ export function useAssignmentRuleManagement({
         enabled: selected.enabled,
         remark: selected.remark || '',
       } : { id: null, enterpriseId: selectedAssignmentEnterpriseId, groupName: '', enabled: true, remark: '' })
-      setAssignmentForm((value) => ({ ...value, groupId: selected ? String(selected.id) : '' }))
+      const groupId = selected ? String(selected.id) : ''
+      setAssignmentForm((value) => ({ ...value, groupId }))
+      setAssignmentFormBaseline((value) => ({ ...value, groupId }))
     } catch (error) {
       if (handleAuthExpired(error)) return
       setAssignmentRulesError(error instanceof Error ? error.message : '分配规则组加载失败')
@@ -114,6 +122,11 @@ export function useAssignmentRuleManagement({
     void fetchAssignmentGroups()
   }, [fetchAssignmentGroups])
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedAssignmentKeyword(assignmentKeyword), 300)
+    return () => window.clearTimeout(timer)
+  }, [assignmentKeyword])
+
   const fetchAssignmentRules = useCallback(async () => {
     if (!token || activeMenu !== '分配规则') return
     if (!canReadAssignmentRules) {
@@ -124,7 +137,9 @@ export function useAssignmentRuleManagement({
 
     if (!selectedAssignmentGroupId) {
       setAssignmentRulesData(null)
-      setAssignmentForm((value) => ({ ...emptyAssignmentRuleForm, groupId: value.groupId }))
+      const emptyForm = { ...emptyAssignmentRuleForm, groupId: assignmentForm.groupId }
+      setAssignmentForm(emptyForm)
+      setAssignmentFormBaseline(emptyForm)
       return
     }
     setAssignmentRulesLoading(true)
@@ -133,17 +148,23 @@ export function useAssignmentRuleManagement({
       const data = await assignmentRuleApi.list({
         groupId: selectedAssignmentGroupId,
         enabled: assignmentEnabledFilter !== 'ALL' ? assignmentEnabledFilter : undefined,
-        keyword: assignmentKeyword.trim() || undefined,
+        keyword: debouncedAssignmentKeyword.trim() || undefined,
         matchType: assignmentMatchTypeFilter !== 'ALL' ? assignmentMatchTypeFilter : undefined,
       })
       setAssignmentRulesData(data)
-      const selected = data.records.find((rule) => rule.id === assignmentForm.id) || data.records[0] || null
+      const selected = assignmentRuleCreating
+        ? null
+        : data.records.find((rule) => rule.id === assignmentForm.id) || data.records[0] || null
       if (selected && !assignmentRuleDirty) {
-        setAssignmentForm(toAssignmentRuleForm(selected))
+        const selectedForm = toAssignmentRuleForm(selected)
+        setAssignmentForm(selectedForm)
+        setAssignmentFormBaseline(selectedForm)
         setAssignmentMatchResult(null)
       }
-      if (!selected && !assignmentRuleDirty) {
-        setAssignmentForm({ ...emptyAssignmentRuleForm, groupId: String(selectedAssignmentGroupId) })
+      if (!assignmentRuleCreating && !selected && !assignmentRuleDirty) {
+        const emptyForm = { ...emptyAssignmentRuleForm, groupId: String(selectedAssignmentGroupId) }
+        setAssignmentForm(emptyForm)
+        setAssignmentFormBaseline(emptyForm)
         setAssignmentMatchResult(null)
       }
     } catch (error) {
@@ -155,9 +176,11 @@ export function useAssignmentRuleManagement({
   }, [
     activeMenu,
     assignmentEnabledFilter,
+    assignmentForm.groupId,
     assignmentForm.id,
-    assignmentKeyword,
+    debouncedAssignmentKeyword,
     assignmentMatchTypeFilter,
+    assignmentRuleCreating,
     assignmentRuleDirty,
     canReadAssignmentRules,
     handleAuthExpired,
@@ -196,29 +219,32 @@ export function useAssignmentRuleManagement({
   const updateAssignmentForm = useCallback((patch: Partial<AssignmentRuleFormState>) => {
     setAssignmentForm((value) => {
       const next = { ...value, ...patch }
-      next.defaultRule = false
+      next.defaultRule = next.matchType === 'DEFAULT'
       return next
     })
-    setAssignmentRuleDirty(true)
     setAssignmentMatchResult(null)
     setAssignmentRulesError('')
   }, [])
 
   const selectAssignmentRule = useCallback((rule: AssignmentRule) => {
-    setAssignmentForm(toAssignmentRuleForm(rule))
-    setAssignmentRuleDirty(false)
+    const selectedForm = toAssignmentRuleForm(rule)
+    setAssignmentForm(selectedForm)
+    setAssignmentFormBaseline(selectedForm)
+    setAssignmentRuleCreating(false)
     setAssignmentMatchResult(null)
     setAssignmentRulesError('')
   }, [])
 
   const openCreateAssignmentRule = useCallback(() => {
-    setAssignmentForm({
+    const draftForm = {
       ...emptyAssignmentRuleForm,
       groupId: selectedAssignmentGroupId ? String(selectedAssignmentGroupId) : '',
       priorityOrder: (assignmentRulesData?.records.length ?? 0) * 10 + 10,
       assigneeId: assignmentAssignees[0] ? String(assignmentAssignees[0].id) : '',
-    })
-    setAssignmentRuleDirty(true)
+    }
+    setAssignmentForm(draftForm)
+    setAssignmentFormBaseline(draftForm)
+    setAssignmentRuleCreating(true)
     setAssignmentMatchResult(null)
     setAssignmentRulesError('')
   }, [assignmentAssignees, assignmentRulesData, selectedAssignmentGroupId])
@@ -228,7 +254,7 @@ export function useAssignmentRuleManagement({
     ruleName: assignmentForm.ruleName.trim(),
     enabled: assignmentForm.enabled,
     priorityOrder: Number(assignmentForm.priorityOrder),
-    defaultRule: false,
+    defaultRule: assignmentForm.matchType === 'DEFAULT',
     matchType: assignmentForm.matchType,
     matchValue: assignmentForm.matchValue.trim(),
     assigneeId: assignmentForm.assigneeId ? Number(assignmentForm.assigneeId) : null,
@@ -244,8 +270,10 @@ export function useAssignmentRuleManagement({
       enabled: group.enabled,
       remark: group.remark || '',
     })
-    setAssignmentForm({ ...emptyAssignmentRuleForm, groupId: String(group.id) })
-    setAssignmentRuleDirty(false)
+    const emptyForm = { ...emptyAssignmentRuleForm, groupId: String(group.id) }
+    setAssignmentForm(emptyForm)
+    setAssignmentFormBaseline(emptyForm)
+    setAssignmentRuleCreating(false)
     setAssignmentMatchResult(null)
   }, [])
 
@@ -254,7 +282,7 @@ export function useAssignmentRuleManagement({
   }, [selectedAssignmentEnterpriseId])
 
   const saveAssignmentGroup = useCallback(async () => {
-    if (!assignmentGroupForm.enterpriseId || !assignmentGroupForm.groupName.trim()) return
+    if (!assignmentGroupForm.enterpriseId || !assignmentGroupForm.groupName.trim()) return false
     setAssignmentGroupSaving(true)
     setAssignmentRulesError('')
     try {
@@ -267,8 +295,10 @@ export function useAssignmentRuleManagement({
       setSelectedAssignmentGroupId(saved.id)
       await fetchAssignmentGroups()
       message.success('分配规则组已保存')
+      return true
     } catch (error) {
       if (!handleAuthExpired(error)) setAssignmentRulesError(error instanceof Error ? error.message : '分配规则组保存失败')
+      return false
     } finally {
       setAssignmentGroupSaving(false)
     }
@@ -287,18 +317,22 @@ export function useAssignmentRuleManagement({
   }, [fetchAssignmentGroups, handleAuthExpired])
 
   const saveAssignmentRule = useCallback(async () => {
-    if (!token) return
+    if (!token) return false
     setAssignmentSaving(true)
     setAssignmentRulesError('')
     try {
       const saved = await assignmentRuleApi.save(assignmentForm.id, buildAssignmentRulePayload())
-      setAssignmentForm(toAssignmentRuleForm(saved))
-      setAssignmentRuleDirty(false)
+      const savedForm = toAssignmentRuleForm(saved)
+      setAssignmentForm(savedForm)
+      setAssignmentFormBaseline(savedForm)
+      setAssignmentRuleCreating(false)
       await fetchAssignmentRules()
       message.success('分配规则已保存')
+      return true
     } catch (error) {
-      if (handleAuthExpired(error)) return
+      if (handleAuthExpired(error)) return false
       setAssignmentRulesError(error instanceof Error ? error.message : '分配规则保存失败')
+      return false
     } finally {
       setAssignmentSaving(false)
     }
@@ -311,8 +345,9 @@ export function useAssignmentRuleManagement({
     try {
       const saved = await assignmentRuleApi.setEnabled(rule.id, enabled)
       if (assignmentForm.id === saved.id) {
-        setAssignmentForm(toAssignmentRuleForm(saved))
-        setAssignmentRuleDirty(false)
+        const savedForm = toAssignmentRuleForm(saved)
+        setAssignmentForm(savedForm)
+        setAssignmentFormBaseline(savedForm)
       }
       await fetchAssignmentRules()
       message.success(enabled ? '规则已启用' : '规则已停用')
@@ -326,7 +361,9 @@ export function useAssignmentRuleManagement({
 
   const moveAssignmentRule = useCallback(async (rule: AssignmentRule, direction: 1 | -1) => {
     if (!token || !assignmentRulesData) return
-    const records = [...assignmentRulesData.records].sort((a, b) => a.priorityOrder - b.priorityOrder || a.id - b.id)
+    const records = assignmentRulesData.records
+      .filter((item) => !item.defaultRule && item.matchType !== 'DEFAULT')
+      .sort((a, b) => a.priorityOrder - b.priorityOrder || a.id - b.id)
     const index = records.findIndex((item) => item.id === rule.id)
     const targetIndex = index + direction
     if (index < 0 || targetIndex < 0 || targetIndex >= records.length) return
@@ -338,7 +375,8 @@ export function useAssignmentRuleManagement({
     setAssignmentActionLoading(true)
     setAssignmentRulesError('')
     try {
-      await assignmentRuleApi.sort(records.map((item) => ({ id: item.id, priorityOrder: item.priorityOrder })))
+      const defaultRules = assignmentRulesData.records.filter((item) => item.defaultRule || item.matchType === 'DEFAULT')
+      await assignmentRuleApi.sort([...records, ...defaultRules].map((item) => ({ id: item.id, priorityOrder: item.priorityOrder })))
       await fetchAssignmentRules()
       message.success('规则排序已保存')
     } catch (error) {
@@ -378,7 +416,8 @@ export function useAssignmentRuleManagement({
       await assignmentRuleApi.delete(assignmentConfirmAction.rule.id)
       if (assignmentForm.id === assignmentConfirmAction.rule.id) {
         setAssignmentForm(emptyAssignmentRuleForm)
-        setAssignmentRuleDirty(false)
+        setAssignmentFormBaseline(emptyAssignmentRuleForm)
+        setAssignmentRuleCreating(false)
       }
       setAssignmentConfirmAction(null)
       await fetchAssignmentRules()
@@ -395,6 +434,19 @@ export function useAssignmentRuleManagement({
   const selectedAssignmentRule = assignmentForm.id
     ? assignmentRecords.find((rule) => rule.id === assignmentForm.id) || null
     : null
+  const discardAssignmentRuleChanges = useCallback(() => {
+    const savedRule = assignmentForm.id
+      ? assignmentRulesData?.records.find((rule) => rule.id === assignmentForm.id)
+      : null
+    const restoredForm = savedRule
+      ? toAssignmentRuleForm(savedRule)
+      : { ...emptyAssignmentRuleForm, groupId: selectedAssignmentGroupId ? String(selectedAssignmentGroupId) : '' }
+    setAssignmentForm(restoredForm)
+    setAssignmentFormBaseline(restoredForm)
+    setAssignmentRuleCreating(false)
+    setAssignmentMatchResult(null)
+    setAssignmentRulesError('')
+  }, [assignmentForm.id, assignmentRulesData, selectedAssignmentGroupId])
   const assignmentMailboxOptions = useMemo(() => mailboxes.map((mailbox) => ({
     value: String(mailbox.id),
     label: `${mailbox.mailboxName} ${mailbox.emailAddress}`,
@@ -427,6 +479,7 @@ export function useAssignmentRuleManagement({
     assignmentSaving,
     assignmentTestForm,
     assignmentTesting,
+    discardAssignmentRuleChanges,
     fetchAssignmentRules,
     fetchAssignmentGroups,
     moveAssignmentRule,
@@ -451,6 +504,10 @@ export function useAssignmentRuleManagement({
       setSelectedAssignmentEnterpriseId(value)
       setSelectedAssignmentGroupId(null)
       setAssignmentRulesData(null)
+      setAssignmentForm(emptyAssignmentRuleForm)
+      setAssignmentFormBaseline(emptyAssignmentRuleForm)
+      setAssignmentRuleCreating(false)
+      setAssignmentMatchResult(null)
     },
     submitAssignmentConfirm,
     toggleAssignmentRule,

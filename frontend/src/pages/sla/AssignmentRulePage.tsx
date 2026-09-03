@@ -1,7 +1,23 @@
-import { useState } from 'react'
-import { Alert, Button, Empty, Input, Segmented, Select, Space, Switch, Table, Tag, Typography } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import { Alert, Button, Drawer, Dropdown, Empty, Input, Modal, Segmented, Select, Space, Switch, Table, Tag, Typography } from 'antd'
 import { DeleteOutlined, SearchOutlined } from '@ant-design/icons'
-import { CheckCircle2, FlaskConical, Layers3, Plus, RefreshCw, ShieldCheck, UserCheck } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Beaker,
+  Bell,
+  CheckCircle2,
+  CircleOff,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Settings2,
+  ShieldCheck,
+  SlidersHorizontal,
+  Users,
+  Workflow,
+} from 'lucide-react'
 import { assignmentMatchTypeLabel, assignmentRuleText } from '../../constants/assignment-rules'
 import type {
   AssignmentRule,
@@ -42,9 +58,9 @@ type AssignmentRulePageProps = {
   matchTypeFilter: string
   mailboxOptions: SelectOption[]
   onCancelConfirm: () => void
+  onDiscardRuleChanges: () => void
   onEnabledFilterChange: (value: string) => void
   onFetchAssignmentRules: () => void
-  onFetchAssignmentGroups: () => void
   onKeywordChange: (value: string) => void
   onMatchTypeFilterChange: (value: string) => void
   onMoveRule: (rule: AssignmentRule, direction: 1 | -1) => void
@@ -53,8 +69,8 @@ type AssignmentRulePageProps = {
   onRequestDelete: (rule: AssignmentRule) => void
   onResetFilters: () => void
   onRunTest: () => void
-  onSaveRule: () => void
-  onSaveGroup: () => void
+  onSaveRule: () => Promise<boolean>
+  onSaveGroup: () => Promise<boolean>
   onSelectGroup: (group: AssignmentRuleGroup) => void
   onSelectRule: (rule: AssignmentRule) => void
   onSubmitConfirm: () => void
@@ -76,6 +92,19 @@ type AssignmentRulePageProps = {
   testing: boolean
 }
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isDefaultRule(rule: AssignmentRule) {
+  return rule.defaultRule || rule.matchType === 'DEFAULT'
+}
+
+function humanRuleCondition(rule: AssignmentRule) {
+  if (isDefaultRule(rule)) return '未命中其他规则时执行默认分配'
+  if (rule.matchType === 'SUBJECT_KEYWORD') return `主题包含“${rule.matchValue || '-'}”`
+  if (rule.matchType === 'MAILBOX') return `来源邮箱为“${rule.matchValue || '-'}”`
+  return `客户邮箱为“${rule.matchValue || '-'}”`
+}
+
 export function AssignmentRulePage({
   actionLoading,
   assigneeOptions,
@@ -95,9 +124,9 @@ export function AssignmentRulePage({
   matchTypeFilter,
   mailboxOptions,
   onCancelConfirm,
+  onDiscardRuleChanges,
   onEnabledFilterChange,
   onFetchAssignmentRules,
-  onFetchAssignmentGroups,
   onKeywordChange,
   onMatchTypeFilterChange,
   onMoveRule,
@@ -128,75 +157,219 @@ export function AssignmentRulePage({
   testForm,
   testing,
 }: AssignmentRulePageProps) {
-  const records = rulesData?.records ?? []
-  const summary = rulesData?.summary
-  const sortedRecords = [...records].sort((a, b) => a.priorityOrder - b.priorityOrder || a.id - b.id)
-  const selectedAssigneeName = assignmentAssignees.find((agent) => String(agent.id) === form.assigneeId)?.displayName || '未选择处理人'
-  const [activeInspector, setActiveInspector] = useState<'editor' | 'test'>('editor')
-  const summaryItems = [
-    {
-      icon: Layers3,
-      tone: 'primary',
-      label: '规则总数',
-      value: summary?.totalCount ?? '--',
-      detail: `启用 ${summary?.enabledCount ?? '--'} / 停用 ${summary?.disabledCount ?? '--'}`,
-    },
-    {
-      icon: CheckCircle2,
-      tone: 'success',
-      label: '启用规则',
-      value: summary?.enabledCount ?? '--',
-      detail: `停用 ${summary?.disabledCount ?? '--'} 条`,
-    },
-    {
-      icon: UserCheck,
-      tone: 'primary',
-      label: '规则组',
-      value: groupsData?.totalCount ?? '--',
-      detail: '按企业隔离分配策略',
-    },
-    {
-      icon: FlaskConical,
-      tone: matchResult?.matched ? 'success' : 'warning',
-      label: '最近测试',
-      value: matchResult?.matched ? '已命中' : '--',
-      detail: matchResult?.ruleName || '尚未运行匹配测试',
-    },
-  ]
+  const [ruleDrawerOpen, setRuleDrawerOpen] = useState(false)
+  const [testDrawerOpen, setTestDrawerOpen] = useState(false)
+  const [groupModalOpen, setGroupModalOpen] = useState(false)
+  const [sortingMode, setSortingMode] = useState(false)
 
-  function openRuleDraft() {
-    setActiveInspector('editor')
-    onOpenCreateRule()
+  const records = useMemo(() => rulesData?.records ?? [], [rulesData?.records])
+  const summary = rulesData?.summary
+  const orderedRecords = useMemo(() => records
+    .filter((record) => !isDefaultRule(record))
+    .sort((a, b) => a.priorityOrder - b.priorityOrder || a.id - b.id), [records])
+  const defaultRecords = useMemo(() => records.filter(isDefaultRule), [records])
+  const displayRecords = useMemo(() => [...orderedRecords, ...defaultRecords], [defaultRecords, orderedRecords])
+  const selectedGroup = groupsData?.records.find((group) => group.id === selectedGroupId) ?? null
+  const selectedEnterprise = enterpriseOptions.find((enterprise) => String(enterprise.id) === selectedEnterpriseId) ?? null
+  const selectedAssigneeName = assignmentAssignees.find((agent) => String(agent.id) === form.assigneeId)?.displayName || '未选择处理人'
+  const defaultForm = form.defaultRule || form.matchType === 'DEFAULT'
+  const emailInvalid = form.matchType === 'FROM_EMAIL' && Boolean(form.matchValue.trim()) && !EMAIL_PATTERN.test(form.matchValue.trim())
+  const formValid = Boolean(selectedGroupId && form.ruleName.trim() && form.assigneeId && (defaultForm || form.matchValue.trim()) && !emailInvalid)
+  const filtersActive = Boolean(keyword.trim() || assignmentEnabledFilter !== 'ALL' || matchTypeFilter !== 'ALL')
+  const mailboxRuleOptions = useMemo(() => {
+    if (form.matchType !== 'MAILBOX' || !form.matchValue || mailboxOptions.some((option) => option.value === form.matchValue)) return mailboxOptions
+    return [{ value: form.matchValue, label: `当前配置：${form.matchValue}` }, ...mailboxOptions]
+  }, [form.matchType, form.matchValue, mailboxOptions])
+
+  useEffect(() => {
+    if (!ruleDirty) return undefined
+    const guard = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [ruleDirty])
+
+  function afterDirtyCheck(action: () => void) {
+    if (!ruleDirty) {
+      action()
+      return
+    }
+    Modal.confirm({
+      title: '放弃未保存的修改？',
+      content: '当前规则还有未保存内容，继续操作后这些修改将丢失。',
+      okText: '放弃修改',
+      cancelText: '继续编辑',
+      okButtonProps: { danger: true },
+      onOk: () => {
+        onDiscardRuleChanges()
+        action()
+      },
+    })
   }
 
-  function selectRule(record: AssignmentRule) {
-    setActiveInspector('editor')
-    onSelectRule(record)
+  function openRuleDraft() {
+    if (!selectedGroupId) return
+    afterDirtyCheck(() => {
+      onOpenCreateRule()
+      setRuleDrawerOpen(true)
+    })
+  }
+
+  function openRule(record: AssignmentRule) {
+    if (form.id === record.id) {
+      setRuleDrawerOpen(true)
+      return
+    }
+    afterDirtyCheck(() => {
+      onSelectRule(record)
+      setRuleDrawerOpen(true)
+    })
+  }
+
+  function closeRuleDrawer() {
+    if (!ruleDirty) {
+      if (!form.id) onDiscardRuleChanges()
+      setRuleDrawerOpen(false)
+      return
+    }
+    afterDirtyCheck(() => setRuleDrawerOpen(false))
+  }
+
+  function changeEnterprise(value: string) {
+    if (value === selectedEnterpriseId) return
+    afterDirtyCheck(() => {
+      onEnterpriseChange(value)
+      setSortingMode(false)
+      setRuleDrawerOpen(false)
+    })
+  }
+
+  function selectGroup(group: AssignmentRuleGroup) {
+    if (group.id === selectedGroupId) return
+    afterDirtyCheck(() => {
+      onSelectGroup(group)
+      setSortingMode(false)
+      setRuleDrawerOpen(false)
+    })
+  }
+
+  function openCreateGroup() {
+    onOpenCreateGroup()
+    setGroupModalOpen(true)
+  }
+
+  function openEditGroup(group: AssignmentRuleGroup) {
+    onGroupFormChange({
+      id: group.id,
+      enterpriseId: String(group.enterpriseId),
+      groupName: group.groupName,
+      enabled: group.enabled,
+      remark: group.remark || '',
+    })
+    setGroupModalOpen(true)
+  }
+
+  function requestToggleGroup(group: AssignmentRuleGroup) {
+    if (!group.enabled) {
+      void onToggleGroup(group)
+      return
+    }
+    Modal.confirm({
+      title: `停用“${group.groupName}”？`,
+      content: '停用后，该规则组内规则不会再参与后续自动分配，历史工单不受影响。',
+      okText: '确认停用',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: () => onToggleGroup(group),
+    })
+  }
+
+  async function saveGroup() {
+    if (await onSaveGroup()) setGroupModalOpen(false)
+  }
+
+  async function saveRule() {
+    if (await onSaveRule()) setRuleDrawerOpen(false)
+  }
+
+  function updateMatchType(value: AssignmentRuleMatchType) {
+    onUpdateForm({ matchType: value, matchValue: '' })
+  }
+
+  function renderMatchValueField() {
+    if (form.matchType === 'DEFAULT') {
+      return (
+        <Alert
+          showIcon
+          type="info"
+          title="无需填写匹配内容"
+          description="前面的规则都未命中时，系统执行这条默认分配规则。每个规则组只能有一条默认规则。"
+        />
+      )
+    }
+    if (form.matchType === 'MAILBOX') {
+      return (
+        <Select
+          showSearch
+          value={form.matchValue || undefined}
+          placeholder="选择接收邮件的邮箱"
+          optionFilterProp="label"
+          options={mailboxRuleOptions}
+          onChange={(value) => onUpdateForm({ matchValue: value })}
+        />
+      )
+    }
+    if (form.matchType === 'FROM_EMAIL') {
+      return (
+        <Input
+          type="email"
+          value={form.matchValue}
+          onChange={(event) => onUpdateForm({ matchValue: event.target.value })}
+          placeholder="例如：vip@example.com"
+          status={emailInvalid || !form.matchValue.trim() ? 'error' : undefined}
+        />
+      )
+    }
+    return (
+      <Input
+        value={form.matchValue}
+        onChange={(event) => onUpdateForm({ matchValue: event.target.value })}
+        placeholder="例如：VIP、退款、紧急"
+        status={!form.matchValue.trim() ? 'error' : undefined}
+      />
+    )
   }
 
   return (
     <>
-      <section className="app-content assignment-page" aria-label="分配规则">
-        <header className="assignment-topbar">
-          <div className="assignment-title-block">
-            <h2>分配规则</h2>
-            <span>按优先级匹配新工单，命中后自动分配给指定处理人</span>
+      <section className="app-content assignment-page assignment-page-v2" aria-label="分配规则">
+        <header className="assignment-v2-header">
+          <div className="assignment-v2-heading">
+            <div className="assignment-v2-title-row">
+              <h2>分配规则</h2>
+              {selectedGroup && <Tag color={selectedGroup.enabled ? 'green' : 'default'}>{selectedGroup.enabled ? '规则组运行中' : '规则组已停用'}</Tag>}
+            </div>
+            <p>
+              {selectedEnterprise?.enterpriseName || '请选择企业'}
+              <span>/</span>
+              {selectedGroup?.groupName || '请选择规则组'}
+            </p>
           </div>
-          <div className="assignment-top-actions">
-            <Select
-              className="assignment-enterprise-select"
-              value={selectedEnterpriseId || undefined}
-              placeholder="选择企业"
-              onChange={onEnterpriseChange}
-              options={enterpriseOptions.map((enterprise) => ({ value: String(enterprise.id), label: enterprise.enterpriseName }))}
-            />
-            <Button disabled={rulesLoading} icon={<RefreshCw size={16} />} onClick={onFetchAssignmentRules}>
-              刷新
-            </Button>
+          <div className="assignment-v2-actions">
+            <label className="assignment-v2-enterprise">
+              <span>当前企业</span>
+              <Select
+                value={selectedEnterpriseId || undefined}
+                placeholder="选择企业"
+                onChange={changeEnterprise}
+                options={enterpriseOptions.map((enterprise) => ({ value: String(enterprise.id), label: enterprise.enterpriseName }))}
+              />
+            </label>
+            <Button aria-label="刷新分配规则" disabled={rulesLoading} icon={<RefreshCw size={15} />} onClick={onFetchAssignmentRules}>刷新</Button>
+            <Button icon={<Beaker size={15} />} disabled={!selectedGroupId} onClick={() => setTestDrawerOpen(true)}>测试规则</Button>
             <Button
               type="primary"
-              disabled={!canCreateAssignmentRules}
-              icon={<Plus size={16} />}
+              disabled={!canCreateAssignmentRules || !selectedGroupId || !selectedGroup?.enabled}
+              icon={<Plus size={15} />}
               onClick={openRuleDraft}
             >
               新建规则
@@ -212,385 +385,294 @@ export function AssignmentRulePage({
           </div>
         ) : (
           <>
-            <section className="assignment-summary-strip" aria-label="分配规则统计">
-              {summaryItems.map((item) => {
-                const Icon = item.icon
-                return (
-                  <div key={item.label} className={`assignment-summary-item assignment-summary-item--${item.tone}`}>
-                    <span className="assignment-summary-icon"><Icon size={17} /></span>
-                    <span className="assignment-summary-copy">
-                      <span>{item.label}</span>
-                      <small>{item.detail}</small>
-                    </span>
-                    <strong>{item.value}</strong>
-                  </div>
-                )
-              })}
+            <section className="assignment-healthbar" aria-label="当前规则运行概况">
+              <div><Workflow size={16} /><span>规则组</span><strong>{groupsData?.totalCount ?? 0}</strong></div>
+              <div><CheckCircle2 size={16} /><span>启用规则</span><strong>{summary?.enabledCount ?? 0}</strong></div>
+              <div><CircleOff size={16} /><span>停用规则</span><strong>{summary?.disabledCount ?? 0}</strong></div>
+              <div className={matchResult?.matched ? 'success' : ''}>
+                <Beaker size={16} /><span>最近测试</span><strong>{matchResult?.matched ? `命中 ${matchResult.ruleName}` : '尚未测试'}</strong>
+              </div>
+              <p><SlidersHorizontal size={15} />按列表顺序从上到下匹配，调整和保存只影响后续新工单。</p>
             </section>
 
-            <Alert
-              showIcon
-              type={rulesError ? 'error' : 'info'}
-              className="assignment-inline-alert"
-              title={rulesError || '优先级数字越小越先匹配；排序、启停和规则保存只影响后续自动建单，历史工单不会回写。'}
-              action={rulesError ? <Button size="small" onClick={onFetchAssignmentRules}>重试</Button> : undefined}
-            />
+            {rulesError && (
+              <Alert showIcon type="error" className="assignment-v2-error" title={rulesError} action={<Button size="small" onClick={onFetchAssignmentRules}>重试</Button>} />
+            )}
 
-            <main className="assignment-workspace">
-              <section className="assignment-panel assignment-group-panel">
-                <header className="assignment-panel-head">
-                  <div><h3>规则组</h3><span>{groupsData?.totalCount ?? 0} 个企业规则组</span></div>
-                  <Button size="small" icon={<Plus size={14} />} onClick={onOpenCreateGroup}>新建</Button>
+            <main className="assignment-v2-workspace">
+              <aside className="assignment-v2-groups">
+                <header>
+                  <div><strong>规则组</strong><span>按业务场景组织规则</span></div>
+                  <Button aria-label="新建规则组" size="small" type="text" icon={<Plus size={15} />} disabled={!selectedEnterpriseId} onClick={openCreateGroup} />
                 </header>
-                <div className="assignment-group-list">
-                  {groupsLoading ? <span>加载中...</span> : groupsData?.records.length ? groupsData.records.map((group) => (
-                    <button className={selectedGroupId === group.id ? 'active' : ''} key={group.id} onClick={() => onSelectGroup(group)} type="button">
-                      <span><strong>{group.groupName}</strong><small>{group.remark || '暂无备注'}</small></span>
-                      <Tag color={group.enabled ? 'green' : 'default'}>{group.enabled ? '启用' : '停用'}</Tag>
-                    </button>
-                  )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无规则组" />}
+                <div className="assignment-v2-group-list">
+                  {groupsLoading ? (
+                    <div className="assignment-v2-loading">加载规则组...</div>
+                  ) : groupsData?.records.length ? groupsData.records.map((group) => (
+                    <div className={`assignment-v2-group ${selectedGroupId === group.id ? 'active' : ''}`} key={group.id}>
+                      <button type="button" onClick={() => selectGroup(group)}>
+                        <span className="assignment-v2-group-icon"><Users size={15} /></span>
+                        <span className="assignment-v2-group-copy">
+                          <strong>{group.groupName}</strong>
+                          <small>{group.remark || '暂无规则组说明'}</small>
+                        </span>
+                      </button>
+                      <Dropdown
+                        trigger={['click']}
+                        menu={{
+                          items: [
+                            { key: 'edit', label: '编辑规则组', icon: <Pencil size={14} /> },
+                            { key: 'toggle', label: group.enabled ? '停用规则组' : '启用规则组', danger: group.enabled },
+                          ],
+                          onClick: ({ key, domEvent }) => {
+                            domEvent.stopPropagation()
+                            if (key === 'edit') openEditGroup(group)
+                            if (key === 'toggle') requestToggleGroup(group)
+                          },
+                        }}
+                      >
+                        <Button aria-label={`${group.groupName}更多操作`} size="small" type="text" icon={<MoreHorizontal size={16} />} onClick={(event) => event.stopPropagation()} />
+                      </Dropdown>
+                      <span className={`assignment-v2-group-status ${group.enabled ? 'enabled' : ''}`} title={group.enabled ? '启用' : '停用'} />
+                    </div>
+                  )) : (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无规则组">
+                      <Button size="small" type="primary" onClick={openCreateGroup}>新建规则组</Button>
+                    </Empty>
+                  )}
                 </div>
-                <div className="assignment-group-form">
-                  <div className="assignment-group-form-head">
-                    <strong>{groupForm.id ? '当前组设置' : '新建规则组'}</strong>
-                    <small>先选择规则组，再维护组内规则</small>
-                  </div>
-                  <label><span>规则组名称</span><Input value={groupForm.groupName} onChange={(event) => onGroupFormChange({ groupName: event.target.value })} placeholder="例如：客服一组" /></label>
-                  <label><span>备注</span><Input.TextArea rows={3} value={groupForm.remark} onChange={(event) => onGroupFormChange({ remark: event.target.value })} /></label>
-                  <Space wrap>
-                    <Button type="primary" loading={groupSaving} disabled={!groupForm.groupName.trim()} onClick={onSaveGroup}>保存</Button>
-                    {groupForm.id && <Button disabled={groupSaving} onClick={() => {
-                      const group = groupsData?.records.find((item) => item.id === groupForm.id)
-                      if (group) onToggleGroup(group)
-                    }}>{groupForm.enabled ? '停用' : '启用'}</Button>}
-                    <Button size="small" onClick={onFetchAssignmentGroups}>刷新</Button>
-                  </Space>
-                </div>
-              </section>
+                {selectedGroup && (
+                  <footer>
+                    <div><span>当前规则组</span><strong>{selectedGroup.groupName}</strong></div>
+                    <Button size="small" icon={<Settings2 size={14} />} onClick={() => openEditGroup(selectedGroup)}>设置</Button>
+                  </footer>
+                )}
+              </aside>
 
-              <section className="assignment-stage">
-                <section className="assignment-panel assignment-ledger">
-                <header className="assignment-panel-head">
+              <section className="assignment-v2-ledger">
+                <header className="assignment-v2-ledger-head">
                   <div>
-                    <h3>规则列表</h3>
-                    <span>共 {summary?.totalCount ?? 0} 条，按当前优先级顺序执行</span>
+                    <strong>规则清单</strong>
+                    <span>{selectedGroup ? `共 ${summary?.totalCount ?? 0} 条规则，列表靠前的规则优先匹配` : '请先选择规则组'}</span>
                   </div>
-                  <Tag color="blue">当前 {sortedRecords.length} 条</Tag>
+                  <Space size={8}>
+                    {sortingMode && <Tag color="purple">排序模式</Tag>}
+                    <Button size="small" icon={<SlidersHorizontal size={14} />} disabled={orderedRecords.length < 2} onClick={() => setSortingMode((value) => !value)}>
+                      {sortingMode ? '完成排序' : '调整顺序'}
+                    </Button>
+                  </Space>
                 </header>
 
-                <section className="assignment-inline-filters" aria-label="筛选条件">
-                  <Input
-                    allowClear
-                    prefix={<SearchOutlined />}
-                    placeholder="规则名 / 匹配值"
-                    value={keyword}
-                    onChange={(event) => onKeywordChange(event.target.value)}
-                    onPressEnter={() => void onFetchAssignmentRules()}
-                  />
-                  <Select
-                    value={assignmentEnabledFilter}
-                    onChange={onEnabledFilterChange}
-                    options={[
-                      { value: 'ALL', label: '全部状态' },
-                      { value: 'true', label: '启用' },
-                      { value: 'false', label: '停用' },
-                    ]}
-                  />
-                  <Select
-                    value={matchTypeFilter}
-                    onChange={onMatchTypeFilterChange}
-                    options={[
-                      { value: 'ALL', label: '全部类型' },
-                      { value: 'SUBJECT_KEYWORD', label: '主题关键词' },
-                      { value: 'MAILBOX', label: '来源邮箱' },
-                      { value: 'FROM_EMAIL', label: '客户邮箱' },
-                    ]}
-                  />
-                  <Button onClick={onResetFilters}>清空筛选</Button>
+                <section className="assignment-v2-filters" aria-label="筛选规则">
+                  <Input allowClear prefix={<SearchOutlined />} placeholder="搜索规则名称或匹配内容" value={keyword} onChange={(event) => onKeywordChange(event.target.value)} />
+                  <Select value={assignmentEnabledFilter} onChange={onEnabledFilterChange} options={[
+                    { value: 'ALL', label: '全部状态' },
+                    { value: 'true', label: '仅看启用' },
+                    { value: 'false', label: '仅看停用' },
+                  ]} />
+                  <Select value={matchTypeFilter} onChange={onMatchTypeFilterChange} options={[
+                    { value: 'ALL', label: '全部匹配方式' },
+                    { value: 'DEFAULT', label: '默认分配' },
+                    { value: 'SUBJECT_KEYWORD', label: '主题关键词' },
+                    { value: 'MAILBOX', label: '来源邮箱' },
+                    { value: 'FROM_EMAIL', label: '客户邮箱' },
+                  ]} />
+                  {filtersActive && <Button size="small" type="link" onClick={onResetFilters}>清空筛选</Button>}
                 </section>
 
-                <div className="assignment-table-shell">
+                <div className="assignment-v2-table">
                   <Table<AssignmentRule>
                     rowKey="id"
                     size="middle"
                     tableLayout="fixed"
                     loading={rulesLoading}
-                    dataSource={sortedRecords}
+                    dataSource={displayRecords}
                     pagination={false}
+                    scroll={{ x: 760 }}
                     locale={{
                       emptyText: (
-                        <Empty description="还没有分配规则" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-                          <Button type="primary" onClick={openRuleDraft}>新建规则</Button>
+                        <Empty description={selectedGroupId ? '当前规则组还没有规则' : '请先在左侧选择规则组'} image={Empty.PRESENTED_IMAGE_SIMPLE}>
+                          {selectedGroupId && <Button type="primary" onClick={openRuleDraft}>新建第一条规则</Button>}
                         </Empty>
                       ),
                     }}
-                    rowClassName={(record) => record.id === form.id ? 'ant-table-row-selected' : ''}
-                    onRow={(record) => ({ onClick: () => selectRule(record) })}
+                    onRow={(record) => ({ onClick: () => !sortingMode && openRule(record) })}
                     columns={[
                       {
-                        title: '优先级',
-                        dataIndex: 'priorityOrder',
-                        width: 82,
-                        render: (value: number) => <Tag color="blue">{value}</Tag>,
+                        title: '顺序',
+                        width: 72,
+                        render: (_value, record) => {
+                          const normalIndex = orderedRecords.findIndex((item) => item.id === record.id)
+                          const defaultIndex = defaultRecords.findIndex((item) => item.id === record.id)
+                          return <span className="assignment-v2-order">{normalIndex >= 0 ? normalIndex + 1 : orderedRecords.length + defaultIndex + 1}</span>
+                        },
                       },
                       {
-                        title: '规则',
-                        dataIndex: 'ruleName',
-                        render: (_value: string, record: AssignmentRule) => (
-                          <div className="assignment-rule-cell">
-                            <Space wrap size={6}>
-                              <Typography.Text strong>{record.ruleName}</Typography.Text>
-                              <Tag color={record.enabled ? 'green' : 'default'}>{record.enabled ? '启用' : '停用'}</Tag>
-                            </Space>
-                            <Typography.Text className="assignment-rule-description" type="secondary">
-                              {assignmentRuleText(record)} · 分配给 {record.assigneeName || record.assigneeId}
-                            </Typography.Text>
+                        title: '匹配条件',
+                        width: 320,
+                        render: (_value, record) => (
+                          <div className="assignment-v2-rule-copy">
+                            <strong>{record.ruleName}</strong>
+                            <span>{humanRuleCondition(record)}</span>
                           </div>
+                        ),
+                      },
+                      {
+                        title: '分配结果',
+                        width: 210,
+                        render: (_value, record) => (
+                          <div className="assignment-v2-result-copy">
+                            <strong title={record.assigneeName || `用户 ${record.assigneeId}`}>{record.assigneeName || `用户 ${record.assigneeId}`}</strong>
+                            <span><Bell size={13} />{record.notifyEnabled ? '通知处理人' : '不发送通知'}</span>
+                          </div>
+                        ),
+                      },
+                      {
+                        title: '状态',
+                        width: 92,
+                        render: (_value, record) => (
+                          <span className="assignment-v2-status" onClick={(event) => event.stopPropagation()}>
+                            <Switch size="small" aria-label={`${record.enabled ? '停用' : '启用'}${record.ruleName}`} checked={record.enabled} loading={actionLoading && form.id === record.id} onChange={(checked) => void onToggleRule(record, checked)} />
+                            {record.enabled ? '启用' : '停用'}
+                          </span>
                         ),
                       },
                       {
                         title: '操作',
-                        width: 176,
-                        render: (_value: unknown, record: AssignmentRule, index: number) => (
-                          <Space className="assignment-row-actions" size={6} onClick={(event) => event.stopPropagation()}>
-                            <Button size="small" disabled={index === 0 || actionLoading} onClick={() => void onMoveRule(record, -1)}>
-                              上移
-                            </Button>
-                            <Button size="small" disabled={index >= sortedRecords.length - 1 || actionLoading} onClick={() => void onMoveRule(record, 1)}>
-                              下移
-                            </Button>
-                            <Switch
-                              size="small"
-                              checked={record.enabled}
-                              loading={actionLoading && form.id === record.id}
-                              onChange={(checked) => void onToggleRule(record, checked)}
-                            />
-                          </Space>
-                        ),
+                        width: sortingMode ? 104 : 144,
+                        fixed: 'right',
+                        render: (_value, record) => {
+                          const index = orderedRecords.findIndex((item) => item.id === record.id)
+                          if (sortingMode) {
+                            return isDefaultRule(record) ? <Typography.Text type="secondary">固定最后</Typography.Text> : (
+                              <Space size={4} onClick={(event) => event.stopPropagation()}>
+                                <Button aria-label={`上移${record.ruleName}`} size="small" type="text" icon={<ArrowUp size={15} />} disabled={index <= 0 || actionLoading} onClick={() => void onMoveRule(record, -1)} />
+                                <Button aria-label={`下移${record.ruleName}`} size="small" type="text" icon={<ArrowDown size={15} />} disabled={index < 0 || index >= orderedRecords.length - 1 || actionLoading} onClick={() => void onMoveRule(record, 1)} />
+                              </Space>
+                            )
+                          }
+                          return (
+                            <Space size={2} onClick={(event) => event.stopPropagation()}>
+                              <Button size="small" type="link" icon={<Pencil size={14} />} onClick={() => openRule(record)}>编辑</Button>
+                              <Button danger size="small" type="link" icon={<DeleteOutlined />} onClick={() => onRequestDelete(record)}>删除</Button>
+                            </Space>
+                          )
+                        },
                       },
                     ]}
                   />
                 </div>
-                </section>
-
-                <aside className="assignment-editor-stack">
-                  <nav className="assignment-inspector-tabs" aria-label="规则操作" role="tablist">
-                    <button
-                      aria-selected={activeInspector === 'editor'}
-                      className={activeInspector === 'editor' ? 'active' : ''}
-                      onClick={() => setActiveInspector('editor')}
-                      role="tab"
-                      type="button"
-                    >
-                      规则配置
-                    </button>
-                    <button
-                      aria-selected={activeInspector === 'test'}
-                      className={activeInspector === 'test' ? 'active' : ''}
-                      onClick={() => setActiveInspector('test')}
-                      role="tab"
-                      type="button"
-                    >
-                      测试验证
-                    </button>
-                  </nav>
-
-                  {activeInspector === 'editor' ? (
-                    <section className="assignment-panel assignment-editor-panel">
-                  <header className="assignment-panel-head">
-                    <div>
-                      <h3>规则编辑</h3>
-                      <span>匹配条件、处理人和通知方式</span>
-                    </div>
-                    {ruleDirty
-                      ? <Tag color="orange">有未保存修改</Tag>
-                      : selectedRule
-                        ? <Tag color="green">已保存</Tag>
-                        : <Tag>新建草稿</Tag>}
-                  </header>
-
-                      <div className="assignment-form-body">
-                        <section className="assignment-form-section">
-                          <div className="assignment-section-title"><strong>基础信息</strong><span>用于识别规则和确定执行顺序</span></div>
-                          <div className="assignment-form-grid">
-                            <label>
-                              <span>规则名称</span>
-                              <Input value={form.ruleName} onChange={(event) => onUpdateForm({ ruleName: event.target.value })} placeholder="VIP 售后优先" />
-                            </label>
-                            <label>
-                              <span>优先级</span>
-                              <Input type="number" min={1} max={9999} value={form.priorityOrder} onChange={(event) => onUpdateForm({ priorityOrder: Number(event.target.value || 1) })} />
-                            </label>
-                          </div>
-                        </section>
-
-                        <section className="assignment-form-section">
-                          <div className="assignment-section-title"><strong>匹配条件</strong><span>新邮件满足条件后进入本规则</span></div>
-                          <div className="assignment-form-grid">
-                            <label className="assignment-form-wide">
-                              <span>匹配类型</span>
-                              <Segmented
-                                block
-                                value={form.matchType}
-                                onChange={(value) => onUpdateForm({ matchType: value as AssignmentRuleMatchType })}
-                                options={[
-                                  { value: 'SUBJECT_KEYWORD', label: '主题关键词' },
-                                  { value: 'MAILBOX', label: '来源邮箱' },
-                                  { value: 'FROM_EMAIL', label: '客户邮箱' },
-                                ]}
-                              />
-                            </label>
-                            <label className="assignment-form-wide">
-                              <span>匹配值</span>
-                              <Input
-                                value={form.matchValue}
-                                onChange={(event) => onUpdateForm({ matchValue: event.target.value })}
-                                placeholder="VIP / support@example.com"
-                                status={!form.matchValue.trim() ? 'error' : undefined}
-                              />
-                              {!form.matchValue.trim() && <small className="assignment-field-error">匹配值不能为空</small>}
-                            </label>
-                          </div>
-                        </section>
-
-                        <section className="assignment-form-section">
-                          <div className="assignment-section-title"><strong>执行动作</strong><span>设置命中后的处理人和通知方式</span></div>
-                          <div className="assignment-form-grid">
-                            <label className="assignment-form-wide">
-                              <span>分配处理人</span>
-                              <Select
-                                showSearch
-                                value={form.assigneeId || undefined}
-                                placeholder="选择处理人"
-                                optionFilterProp="label"
-                                options={assigneeOptions}
-                                onChange={(value) => onUpdateForm({ assigneeId: value })}
-                              />
-                            </label>
-                            <label>
-                              <span>启用状态</span>
-                              <Select
-                                value={String(form.enabled)}
-                                onChange={(value) => onUpdateForm({ enabled: value === 'true' })}
-                                options={[
-                                  { value: 'true', label: '启用' },
-                                  { value: 'false', label: '停用' },
-                                ]}
-                              />
-                            </label>
-                            <label>
-                              <span>分配通知</span>
-                              <Select
-                                value={String(form.notifyEnabled)}
-                                onChange={(value) => onUpdateForm({ notifyEnabled: value === 'true' })}
-                                options={[
-                                  { value: 'true', label: '通知处理人' },
-                                  { value: 'false', label: '不发送通知' },
-                                ]}
-                              />
-                            </label>
-                            <Alert
-                              className="assignment-form-wide assignment-rule-preview"
-                              type="info"
-                              showIcon
-                              title="规则预览"
-                              description={`IF ${assignmentMatchTypeLabel(form.matchType)} = ${form.matchValue || '未填写'} THEN 分配给 ${selectedAssigneeName}`}
-                            />
-                          </div>
-                        </section>
-                      </div>
-
-                  <footer className="assignment-panel-actions">
-                    <Button onClick={openRuleDraft}>新建草稿</Button>
-                    <Button
-                      type="primary"
-                      loading={saving}
-                      disabled={!selectedGroupId || !form.ruleName.trim() || !form.assigneeId || !form.matchValue.trim()}
-                      onClick={() => void onSaveRule()}
-                    >
-                      保存规则
-                    </Button>
-                    <Button danger disabled={!selectedRule} icon={<DeleteOutlined />} onClick={() => selectedRule && onRequestDelete(selectedRule)}>
-                      删除
-                    </Button>
-                  </footer>
-                    </section>
-
-                  ) : (
-                    <section className="assignment-panel assignment-test-panel">
-                  <header className="assignment-panel-head">
-                    <div>
-                      <h3>测试匹配</h3>
-                      <span>用邮件信息预演规则命中结果</span>
-                    </div>
-                    {matchResult?.matched ? <Tag color="green">已命中</Tag> : <Tag>未测试</Tag>}
-                  </header>
-                  <div className="assignment-test-copy">
-                    <strong>用真实邮件条件验证当前规则顺序</strong>
-                    <span>测试只返回命中结果，不会创建工单或修改历史数据。</span>
-                  </div>
-                  <div className="assignment-form-grid">
-                    <label>
-                      <span>来源邮箱</span>
-                      <Select
-                        showSearch
-                        value={testForm.mailboxId || undefined}
-                        placeholder="选择来源邮箱"
-                        optionFilterProp="label"
-                        options={mailboxOptions}
-                        onChange={(value) => onTestFormChange({ mailboxId: value })}
-                      />
-                    </label>
-                    <label>
-                      <span>客户邮箱</span>
-                      <Input value={testForm.fromEmail} onChange={(event) => onTestFormChange({ fromEmail: event.target.value })} placeholder="buyer@acme.com" />
-                    </label>
-                    <label className="assignment-form-wide">
-                      <span>邮件主题</span>
-                      <Input value={testForm.subject} onChange={(event) => onTestFormChange({ subject: event.target.value })} placeholder="VIP 客户反馈：无法登录后台" />
-                    </label>
-                  </div>
-                  <Button block type="primary" loading={testing} disabled={!testForm.mailboxId} onClick={() => void onRunTest()}>
-                    运行测试匹配
-                  </Button>
-                  {matchResult ? (
-                    <Alert
-                      showIcon
-                      type={matchResult.matched ? 'success' : 'warning'}
-                      className="assignment-match-result"
-                      title={matchResult.matched ? `命中 ${matchResult.ruleName}` : '未命中分配规则'}
-                      description={matchResult.matched
-                        ? `${assignmentMatchTypeLabel(matchResult.matchType)} = ${matchResult.matchValue || '-'}，分配给 ${matchResult.assigneeName || matchResult.assigneeId}，${matchResult.notifyEnabled ? '通知处理人' : '不发送通知'}。`
-                        : '当前输入未命中任何启用规则，将按邮箱未命中策略保持待分配，或显式使用默认处理人。'}
-                    />
-                  ) : (
-                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="输入来源邮箱、客户邮箱和主题后测试命中结果" className="assignment-empty-state" />
-                  )}
-                    </section>
-                  )}
-                </aside>
               </section>
             </main>
           </>
         )}
       </section>
 
+      <Drawer
+        rootClassName="assignment-v2-drawer"
+        title={selectedRule ? '编辑分配规则' : '新建分配规则'}
+        extra={ruleDirty ? <Tag color="orange">未保存</Tag> : selectedRule ? <Tag color="green">已保存</Tag> : null}
+        width={580}
+        open={ruleDrawerOpen}
+        onClose={closeRuleDrawer}
+        footer={(
+          <div className="assignment-v2-drawer-footer">
+            <div>{selectedRule && <Button danger type="text" icon={<DeleteOutlined />} onClick={() => onRequestDelete(selectedRule)}>删除规则</Button>}</div>
+            <Space>
+              <Button onClick={closeRuleDrawer}>取消</Button>
+              <Button type="primary" loading={saving} disabled={!formValid} onClick={() => void saveRule()}>保存规则</Button>
+            </Space>
+          </div>
+        )}
+      >
+        <div className="assignment-v2-drawer-body">
+          <>
+              <section className="assignment-v2-form-section">
+                <header><span>1</span><div><strong>规则信息</strong><small>为运营人员提供清晰、可识别的规则名称</small></div></header>
+                <div className="assignment-v2-form-grid">
+                  <label className="wide"><span>规则名称</span><Input value={form.ruleName} onChange={(event) => onUpdateForm({ ruleName: event.target.value })} placeholder="例如：VIP 客户优先分配" /></label>
+                  <label><span>执行顺序</span><Input type="number" min={1} max={9999} value={form.priorityOrder} onChange={(event) => onUpdateForm({ priorityOrder: Number(event.target.value || 1) })} /><small>数字越小越先执行，也可以在列表中调整。</small></label>
+                  <label className="assignment-v2-switch-field"><span>规则状态</span><div><Switch checked={form.enabled} onChange={(checked) => onUpdateForm({ enabled: checked })} /><strong>{form.enabled ? '启用' : '停用'}</strong></div></label>
+                </div>
+              </section>
+
+              <section className="assignment-v2-form-section">
+                <header><span>2</span><div><strong>匹配条件</strong><small>新邮件满足以下条件时执行本规则</small></div></header>
+                <div className="assignment-v2-form-grid one-column">
+                  <label><span>匹配方式</span><Segmented block value={form.matchType} onChange={(value) => updateMatchType(value as AssignmentRuleMatchType)} options={[
+                    { value: 'DEFAULT', label: '默认分配' },
+                    { value: 'SUBJECT_KEYWORD', label: '主题关键词' },
+                    { value: 'MAILBOX', label: '来源邮箱' },
+                    { value: 'FROM_EMAIL', label: '客户邮箱' },
+                  ]} /></label>
+                  {!defaultForm && <label>
+                    <span>{form.matchType === 'SUBJECT_KEYWORD' ? '关键词' : form.matchType === 'MAILBOX' ? '来源邮箱' : '客户邮箱'}</span>
+                    {renderMatchValueField()}
+                    {!form.matchValue.trim() && <small className="assignment-field-error">请填写匹配内容</small>}
+                    {emailInvalid && <small className="assignment-field-error">请输入有效的邮箱地址</small>}
+                  </label>}
+                  {defaultForm && renderMatchValueField()}
+                </div>
+              </section>
+
+              <section className="assignment-v2-form-section">
+                <header><span>3</span><div><strong>分配结果</strong><small>设置命中规则后的处理人与通知方式</small></div></header>
+                <div className="assignment-v2-form-grid one-column">
+                  <label><span>分配处理人</span><Select showSearch value={form.assigneeId || undefined} placeholder="选择负责处理工单的客服" optionFilterProp="label" options={assigneeOptions} onChange={(value) => onUpdateForm({ assigneeId: value })} /></label>
+                  <label className="assignment-v2-notify-field">
+                    <div><Bell size={17} /><span><strong>通知处理人</strong><small>工单分配成功后，按照配置的通知渠道提醒客服。</small></span></div>
+                    <Switch checked={form.notifyEnabled} onChange={(checked) => onUpdateForm({ notifyEnabled: checked })} />
+                  </label>
+                </div>
+              </section>
+
+              <Alert className="assignment-v2-preview" type="info" showIcon title="规则预览" description={defaultForm
+                ? `其他规则均未命中时，默认分配给${selectedAssigneeName}${form.notifyEnabled ? '，并通知处理人' : ''}。`
+                : `${assignmentMatchTypeLabel(form.matchType)}“${form.matchValue || '未填写'}”时，分配给${selectedAssigneeName}${form.notifyEnabled ? '，并通知处理人' : ''}。`} />
+            </>
+        </div>
+      </Drawer>
+
+      <Drawer rootClassName="assignment-v2-drawer" title="测试分配规则" width={540} open={testDrawerOpen} onClose={() => setTestDrawerOpen(false)} extra={matchResult?.matched ? <Tag color="green">已命中</Tag> : <Tag>不会创建工单</Tag>}>
+        <div className="assignment-v2-test">
+          <Alert showIcon type="info" title="使用一封模拟邮件验证当前规则顺序，不会创建工单或修改数据。" />
+          <label><span>来源邮箱</span><Select showSearch value={testForm.mailboxId || undefined} placeholder="选择接收邮件的邮箱" optionFilterProp="label" options={mailboxOptions} onChange={(value) => onTestFormChange({ mailboxId: value })} /></label>
+          <label><span>客户邮箱</span><Input value={testForm.fromEmail} onChange={(event) => onTestFormChange({ fromEmail: event.target.value })} placeholder="buyer@example.com" /></label>
+          <label><span>邮件主题</span><Input.TextArea rows={3} value={testForm.subject} onChange={(event) => onTestFormChange({ subject: event.target.value })} placeholder="例如：VIP 客户反馈无法登录后台" /></label>
+          <Button block type="primary" loading={testing} disabled={!testForm.mailboxId} icon={<Beaker size={15} />} onClick={() => void onRunTest()}>运行测试</Button>
+          {matchResult ? (
+            <section className={`assignment-v2-test-result ${matchResult.matched ? 'matched' : ''}`}>
+              <header><CheckCircle2 size={20} /><div><strong>{matchResult.matched ? `命中：${matchResult.ruleName}` : '未命中任何规则'}</strong><span>{matchResult.matched ? '系统将按照以下结果自动分配' : '系统将按邮箱配置的兜底策略处理'}</span></div></header>
+              {matchResult.matched && <div>
+                <p><span>命中原因</span><strong>{assignmentMatchTypeLabel(matchResult.matchType)} = {matchResult.matchValue || '-'}</strong></p>
+                <p><span>最终处理人</span><strong>{matchResult.assigneeName || matchResult.assigneeId}</strong></p>
+                <p><span>通知方式</span><strong>{matchResult.notifyEnabled ? '通知处理人' : '不发送通知'}</strong></p>
+              </div>}
+            </section>
+          ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="填写模拟邮件后运行测试" />}
+        </div>
+      </Drawer>
+
+      <Modal title={groupForm.id ? '编辑规则组' : '新建规则组'} open={groupModalOpen} onCancel={() => setGroupModalOpen(false)} footer={(
+        <Space><Button onClick={() => setGroupModalOpen(false)}>取消</Button><Button type="primary" loading={groupSaving} disabled={!groupForm.groupName.trim()} onClick={() => void saveGroup()}>保存规则组</Button></Space>
+      )}>
+        <div className="assignment-v2-group-form">
+          <Alert type="info" showIcon title="规则组用于组织同一企业下不同业务场景的分配策略。" />
+          <label><span>规则组名称</span><Input value={groupForm.groupName} onChange={(event) => onGroupFormChange({ groupName: event.target.value })} placeholder="例如：售后客服组" /></label>
+          <label><span>规则组说明</span><Input.TextArea rows={3} value={groupForm.remark} onChange={(event) => onGroupFormChange({ remark: event.target.value })} placeholder="说明该规则组适用的业务范围" /></label>
+          <label className="assignment-v2-group-enable"><span><strong>启用规则组</strong><small>停用后组内规则不再参与后续自动分配。</small></span><Switch checked={groupForm.enabled} onChange={(checked) => onGroupFormChange({ enabled: checked })} /></label>
+        </div>
+      </Modal>
+
       {confirmAction && (
         <div className="modal-mask user-modal-mask" role="dialog" aria-modal="true" aria-labelledby="assignment-confirm-title">
           <div className="confirm-modal">
             <h3 id="assignment-confirm-title">删除分配规则</h3>
             <p>删除后该规则不再参与新工单自动匹配，历史工单已分配的处理人保持不变。</p>
-            <div className="confirm-target">
-              <strong>{confirmAction.rule.ruleName}</strong>
-              <span>{assignmentRuleText(confirmAction.rule)}</span>
-            </div>
+            <div className="confirm-target"><strong>{confirmAction.rule.ruleName}</strong><span>{assignmentRuleText(confirmAction.rule)}</span></div>
             <div className="user-modal__foot">
-              <button disabled={actionLoading} onClick={onCancelConfirm} type="button">
-                取消
-              </button>
-              <button className="primary-action" disabled={actionLoading} onClick={onSubmitConfirm} type="button">
-                {actionLoading ? '删除中...' : '确认删除'}
-              </button>
+              <button disabled={actionLoading} onClick={onCancelConfirm} type="button">取消</button>
+              <button className="primary-action" disabled={actionLoading} onClick={onSubmitConfirm} type="button">{actionLoading ? '删除中...' : '确认删除'}</button>
             </div>
           </div>
         </div>

@@ -40,6 +40,12 @@ public class NotificationTemplateService {
     private static final Pattern VARIABLE_PATTERN = Pattern.compile("\\{[a-zA-Z0-9_]+}");
     private static final Set<String> TEMPLATE_TYPES = Set.of(
             "AUTO_REPLY", "ASSIGN_NOTIFY", "AGENT_REPLY", "SLA_WARNING", "SLA_BREACH", "SYSTEM");
+    private static final Set<String> THREADED_REPLY_TYPES = Set.of("AUTO_REPLY", "AGENT_REPLY");
+    private static final String THREADED_REPLY_SUBJECT = "Re: {subject}";
+    private static final Set<String> AGENT_REPLY_VARIABLES = Set.of(
+            "{ticket_no}", "{subject}", "{customer_email}", "{customer_name}",
+            "{assignee_name}", "{mailbox_email}", "{ticket_link}",
+            "{customer_ticket_url}", "{customer_ticket_expires_at}", "{reply_content}");
 
     private static final Map<String, TemplateVariableVO> VARIABLES = buildVariables();
 
@@ -79,15 +85,17 @@ public class NotificationTemplateService {
         String templateType = normalizeTemplateType(request.getTemplateType());
         ensureTemplateCodeUnique(templateCode, null);
         // 3、校验主题和正文中的变量都在白名单内
-        validateVariables(request.getSubjectTpl());
+        String subjectTemplate = normalizeSubjectTemplate(templateType, request.getSubjectTpl());
+        validateVariables(subjectTemplate);
         validateVariables(request.getContentTpl());
+        validateTemplateContent(templateType, request.getContentTpl());
 
         // 4、写入新模板基础信息、启用状态和创建人
         NotificationTemplateEntity template = new NotificationTemplateEntity();
         template.setTemplateCode(templateCode);
         template.setTemplateType(templateType);
         template.setTemplateName(normalize(request.getTemplateName()));
-        template.setSubjectTpl(normalize(request.getSubjectTpl()));
+        template.setSubjectTpl(subjectTemplate);
         template.setContentTpl(normalize(request.getContentTpl()));
         template.setEnabled(request.getEnabled());
         template.setCreatedBy(principal.account());
@@ -119,15 +127,17 @@ public class NotificationTemplateService {
             throw new BusinessException(CODE_CONFLICT, "模板已被邮箱引用，不能停用");
         }
         // 3、校验主题和正文中的变量都在白名单内
-        validateVariables(request.getSubjectTpl());
+        String subjectTemplate = normalizeSubjectTemplate(templateType, request.getSubjectTpl());
+        validateVariables(subjectTemplate);
         validateVariables(request.getContentTpl());
+        validateTemplateContent(templateType, request.getContentTpl());
 
         // 4、更新模板名称、主题、正文、启用状态和更新人
         notificationTemplateMapper.update(null, new LambdaUpdateWrapper<NotificationTemplateEntity>()
                 .eq(NotificationTemplateEntity::getId, id)
                 .set(NotificationTemplateEntity::getTemplateType, templateType)
                 .set(NotificationTemplateEntity::getTemplateName, normalize(request.getTemplateName()))
-                .set(NotificationTemplateEntity::getSubjectTpl, normalize(request.getSubjectTpl()))
+                .set(NotificationTemplateEntity::getSubjectTpl, subjectTemplate)
                 .set(NotificationTemplateEntity::getContentTpl, normalize(request.getContentTpl()))
                 .set(NotificationTemplateEntity::getEnabled, request.getEnabled())
                 .set(NotificationTemplateEntity::getUpdatedBy, principal.account()));
@@ -214,6 +224,23 @@ public class NotificationTemplateService {
         }
     }
 
+    private void validateTemplateContent(String templateType, String contentTemplate) {
+        if (!"AGENT_REPLY".equals(templateType)) {
+            return;
+        }
+        String content = normalize(contentTemplate);
+        if (!content.contains("{reply_content}")) {
+            throw new BusinessException(CODE_BAD_REQUEST, "处理人回复模板必须包含 {reply_content} 变量");
+        }
+        Matcher matcher = VARIABLE_PATTERN.matcher(content);
+        while (matcher.find()) {
+            String variable = matcher.group();
+            if (!AGENT_REPLY_VARIABLES.contains(variable)) {
+                throw new BusinessException(CODE_BAD_REQUEST, "处理人回复模板不支持变量：" + variable);
+            }
+        }
+    }
+
     private void ensureTemplateCodeUnique(String templateCode, Long excludeId) {
         LambdaQueryWrapper<NotificationTemplateEntity> wrapper =
                 new LambdaQueryWrapper<NotificationTemplateEntity>()
@@ -246,6 +273,12 @@ public class NotificationTemplateService {
         return normalized;
     }
 
+    private String normalizeSubjectTemplate(String templateType, String requestedSubject) {
+        return THREADED_REPLY_TYPES.contains(templateType)
+                ? THREADED_REPLY_SUBJECT
+                : normalize(requestedSubject);
+    }
+
     private Map<String, String> buildSampleData(Map<String, String> requestSampleData) {
         Map<String, String> sampleData = new LinkedHashMap<>();
         sampleData.put("ticket_no", "TCK-260821093012-482931");
@@ -255,6 +288,12 @@ public class NotificationTemplateService {
         sampleData.put("assignee_name", "李强");
         sampleData.put("mailbox_email", "service@ntn.fziot");
         sampleData.put("sla_deadline", "2026-07-22 18:00");
+        sampleData.put("sla_stage", "首次响应");
+        sampleData.put("sla_action", "预警");
+        sampleData.put("sla_response_deadline", "2026-07-22 18:00");
+        sampleData.put("sla_resolve_deadline", "2026-07-23 18:00");
+        sampleData.put("sla_triggered_at", "2026-07-22 17:00");
+        sampleData.put("sla_overdue_hours", "2");
         sampleData.put("ticket_link", "https://mailtrace.local/tickets/TCK-260821093012-482931");
         sampleData.put("customer_ticket_url", "https://mailtrace.local/customer/tickets/TCK-260821093012-482931");
         sampleData.put("customer_ticket_code", "482931");
@@ -323,6 +362,12 @@ public class NotificationTemplateService {
         variables.put("{assignee_name}", new TemplateVariableVO("{assignee_name}", "处理人", "李强"));
         variables.put("{mailbox_email}", new TemplateVariableVO("{mailbox_email}", "服务邮箱", "service@ntn.fziot"));
         variables.put("{sla_deadline}", new TemplateVariableVO("{sla_deadline}", "SLA 截止时间", "2026-07-22 18:00"));
+        variables.put("{sla_stage}", new TemplateVariableVO("{sla_stage}", "SLA 阶段", "首次响应"));
+        variables.put("{sla_action}", new TemplateVariableVO("{sla_action}", "SLA 通知动作", "预警"));
+        variables.put("{sla_response_deadline}", new TemplateVariableVO("{sla_response_deadline}", "首次响应截止时间", "2026-07-22 18:00"));
+        variables.put("{sla_resolve_deadline}", new TemplateVariableVO("{sla_resolve_deadline}", "解决截止时间", "2026-07-23 18:00"));
+        variables.put("{sla_triggered_at}", new TemplateVariableVO("{sla_triggered_at}", "SLA 通知触发时间", "2026-07-22 17:00"));
+        variables.put("{sla_overdue_hours}", new TemplateVariableVO("{sla_overdue_hours}", "SLA 超时工作小时数", "2"));
         variables.put("{ticket_link}", new TemplateVariableVO("{ticket_link}", "工单链接", "https://mailtrace.local/tickets/TCK-260821093012-482931"));
         variables.put("{customer_ticket_url}", new TemplateVariableVO("{customer_ticket_url}", "客户查看链接", "https://mailtrace.local/customer/tickets/TCK-260821093012-482931"));
         variables.put("{customer_ticket_code}", new TemplateVariableVO("{customer_ticket_code}", "客户查看校验码", "482931"));

@@ -160,12 +160,36 @@ class AssignmentRuleServiceTest {
     }
 
     @Test
-    void createRule_whenDefaultAlreadyExists_shouldReject() {
+    void createRule_whenDefault_shouldPersistGroupDefaultRule() {
+        when(assignmentRuleMapper.insert(any(AssignmentRuleEntity.class))).thenAnswer(invocation -> {
+            AssignmentRuleEntity entity = invocation.getArgument(0);
+            entity.setId(101L);
+            return 1;
+        });
+        when(assignmentRuleMapper.selectById(101L)).thenReturn(rule(101L, "默认规则", true, 100,
+                true, "DEFAULT", null, 2L, true));
+
+        AssignmentRuleVO vo = assignmentRuleService.createRule(admin, saveRequest(
+                "默认规则", "DEFAULT", null, 2L, 100, true, true));
+
+        ArgumentCaptor<AssignmentRuleEntity> ruleCaptor = ArgumentCaptor.forClass(AssignmentRuleEntity.class);
+        verify(assignmentRuleMapper).insert(ruleCaptor.capture());
+        AssignmentRuleEntity saved = ruleCaptor.getValue();
+        assertEquals(true, saved.getDefaultRule());
+        assertEquals("DEFAULT", saved.getMatchType());
+        assertNull(saved.getMatchValue());
+        assertEquals("DEFAULT", vo.matchType());
+    }
+
+    @Test
+    void createRule_whenGroupDefaultAlreadyExists_shouldReject() {
+        when(assignmentRuleMapper.selectCount(any())).thenReturn(1L);
+
         BusinessException ex = assertThrows(BusinessException.class,
                 () -> assignmentRuleService.createRule(admin, saveRequest(
                         "默认规则", "DEFAULT", null, 2L, 100, true, true)));
 
-        assertTrue(ex.getMessage().contains("不再支持 DEFAULT"));
+        assertTrue(ex.getMessage().contains("当前规则组已存在默认分配规则"));
     }
 
     @Test
@@ -291,7 +315,7 @@ class AssignmentRuleServiceTest {
     }
 
     @Test
-    void matchForTicket_shouldSkipInvalidAssigneeAndIgnoreLegacyDefault() {
+    void matchForTicket_shouldSkipInvalidAssigneeAndUseDefaultRule() {
         when(assignmentRuleMapper.selectList(any())).thenReturn(List.of(
                 rule(204L, "停用处理人规则", true, 10, false, "SUBJECT_KEYWORD", "VIP", 3L, true),
                 rule(205L, "默认规则", true, 100, true, "DEFAULT", null, 2L, true)
@@ -300,7 +324,9 @@ class AssignmentRuleServiceTest {
         AssignmentRuleMatchResult result = assignmentRuleService.matchForTicket(
                 11L, "support@example.com", "VIP 咨询", "customer@example.com");
 
-        assertNull(result);
+        assertNotNull(result);
+        assertEquals(205L, result.ruleId());
+        assertEquals("DEFAULT", result.matchType());
     }
 
     @Test

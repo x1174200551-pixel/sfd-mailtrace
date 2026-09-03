@@ -121,8 +121,25 @@ class SlaPolicyServiceTest {
         assertEquals(4, saved.getResponseHours());
         assertEquals(24, saved.getResolveHours());
         assertEquals(1L, saved.getCalendarId());
+        assertTrue(saved.getResponseWarningNotifyEnabled());
+        assertTrue(saved.getResponseBreachNotifyEnabled());
+        assertEquals(false, saved.getResponseEscalationNotifyEnabled());
+        assertTrue(saved.getResolveWarningNotifyEnabled());
+        assertTrue(saved.getResolveBreachNotifyEnabled());
+        assertEquals(false, saved.getResolveEscalationNotifyEnabled());
         assertEquals("admin", saved.getCreatedBy());
         assertEquals("标准 SLA", vo.policyName());
+    }
+
+    @Test
+    void createPolicy_whenEscalationEnabledWithoutThreshold_shouldReject() {
+        SlaPolicySaveRequest request = saveRequest("升级 SLA", true, false, 4, 24, 1, null, 1L);
+        request.setResolveEscalationNotifyEnabled(true);
+
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> slaPolicyService.createPolicy(admin, request));
+
+        assertTrue(ex.getMessage().contains("升级阈值"));
     }
 
     @Test

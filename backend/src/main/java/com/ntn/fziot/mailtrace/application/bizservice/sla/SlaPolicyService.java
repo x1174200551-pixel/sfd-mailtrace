@@ -255,6 +255,11 @@ public class SlaPolicyService {
         if (Boolean.TRUE.equals(request.getDefaultPolicy()) && Boolean.FALSE.equals(request.getEnabled())) {
             throw new BusinessException(CODE_BAD_REQUEST, "默认 SLA 策略必须启用");
         }
+        if ((Boolean.TRUE.equals(request.getResponseEscalationNotifyEnabled())
+                || Boolean.TRUE.equals(request.getResolveEscalationNotifyEnabled()))
+                && request.getEscalateAfterBreachHours() == null) {
+            throw new BusinessException(CODE_BAD_REQUEST, "启用超时升级通知前，请先配置升级阈值");
+        }
     }
 
     private void ensureDefaultPolicyUnique(Long enterpriseId, boolean defaultPolicy, Long excludeId) {
@@ -298,6 +303,12 @@ public class SlaPolicyService {
         policy.setResolveHours(request.getResolveHours());
         policy.setWarningRemainHours(request.getWarningRemainHours());
         policy.setEscalateAfterBreachHours(request.getEscalateAfterBreachHours());
+        policy.setResponseWarningNotifyEnabled(defaultOn(request.getResponseWarningNotifyEnabled()));
+        policy.setResponseBreachNotifyEnabled(defaultOn(request.getResponseBreachNotifyEnabled()));
+        policy.setResponseEscalationNotifyEnabled(Boolean.TRUE.equals(request.getResponseEscalationNotifyEnabled()));
+        policy.setResolveWarningNotifyEnabled(defaultOn(request.getResolveWarningNotifyEnabled()));
+        policy.setResolveBreachNotifyEnabled(defaultOn(request.getResolveBreachNotifyEnabled()));
+        policy.setResolveEscalationNotifyEnabled(Boolean.TRUE.equals(request.getResolveEscalationNotifyEnabled()));
         policy.setCalendarId(request.getCalendarId());
         policy.setUpdatedBy(operator);
     }
@@ -325,6 +336,12 @@ public class SlaPolicyService {
                 policy.getResolveHours(),
                 policy.getWarningRemainHours(),
                 policy.getEscalateAfterBreachHours(),
+                defaultOn(policy.getResponseWarningNotifyEnabled()),
+                defaultOn(policy.getResponseBreachNotifyEnabled()),
+                Boolean.TRUE.equals(policy.getResponseEscalationNotifyEnabled()),
+                defaultOn(policy.getResolveWarningNotifyEnabled()),
+                defaultOn(policy.getResolveBreachNotifyEnabled()),
+                Boolean.TRUE.equals(policy.getResolveEscalationNotifyEnabled()),
                 policy.getCalendarId(),
                 policy.getCreatedAt(),
                 policy.getUpdatedAt()
@@ -333,5 +350,9 @@ public class SlaPolicyService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private boolean defaultOn(Boolean value) {
+        return !Boolean.FALSE.equals(value);
     }
 }

@@ -9,6 +9,7 @@ import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseOptionVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseVO;
+import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.FeishuGroupTestResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -90,5 +91,14 @@ public class EnterpriseController {
             @PathVariable Long id,
             @Valid @RequestBody EnterpriseEnabledRequest request) {
         return BasicResult.ok(enterpriseService.updateEnabled(principal, id, request));
+    }
+
+    @Operation(summary = "测试企业飞书通知群")
+    @PostMapping("/{id}/feishu-group-test")
+    @RequirePermission(value = "enterprise:update", message = "无权测试企业飞书通知群")
+    public BasicResult<FeishuGroupTestResponse> testFeishuGroup(
+            @AuthenticationPrincipal CurrentUserPrincipal principal,
+            @PathVariable Long id) {
+        return BasicResult.ok(enterpriseService.testFeishuGroup(principal, id));
     }
 }

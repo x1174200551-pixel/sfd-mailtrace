@@ -50,6 +50,24 @@ public class SlaPolicySaveRequest {
     @Schema(description = "超时后升级提醒的工作小时（可空）", example = "2")
     private Integer escalateAfterBreachHours;
 
+    @Schema(description = "是否发送首次响应预警通知", example = "true")
+    private Boolean responseWarningNotifyEnabled = true;
+
+    @Schema(description = "是否发送首次响应超时通知", example = "true")
+    private Boolean responseBreachNotifyEnabled = true;
+
+    @Schema(description = "是否发送首次响应超时升级通知", example = "false")
+    private Boolean responseEscalationNotifyEnabled = false;
+
+    @Schema(description = "是否发送解决预警通知", example = "true")
+    private Boolean resolveWarningNotifyEnabled = true;
+
+    @Schema(description = "是否发送解决超时通知", example = "true")
+    private Boolean resolveBreachNotifyEnabled = true;
+
+    @Schema(description = "是否发送解决超时升级通知", example = "false")
+    private Boolean resolveEscalationNotifyEnabled = false;
+
     @NotNull(message = "请选择工作日历")
     @Min(value = 1, message = "工作日历ID需大于 0")
     @Schema(description = "工作日历ID", example = "1")

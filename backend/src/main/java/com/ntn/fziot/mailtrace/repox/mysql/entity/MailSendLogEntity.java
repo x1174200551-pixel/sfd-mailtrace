@@ -18,6 +18,8 @@ public class MailSendLogEntity {
 
     private Long ticketId;
 
+    private Long ticketMessageId;
+
     private Long mailboxId;
 
     private Long enterpriseId;
@@ -33,6 +35,16 @@ public class MailSendLogEntity {
     private String subject;
 
     private String contentBody;
+
+    private String messageId;
+
+    private String inReplyTo;
+
+    private String mailReferences;
+
+    private String replyToAddress;
+
+    private String contentType;
 
     private String sendStatus;
 

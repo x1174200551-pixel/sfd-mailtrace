@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ntn.fziot.mailtrace.application.bizservice.common.BusinessException;
+import com.ntn.fziot.mailtrace.application.bizservice.notification.FeishuNotificationService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.EnterpriseMailboxAccessService;
 import com.ntn.fziot.mailtrace.application.bizservice.security.PermissionService;
 import com.ntn.fziot.mailtrace.infrastructure.security.CurrentUserPrincipal;
@@ -12,6 +13,7 @@ import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseListResponse;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseOptionVO;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseSaveRequest;
 import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.EnterpriseVO;
+import com.ntn.fziot.mailtrace.interfaces.vo.enterprise.FeishuGroupTestResponse;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.EnterpriseEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.MailboxEntity;
 import com.ntn.fziot.mailtrace.repox.mysql.entity.TicketEntity;
@@ -21,6 +23,7 @@ import com.ntn.fziot.mailtrace.repox.mysql.mapper.OperationLogMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.MailboxMapper;
 import com.ntn.fziot.mailtrace.repox.mysql.mapper.TicketMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class EnterpriseService {
 
@@ -42,6 +46,7 @@ public class EnterpriseService {
     private final EnterpriseMailboxAccessService enterpriseMailboxAccessService;
     private final MailboxMapper mailboxMapper;
     private final TicketMapper ticketMapper;
+    private final FeishuNotificationService feishuNotificationService;
 
     public EnterpriseListResponse listEnterprises(CurrentUserPrincipal principal, String keyword, Boolean enabled,
                                                    Integer page, Integer size) {
@@ -98,6 +103,7 @@ public class EnterpriseService {
         fillEnterprise(entity, request, principal.account());
         entity.setEnterpriseName(enterpriseName);
         entity.setCreatedBy(principal.account());
+        applyFeishuConfig(entity, null, request);
         enterpriseMapper.insert(entity);
         recordLog(principal, "CREATE", entity.getId(), "新建企业：" + enterpriseName);
         return toVO(enterpriseMapper.selectById(entity.getId()));
@@ -114,7 +120,21 @@ public class EnterpriseService {
         update.setId(id);
         fillEnterprise(update, request, principal.account());
         update.setEnterpriseName(enterpriseName);
+        applyFeishuConfig(update, existing, request);
         enterpriseMapper.updateById(update);
+        if (Boolean.TRUE.equals(request.getClearFeishuConfig())) {
+            enterpriseMapper.update(null, new LambdaUpdateWrapper<EnterpriseEntity>()
+                    .eq(EnterpriseEntity::getId, id)
+                    .set(EnterpriseEntity::getFeishuNotifyEnabled, false)
+                    .set(EnterpriseEntity::getFeishuGroupName, null)
+                    .set(EnterpriseEntity::getFeishuWebhookUrl, null)
+                    .set(EnterpriseEntity::getFeishuSigningSecret, null)
+                    .set(EnterpriseEntity::getFeishuConfigVersion, update.getFeishuConfigVersion())
+                    .set(EnterpriseEntity::getFeishuConnectionStatus, "UNCONFIGURED")
+                    .set(EnterpriseEntity::getFeishuLastTestAt, null)
+                    .set(EnterpriseEntity::getFeishuLastError, null)
+                    .set(EnterpriseEntity::getUpdatedBy, principal.account()));
+        }
         recordLog(principal, "UPDATE", id, "编辑企业：" + existing.getEnterpriseName());
         return toVO(enterpriseMapper.selectById(id));
     }
@@ -131,6 +151,21 @@ public class EnterpriseService {
                 (Boolean.TRUE.equals(request.getEnabled()) ? "启用企业：" : "停用企业：")
                         + existing.getEnterpriseName());
         return toVO(enterpriseMapper.selectById(id));
+    }
+
+    public FeishuGroupTestResponse testFeishuGroup(CurrentUserPrincipal principal, Long enterpriseId) {
+        permissionService.assertPermission(principal, "enterprise:update", "无权测试企业飞书通知群");
+        requireEnterprise(enterpriseId);
+        FeishuGroupTestResponse response = feishuNotificationService.sendTest(enterpriseId);
+        try {
+            recordLog(principal, "TEST_FEISHU", enterpriseId,
+                    response.accepted() ? "企业飞书通知群测试成功" : "企业飞书通知群测试失败");
+        } catch (RuntimeException exception) {
+            // 飞书已经产生外部副作用，审计日志失败不能把已发送结果伪装成接口失败。
+            log.warn("记录企业飞书通知群测试审计日志失败 enterpriseId={} operator={} errorType={}",
+                    enterpriseId, principal.account(), exception.getClass().getSimpleName());
+        }
+        return response;
     }
 
     private LambdaQueryWrapper<EnterpriseEntity> buildQuery(String keyword, Boolean enabled) {
@@ -187,6 +222,91 @@ public class EnterpriseService {
         entity.setUpdatedBy(operator);
     }
 
+    private void applyFeishuConfig(EnterpriseEntity target, EnterpriseEntity existing,
+                                   EnterpriseSaveRequest request) {
+        if (Boolean.TRUE.equals(request.getClearFeishuConfig())) {
+            target.setFeishuNotifyEnabled(false);
+            target.setFeishuGroupName(null);
+            target.setFeishuWebhookUrl(null);
+            target.setFeishuSigningSecret(null);
+            target.setFeishuConfigVersion(nextVersion(existing));
+            target.setFeishuConnectionStatus("UNCONFIGURED");
+            target.setFeishuLastTestAt(null);
+            target.setFeishuLastError(null);
+            return;
+        }
+
+        String groupName = firstConfigured(request.getFeishuGroupName(),
+                existing == null ? null : existing.getFeishuGroupName());
+        String webhook = firstConfigured(request.getFeishuWebhookUrl(),
+                existing == null ? null : existing.getFeishuWebhookUrl());
+        String secret = firstConfigured(request.getFeishuSigningSecret(),
+                existing == null ? null : existing.getFeishuSigningSecret());
+        boolean configChanged = existing == null
+                ? hasText(groupName) || hasText(webhook) || hasText(secret)
+                : changedWhenProvided(request.getFeishuWebhookUrl(), existing.getFeishuWebhookUrl())
+                        || changedWhenProvided(request.getFeishuSigningSecret(), existing.getFeishuSigningSecret());
+
+        target.setFeishuGroupName(groupName);
+        target.setFeishuWebhookUrl(webhook);
+        target.setFeishuSigningSecret(secret);
+        target.setFeishuConfigVersion(configChanged ? nextVersion(existing) : currentVersion(existing));
+        target.setFeishuConnectionStatus(configChanged
+                ? (isComplete(groupName, webhook, secret) ? "UNTESTED" : "UNCONFIGURED")
+                : currentStatus(existing));
+        target.setFeishuLastTestAt(configChanged ? null : existing == null ? null : existing.getFeishuLastTestAt());
+        target.setFeishuLastError(configChanged ? null : existing == null ? null : existing.getFeishuLastError());
+
+        boolean notifyEnabled = request.getFeishuNotifyEnabled() == null
+                ? existing != null && Boolean.TRUE.equals(existing.getFeishuNotifyEnabled())
+                : Boolean.TRUE.equals(request.getFeishuNotifyEnabled());
+        if (notifyEnabled) {
+            validateCompleteConfig(groupName, webhook, secret);
+        }
+        target.setFeishuNotifyEnabled(notifyEnabled);
+    }
+
+    private void validateCompleteConfig(String groupName, String webhook, String secret) {
+        if (!isComplete(groupName, webhook, secret)) {
+            throw new BusinessException(CODE_BAD_REQUEST, "启用飞书通知前请完整配置群名称、Webhook 和签名密钥");
+        }
+        try {
+            feishuNotificationService.validateWebhook(webhook);
+        } catch (IllegalArgumentException exception) {
+            throw new BusinessException(CODE_BAD_REQUEST, exception.getMessage());
+        }
+    }
+
+    private boolean isComplete(String groupName, String webhook, String secret) {
+        return hasText(groupName) && hasText(webhook) && hasText(secret);
+    }
+
+    private boolean changedWhenProvided(String requestValue, String existingValue) {
+        return hasText(requestValue) && !normalize(existingValue).equals(normalize(requestValue));
+    }
+
+    private String firstConfigured(String requestValue, String existingValue) {
+        String normalized = normalizeNullable(requestValue);
+        return normalized == null ? normalizeNullable(existingValue) : normalized;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private int nextVersion(EnterpriseEntity existing) {
+        return currentVersion(existing) + 1;
+    }
+
+    private int currentVersion(EnterpriseEntity existing) {
+        return existing == null || existing.getFeishuConfigVersion() == null ? 0 : existing.getFeishuConfigVersion();
+    }
+
+    private String currentStatus(EnterpriseEntity existing) {
+        return existing == null || existing.getFeishuConnectionStatus() == null
+                ? "UNCONFIGURED" : existing.getFeishuConnectionStatus();
+    }
+
     private void recordLog(CurrentUserPrincipal principal, String actionCode, Long bizId, String content) {
         OperationLogEntity log = new OperationLogEntity();
         log.setOperator(principal.account());
@@ -207,7 +327,10 @@ public class EnterpriseService {
         return new EnterpriseVO(
                 entity.getId(), entity.getEnterpriseName(), entity.getContactName(), entity.getContactEmail(),
                 entity.getContactPhone(), mailboxCount == null ? 0L : mailboxCount,
-                ticketCount == null ? 0L : ticketCount, entity.getEnabled(), entity.getRemark(),
+                ticketCount == null ? 0L : ticketCount, entity.getEnabled(), entity.getFeishuNotifyEnabled(),
+                entity.getFeishuGroupName(), isComplete(entity.getFeishuGroupName(),
+                        entity.getFeishuWebhookUrl(), entity.getFeishuSigningSecret()),
+                entity.getFeishuConnectionStatus(), entity.getFeishuLastTestAt(), entity.getFeishuLastError(), entity.getRemark(),
                 entity.getCreatedAt(), entity.getUpdatedAt()
         );
     }

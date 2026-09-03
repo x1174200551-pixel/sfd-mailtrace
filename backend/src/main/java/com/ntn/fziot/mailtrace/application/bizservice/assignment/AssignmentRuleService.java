@@ -118,11 +118,10 @@ public class AssignmentRuleService {
             return null;
         }
 
-        // 2、加载组内启用的非 DEFAULT 规则，数字越小优先级越高。
+        // 2、加载组内全部启用规则；普通规则按数字优先级匹配，默认规则固定最后执行。
         List<AssignmentRuleEntity> rules = assignmentRuleMapper.selectList(new LambdaQueryWrapper<AssignmentRuleEntity>()
                 .eq(AssignmentRuleEntity::getGroupId, group.getId())
                 .eq(AssignmentRuleEntity::getEnabled, true)
-                .ne(AssignmentRuleEntity::getMatchType, MATCH_DEFAULT)
                 .orderByAsc(AssignmentRuleEntity::getPriorityOrder)
                 .orderByAsc(AssignmentRuleEntity::getId));
 
@@ -131,39 +130,31 @@ public class AssignmentRuleService {
                 ? mailbox.getEmailAddress()
                 : mailboxAddress;
         for (AssignmentRuleEntity rule : rules) {
-            if (MATCH_DEFAULT.equals(rule.getMatchType())) {
+            if (isDefaultRule(rule)) {
                 continue;
             }
             if (!matches(rule, mailboxId, effectiveMailboxAddress, subject, fromEmail)) {
                 continue;
             }
-            UserEntity assignee = userMapper.selectById(rule.getAssigneeId());
-            try {
-                enterpriseMailboxAccessService.assertAssigneeCanAccessMailbox(rule.getAssigneeId(), mailboxId);
-            } catch (BusinessException exception) {
-                log.info("分配规则命中但处理人不可操作邮箱，继续尝试下一条 ruleId={} assigneeId={} mailboxId={}",
-                        rule.getId(), rule.getAssigneeId(), mailboxId);
-                continue;
-            }
-            if (assignee == null) {
-                continue;
-            }
-
             // 4、返回首条可执行规则，调用方负责回写工单策略快照和发送通知。
-            return new AssignmentRuleMatchResult(
-                    group.getId(),
-                    rule.getId(),
-                    rule.getRuleName(),
-                    rule.getMatchType(),
-                    rule.getMatchValue(),
-                    assignee.getId(),
-                    assignee.getDisplayName(),
-                    assignee.getEmail(),
-                    rule.getNotifyEnabled()
-            );
+            AssignmentRuleMatchResult result = buildExecutableMatchResult(group, rule, mailboxId);
+            if (result != null) {
+                return result;
+            }
         }
 
-        // 5、无规则命中时返回空，是否使用邮箱默认处理人由 fallback 明确决定。
+        // 5、普通规则均未命中或无法执行时，尝试规则组中的默认分配规则。
+        for (AssignmentRuleEntity rule : rules) {
+            if (!isDefaultRule(rule)) {
+                continue;
+            }
+            AssignmentRuleMatchResult result = buildExecutableMatchResult(group, rule, mailboxId);
+            if (result != null) {
+                return result;
+            }
+        }
+
+        // 6、规则组未配置可执行的默认规则时返回空，调用方再按邮箱兜底策略处理。
         return null;
     }
 
@@ -189,9 +180,10 @@ public class AssignmentRuleService {
     public AssignmentRuleVO createRule(CurrentUserPrincipal principal, AssignmentRuleSaveRequest request) {
         permissionService.assertPermission(principal, "assignment_rule:create", "无权新建分配规则");
         AssignmentRuleGroupEntity group = requireEnabledGroup(request.getGroupId());
-        String matchType = normalizeManageMatchType(request.getMatchType());
+        String matchType = normalizeMatchType(request.getMatchType());
         String matchValue = normalizeMatchValue(matchType, request.getMatchValue());
         boolean defaultRule = normalizeDefaultRule(request.getDefaultRule(), matchType);
+        ensureDefaultRuleUnique(defaultRule, group.getId(), null);
         assertAssigneeValid(request.getAssigneeId(), group.getId());
 
         AssignmentRuleEntity rule = new AssignmentRuleEntity();
@@ -212,9 +204,10 @@ public class AssignmentRuleService {
         permissionService.assertPermission(principal, "assignment_rule:update", "无权编辑分配规则");
         AssignmentRuleEntity existing = requireRule(id);
         AssignmentRuleGroupEntity group = requireEnabledGroup(request.getGroupId());
-        String matchType = normalizeManageMatchType(request.getMatchType());
+        String matchType = normalizeMatchType(request.getMatchType());
         String matchValue = normalizeMatchValue(matchType, request.getMatchValue());
         boolean defaultRule = normalizeDefaultRule(request.getDefaultRule(), matchType);
+        ensureDefaultRuleUnique(defaultRule, group.getId(), id);
         assertAssigneeValid(request.getAssigneeId(), group.getId());
 
         AssignmentRuleEntity update = new AssignmentRuleEntity();
@@ -368,38 +361,34 @@ public class AssignmentRuleService {
     }
 
     private boolean normalizeDefaultRule(Boolean defaultRule, String matchType) {
-        if (Boolean.TRUE.equals(defaultRule) || MATCH_DEFAULT.equals(matchType)) {
-            throw new BusinessException(CODE_BAD_REQUEST, "P3 分配规则不再支持 DEFAULT，请使用邮箱兜底策略");
+        if (Boolean.TRUE.equals(defaultRule) && !MATCH_DEFAULT.equals(matchType)) {
+            throw new BusinessException(CODE_BAD_REQUEST, "默认分配规则的匹配类型必须为 DEFAULT");
         }
-        return false;
+        return MATCH_DEFAULT.equals(matchType);
     }
 
-    private void ensureDefaultRuleUnique(boolean defaultRule, Long excludeId) {
+    private void ensureDefaultRuleUnique(boolean defaultRule, Long groupId, Long excludeId) {
         if (!defaultRule) {
             return;
         }
         LambdaQueryWrapper<AssignmentRuleEntity> wrapper = new LambdaQueryWrapper<AssignmentRuleEntity>()
-                .eq(AssignmentRuleEntity::getDefaultRule, true);
+                .eq(AssignmentRuleEntity::getGroupId, groupId)
+                .and(query -> query
+                        .eq(AssignmentRuleEntity::getDefaultRule, true)
+                        .or()
+                        .eq(AssignmentRuleEntity::getMatchType, MATCH_DEFAULT));
         if (excludeId != null) {
             wrapper.ne(AssignmentRuleEntity::getId, excludeId);
         }
         Long count = assignmentRuleMapper.selectCount(wrapper);
         if (count != null && count > 0) {
-            throw new BusinessException(CODE_CONFLICT, "默认分配规则已存在，请先编辑原默认规则");
+            throw new BusinessException(CODE_CONFLICT, "当前规则组已存在默认分配规则，请直接编辑原规则");
         }
     }
 
     private String normalizeMatchType(String matchType) {
         String normalized = normalize(matchType).toUpperCase();
         assertMatchType(normalized);
-        return normalized;
-    }
-
-    private String normalizeManageMatchType(String matchType) {
-        String normalized = normalizeMatchType(matchType);
-        if (MATCH_DEFAULT.equals(normalized)) {
-            throw new BusinessException(CODE_BAD_REQUEST, "P3 分配规则不再支持 DEFAULT，请使用邮箱兜底策略");
-        }
         return normalized;
     }
 
@@ -450,6 +439,37 @@ public class AssignmentRuleService {
             case MATCH_FROM_EMAIL -> equalsIgnoreCase(fromEmail, rule.getMatchValue());
             default -> false;
         };
+    }
+
+    private boolean isDefaultRule(AssignmentRuleEntity rule) {
+        return Boolean.TRUE.equals(rule.getDefaultRule()) || MATCH_DEFAULT.equals(rule.getMatchType());
+    }
+
+    private AssignmentRuleMatchResult buildExecutableMatchResult(AssignmentRuleGroupEntity group,
+                                                                  AssignmentRuleEntity rule,
+                                                                  Long mailboxId) {
+        UserEntity assignee = userMapper.selectById(rule.getAssigneeId());
+        if (assignee == null) {
+            return null;
+        }
+        try {
+            enterpriseMailboxAccessService.assertAssigneeCanAccessMailbox(rule.getAssigneeId(), mailboxId);
+        } catch (BusinessException exception) {
+            log.info("分配规则命中但处理人不可操作邮箱，继续尝试下一条 ruleId={} assigneeId={} mailboxId={}",
+                    rule.getId(), rule.getAssigneeId(), mailboxId);
+            return null;
+        }
+        return new AssignmentRuleMatchResult(
+                group.getId(),
+                rule.getId(),
+                rule.getRuleName(),
+                rule.getMatchType(),
+                rule.getMatchValue(),
+                assignee.getId(),
+                assignee.getDisplayName(),
+                assignee.getEmail(),
+                rule.getNotifyEnabled()
+        );
     }
 
     private boolean matchesMailbox(String matchValue, Long mailboxId, String mailboxAddress) {

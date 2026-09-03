@@ -1,18 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { readStoredToken, resolveApiUrl } from '../../shared/api/request'
 
-function buildEmailSrcDoc(html: string): string {
+function buildEmailSrcDoc(html: string, compactParagraphMargins: boolean): string {
   const baseHref = typeof window === 'undefined' ? '/' : `${window.location.origin}/`
+  const normalizedHtml = compactParagraphMargins
+    ? html.replace(
+        /(<\/(?:p|div|ul|ol|blockquote|h[1-6]|table)>)\s*(<br\s*\/?>)\s*<br\s*\/?>/gi,
+        '$1$2',
+      )
+    : html
+  const paragraphStyle = compactParagraphMargins
+    ? `
+      p { margin-block: 0; }
+      p + p { margin-top: 1.7em; }
+    `
+    : ''
   const baseStyle = `
     <meta charset="utf-8" />
     <base href="${baseHref}" target="_blank" />
     <style>
       html, body { margin: 0; padding: 0; background: #fff; }
-      body { overflow-wrap: anywhere; }
+      body {
+        overflow-wrap: anywhere;
+        color: #4b5563;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.7;
+      }
       img { max-width: 100%; height: auto; }
+      ${paragraphStyle}
     </style>
   `
-  const trimmed = html.trim()
+  const trimmed = normalizedHtml.trim()
   if (/<html[\s>]/i.test(trimmed)) {
     if (/<head[\s>]/i.test(trimmed)) {
       return trimmed.replace(/<head([^>]*)>/i, `<head$1>${baseStyle}`)
@@ -93,13 +113,21 @@ async function resolveAuthorizedInlineResources(html: string, signal: AbortSigna
 type EmailHtmlFrameProps = {
   html: string
   authorizeInlineResources?: boolean
+  compactParagraphMargins?: boolean
 }
 
-export function EmailHtmlFrame({ html, authorizeInlineResources = true }: EmailHtmlFrameProps) {
+export function EmailHtmlFrame({
+  html,
+  authorizeInlineResources = true,
+  compactParagraphMargins = false,
+}: EmailHtmlFrameProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [height, setHeight] = useState(180)
   const [resolvedHtml, setResolvedHtml] = useState(html)
-  const srcDoc = useMemo(() => buildEmailSrcDoc(resolvedHtml), [resolvedHtml])
+  const srcDoc = useMemo(
+    () => buildEmailSrcDoc(resolvedHtml, compactParagraphMargins),
+    [compactParagraphMargins, resolvedHtml],
+  )
 
   useEffect(() => {
     const controller = new AbortController()

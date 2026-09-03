@@ -384,7 +384,8 @@ public class CustomerTicketAccessService {
                                 .orderByAsc(TicketMessageEntity::getCreatedAt))
                 .stream()
                 .filter(message -> TicketBizService.DIRECTION_INBOUND.equals(message.getDirection())
-                        || TicketBizService.DIRECTION_OUTBOUND.equals(message.getDirection()))
+                        || (TicketBizService.DIRECTION_OUTBOUND.equals(message.getDirection())
+                        && "SUCCESS".equals(message.getSendStatus())))
                 .toList();
     }
 
