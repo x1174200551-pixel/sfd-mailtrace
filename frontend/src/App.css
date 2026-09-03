@@ -1093,6 +1093,7 @@
   background: #2563eb;
   color: #fff;
   font-weight: 800;
+  object-fit: cover;
 }
 
 .customer-topmeta {

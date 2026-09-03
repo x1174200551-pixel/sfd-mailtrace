@@ -3,6 +3,7 @@ import { Alert, Button, Input, Modal, Spin, Tag } from 'antd'
 import dayjs from 'dayjs'
 import { CheckCircle2, Clock3, Mail, RefreshCw } from 'lucide-react'
 import { customerTicketApi } from '../../api/customer-tickets'
+import { BrandLogo } from '../../components/branding/BrandLogo'
 import { EmailHtmlFrame } from '../../components/ticket/EmailHtmlFrame'
 import {
   CUSTOMER_TICKET_LANGUAGE_STORAGE_KEY,
@@ -269,7 +270,7 @@ export function CustomerTicketLookupPage({ ticketNo }: CustomerTicketLookupPageP
     <main className="customer-ticket-page">
       {closed ? (
         <section className="customer-closed-card">
-          <div className="customer-brand-mark">M</div>
+          <BrandLogo className="customer-brand-mark" />
           <h1>{t('closed.title')}</h1>
           <p>{t('closed.description')}</p>
         </section>
@@ -278,7 +279,7 @@ export function CustomerTicketLookupPage({ ticketNo }: CustomerTicketLookupPageP
           <div className={`customer-ticket-shell${detail ? '' : ' is-masked'}`}>
             <header className="customer-topbar">
               <div className="customer-brand">
-                <div className="customer-brand-mark">M</div>
+                <BrandLogo className="customer-brand-mark" />
                 <strong>{t('brand.name')}</strong>
               </div>
               <div className="customer-top-actions">
@@ -439,7 +440,7 @@ export function CustomerTicketLookupPage({ ticketNo }: CustomerTicketLookupPageP
           className="customer-verify-modal"
         >
           <div className="customer-verify-content">
-            <div className="customer-verify-icon">M</div>
+            <BrandLogo className="customer-verify-icon" />
             <h2>{t('modal.title')}</h2>
             <p>{t('modal.description')}</p>
             <label>
